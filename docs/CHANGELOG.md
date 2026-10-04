@@ -1,5 +1,16 @@
 # Changelog
 
+## [v179] - 2026-10-04 — Users: no success bar
+
+### Changed
+- The Users page no longer shows a notice after a successful add, password change, expiry change or delete; the list shows it. A notice still appears for an error, and a warning when a cluster node did not get the change.
+
+### Verified
+- `node --check webui/app.js`; help and version tests.
+
+### Not verified
+- Not looked at in Chromium.
+
 ## [v178] - 2026-10-04 — Users: cluster-wide changes, root never listed
 
 ### Changed

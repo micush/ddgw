@@ -3040,7 +3040,7 @@
       try {
         const r = (await api("POST", "/api/users/" + path, body)).data;
         editing = false;
-        say(status, r.partial ? "warn" : "info", r.message);
+        if (r.partial) say(status, "warn", r.message); else clear(status); // success shows in the list; only a node that missed it is worth saying
         if (done) done();
         await VIEWS.users.poll(true);
       } catch (e) { fail(status)(e); }
