@@ -56,8 +56,8 @@ ddgw installer
 Usage: sudo ./install.sh [options]
 
   --add-user NAME   add NAME to the '$GROUP' group so they can log in to the
-                    web GUI (repeatable). Nobody is added unless you ask, or
-                    answer yes to the prompt on a terminal.
+                    web GUI (repeatable). The user running the installer
+                    (the one behind sudo) is always added.
   --no-start        install and enable the service but do not start/restart it
   --force           reinstall even if this version is already installed, and
                     allow a downgrade
@@ -515,12 +515,6 @@ for u in ${ADD_USERS[@]+"${ADD_USERS[@]}"}; do
     warn "no such user '$u' — not added"
   fi
 done
-if [ ${#ADD_USERS[@]} -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] &&
-   id -u "$SUDO_USER" >/dev/null 2>&1 && ! id -nG "$SUDO_USER" | tr ' ' '\n' | grep -qx "$GROUP"; then
-  if confirm "Add $SUDO_USER to '$GROUP' so you can log in to the GUI? (grants admin control of ddgw)"; then
-    ADD_USERS+=("$SUDO_USER"); run usermod -aG "$GROUP" "$SUDO_USER"; info "added $SUDO_USER to $GROUP"
-  fi
-fi
 
 # PAM service
 step "PAM service $PAM_FILE"
@@ -668,7 +662,13 @@ if [ ! -f "$CONF_DIR/ddgw.conf" ]; then
   info "  - in the web GUI: https://$HOST:$GUI_PORT  → Configuration"
   info "  - or by hand: cp $SHARE/ddgw.conf.example $CONF_DIR/ddgw.conf && chmod 600 $CONF_DIR/ddgw.conf  (edits apply live)"
 fi
-if [ -z "$(getent group "$GROUP" | cut -d: -f4)" ]; then
+# The user who ran the installer (the one behind sudo, or root itself) can log in to the GUI.
+INVOKER="${SUDO_USER:-${DOAS_USER:-}}"
+[ -n "$INVOKER" ] || INVOKER="$(id -un)"
+if id -u "$INVOKER" >/dev/null 2>&1 && ! id -nG "$INVOKER" | tr ' ' '\n' | grep -qx "$GROUP"; then
+  run usermod -aG "$GROUP" "$INVOKER"; info "added $INVOKER to $GROUP (can log in to the GUI)"
+fi
+if [ -z "$(getent group "$GROUP" | cut -d: -f4)" ] && [ "$DRY" != 1 ]; then
   info "'$GROUP' has no members yet, so nobody can log in to the GUI. Add someone:  usermod -aG $GROUP <user>"
 fi
 info "web GUI: https://$HOST:$GUI_PORT (self-signed certificate until you set web.cert_file/key_file)"

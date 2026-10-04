@@ -73,8 +73,8 @@ If ddgw is already installed the script upgrades it: the config, certificate,
 group members and an existing PAM file are kept, the old binary is saved as
 `/usr/local/share/ddgw/ddgw.prev`, and if the new version does not start the
 old one is restored. The same version is a no-op (`--force` reinstalls; a
-downgrade needs `--force`). Nobody is added to the `ddgw` group unless you pass
-`--add-user` or say yes at the prompt. Uninstall keeps `/var/lib/ddgw` (the config, the
+downgrade needs `--force`). The user who ran the installer (the one behind `sudo`) is added to the `ddgw` group
+so they can log in to the GUI; `--add-user NAME` adds others. Uninstall keeps `/var/lib/ddgw` (the config, the
 certificate, config history, cluster identity) unless `--purge` is given.
 
 **Where things live**: everything ddgw keeps is in `/var/lib/ddgw` (mode 0700):
@@ -460,6 +460,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--show-dns` | DNS tab (ranking, health, latency bars, counters) |
 | `--show-config`, `--configure` | Settings page (form; every edit saves and applies at once) |
 | `--versions`, `--version-show/-diff/-snapshot/-restore/-export`, `--config-import` | History tab |
+| `--users`, `--user-add`, `--user-passwd`, `--user-expiry`, `--user-del` | Configure ▸ Users |
 | `--tls-status/-install/-csr/-revert/-regenerate` | Settings ▸ Web GUI (certificate) |
 | `--cluster-status/-token/-join/-promote/-remove/-unremove/-leave/-sync` | Cluster tab |
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
@@ -508,6 +509,35 @@ an address is locked out does the login page show a countdown. The management co
 (everything under `--versions`, `--tls-*`, `--cluster-*`, `--update-*`, and
 `--assert-agc`) go over the local status socket, which only root may use
 (file mode plus `SO_PEERCRED`).
+
+## Users
+
+Configure ▸ Users (or `ddgw --users`) manages the accounts that may sign in to the GUI: the
+members of the GUI group (`ddgw`, or `web.group`). They are ordinary operating-system accounts on
+the node, managed with `useradd`, `usermod`, `userdel` and `chpasswd`, so PAM stays the single place
+passwords are checked. A new account has no shell and no home directory and exists only to sign in.
+Each account can have an expiry date; the operating system refuses it from that day.
+
+    ddgw --users
+    ddgw --user-add alice --expires 2027-06-30     # asks for the password
+    ddgw --user-passwd alice
+    ddgw --user-expiry alice --expires never
+    ddgw --user-del alice
+
+Names are 1-32 lower-case letters, digits, `_` or `-`. Passwords go to `chpasswd` on its standard
+input, never on a command line. *Add* never touches an account that already exists (put one in the
+group with `usermod -aG ddgw NAME`), only members of the group can be changed, `root` is never listed
+or changeable, and neither the signed-in user nor the last account that can sign in can be deleted.
+Any member can manage the others, which is the same power they already have over the daemon. Every
+change is logged with who made it. The installer adds the user who ran it to the group.
+
+**In a cluster every change applies to every node**: add, delete, password and expiry are made on
+the node you are on and sent to the others over the cluster channel as the password *hash* (the
+password itself never leaves the node that received it). The reply says on how many nodes it was
+applied and names any that were not (a node that was down misses the change; the CLI exits with 2).
+To bring such a node in line, set the password again (that re-sends the whole account and creates it
+where it is missing), or repeat `--user-del` (a node where the account is already gone accepts it).
+A node never takes over an account that already exists there outside the GUI group.
 
 ## Config history
 

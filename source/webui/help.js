@@ -472,5 +472,27 @@ const DDGW_HELP = {
       ["cli", "ddgw --node-pause\nddgw --node-resume\nddgw --node-status\nddgw --power restart|shutdown\nddgw --power restart --in 10\nddgw --power shutdown --at 02:30\nddgw --power status\nddgw --power cancel\n(--yes skips the question and goes ahead even if a gateway would be left unserved)"],
     ],
   },
+  users: {
+    title: "Users",
+    body: [
+      "The accounts that may sign in to this web GUI: the members of the GUI group (`ddgw` unless `web.group` says otherwise). They are ordinary operating-system accounts, so a password set here is the one PAM checks. In a cluster every change here is made on **every node** (the password hash is sent, not the password); if a node could not be reached the message says which, and the change can be repeated when it is back.",
+      ["h", "What it does"],
+      ["ul", [
+        "**Add user** creates an account with no shell and no home directory, in the GUI group, so it can sign in here and do nothing else on the machine.",
+        "**Password** sets a new password for that account; **Expiry** sets the date it stops working (the operating system refuses it from that day) or clears it.",
+        "**Delete** removes the account. You cannot delete yourself or the last account that can sign in.",
+        "Only accounts in the GUI group are listed, and `root` never is. An account that already exists on a machine is never changed by *Add user*; put it in the group with `usermod -aG ddgw NAME` instead.",
+        "A node that was down misses a change. **Password** sends the whole account again (and creates it where it is missing), so setting the password again brings it back in line; `ddgw --user-del NAME` can repeat a delete.",
+        "Every member can manage every other member, which is the same power they already have over the daemon. Changes are logged with who made them.",
+      ]],
+      ["h", "Fields"],
+      ["fields", [
+        ["Name", "Lower-case letters, digits, `_` and `-`, up to 32 characters, starting with a letter or `_`."],
+        ["Password", "The new account's password. It is passed to the system on standard input, never on a command line."],
+        ["Expires", "Optional date after which the account cannot sign in. Empty means never."],
+      ]],
+      ["cli", "ddgw --users\nddgw --user-add NAME [--expires YYYY-MM-DD]\nddgw --user-passwd NAME\nddgw --user-expiry NAME --expires YYYY-MM-DD|never\nddgw --user-del NAME"],
+    ],
+  },
   _default: { title: "Help", body: ["No help has been written for this page yet."] },
 };

@@ -113,6 +113,10 @@ the web GUI):
   Host             --host [--host-range 1h|1d|7d|30d]   (CPU, memory, disk and network use)
   Log              --log [--log-min debug|info|warn|error] [--log-grep WORDS]
                    [--log-since 15m|6h|2d] [--log-lines N]   (the whole log if no --log-lines)
+  Users            --users   (the accounts that may sign in to the web GUI)
+                   --user-add NAME [--expires YYYY-MM-DD]   (asks for the password)
+                   --user-passwd NAME   --user-del NAME
+                   --user-expiry NAME --expires YYYY-MM-DD|never
   Power            --power restart|shutdown [--in MINUTES | --at HH:MM]
                    --power cancel  --power status
                    (restarts or shuts down the whole host; refused while it is the only

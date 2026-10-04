@@ -229,6 +229,7 @@ func (c *Cluster) applyListener() {
 	mux.HandleFunc("GET /cluster/source", c.peerAuth(c.handleSource))
 	mux.HandleFunc("POST /cluster/proxy", c.peerAuth(c.handleProxy))
 	mux.HandleFunc("POST /cluster/hist", c.peerAuth(c.handleHist))
+	mux.HandleFunc("POST /cluster/users", c.peerAuth(c.handleUsers))
 	srv := &http.Server{
 		ErrorLog: log.New(io.Discard, "", 0), Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 2 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10,
@@ -1612,3 +1613,18 @@ func (c *Cluster) peerGateways() []peerGateways {
 }
 
 func selfHost() string { h, _ := os.Hostname(); return h }
+
+// handleUsers applies an account change another member made (users.go).
+func (c *Cluster) handleUsers(rw http.ResponseWriter, r *http.Request, caller ClusterPeer, body []byte) {
+	var m usersMsg
+	if json.Unmarshal(body, &m) != nil || m.Op == "" {
+		jsonError(rw, http.StatusBadRequest, "bad request")
+		return
+	}
+	if err := c.mg.usersPeer(m, firstNonEmpty(m.By, "a member")+" (via "+caller.Addr+")"); err != nil {
+		jsonError(rw, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Write([]byte(`{}`))
+}

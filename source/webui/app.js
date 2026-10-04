@@ -156,7 +156,7 @@
   const TOPO = "Topology";
   const NAV_GROUPS = [
     ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Nodes"], ["dns", "DNS"], ["bgpstatus", "BGP"], ["log", "Log"]]],
-    ["Configure", [["config", "Settings"], ["bgp", "BGP"], ["history", "History"]]],
+    ["Configure", [["config", "Settings"], ["bgp", "BGP"], ["users", "Users"], ["history", "History"]]],
     ["Operate", [["cluster", "Cluster"], ["updates", "Upgrade"], ["power", "Power"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
@@ -3025,6 +3025,95 @@
         sel = null; draft = null;
         main.append(status, settings, nbrs);
         try { await load(); } catch (e) { fail(status)(e); }
+      },
+    };
+  })();
+
+  // ── Users  (CLI: --users, --user-add, --user-passwd, --user-expiry, --user-del) ──
+  VIEWS.users = (() => {
+    let status, box, users = [], group = "", editing = false;
+    const dateText = (u) => (u.expires ? new Date(u.expires * 1000).toISOString().slice(0, 10) : "never");
+    const toUnix = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? Math.floor(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10), 12) / 1000) : 0);
+    const me = () => (state.session && state.session.user) || "";
+
+    async function call(path, body, done) {
+      try {
+        const r = (await api("POST", "/api/users/" + path, body)).data;
+        editing = false;
+        say(status, r.partial ? "warn" : "info", r.message);
+        if (done) done();
+        await VIEWS.users.poll(true);
+      } catch (e) { fail(status)(e); }
+    }
+
+    function editor(td, u, kind) {
+      editing = true;
+      clear(td);
+      const cancel = h("button", { class: "btn small", type: "button", onclick: () => { editing = false; draw(); } }, "Cancel");
+      if (kind === "password") {
+        const pw = h("input", { type: "password", class: "inline", autocomplete: "new-password", "aria-label": "New password for " + u.name });
+        const go = () => call("password", { username: u.name, password: pw.value });
+        pw.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); if (e.key === "Escape") cancel.click(); });
+        td.append(pw, " ", h("button", { class: "btn small primary", type: "button", onclick: go }, "Save"), " ", cancel);
+        pw.focus();
+      } else {
+        const d = h("input", { type: "date", value: u.expires ? dateText(u) : "", "aria-label": "Expiry date for " + u.name });
+        td.append(d, " ", h("button", { class: "btn small primary", type: "button", onclick: () => {
+          if (!d.value) { say(status, "warn", "Choose a date, or use Never expires."); return; }
+          call("expiry", { username: u.name, expires: toUnix(d.value) });
+        } }, "Save"), " ",
+        h("button", { class: "btn small", type: "button", onclick: () => call("expiry", { username: u.name, expires: 0 }) }, "Never expires"), " ", cancel);
+        d.focus();
+      }
+    }
+
+    function draw() {
+      clear(box);
+      if (!users.length) {
+        box.append(h("div", { class: "empty" }, "No account is in the " + group + " group, so nobody can sign in. Add one below."));
+        return;
+      }
+      box.append(h("div", { class: "scroll" }, h("table", {},
+        h("thead", {}, h("tr", {}, h("th", {}, "User"), h("th", {}, "Expires"), h("th", {}, ""))),
+        h("tbody", {}, users.map((u) => {
+          const act = h("td", {});
+          const row = h("tr", {},
+            h("td", {}, u.name, u.name === me() ? h("span", { class: "pill info tiny" }, "you") : null),
+            h("td", {}, u.expired ? h("span", { class: "pill bad" }, "expired " + dateText(u)) : dateText(u)),
+            act);
+          act.append(
+            h("button", { class: "btn small", type: "button", onclick: () => editor(act, u, "password") }, "Password"), " ",
+            h("button", { class: "btn small", type: "button", onclick: () => editor(act, u, "expiry") }, "Expiry"), " ",
+            h("button", { class: "btn small danger", type: "button", disabled: u.name === me(), onclick: () => {
+              if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
+            } }, "Delete"));
+          return row;
+        })))));
+    }
+
+    return {
+      mount(main) {
+        status = h("div", { "aria-live": "polite" });
+        box = h("div", {});
+        const name = h("input", { type: "text", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
+        const pw = h("input", { type: "password", autocomplete: "new-password" });
+        const exp = h("input", { type: "date" });
+        const add = () => call("add", { username: name.value.trim(), password: pw.value, expires: toUnix(exp.value) }, () => { name.value = ""; pw.value = ""; exp.value = ""; });
+        main.append(status,
+          section("Users", box),
+          section("Add user",
+            h("div", { class: "grid c3" },
+              h("label", { class: "f" }, "Name", name),
+              h("label", { class: "f" }, "Password", pw),
+              h("label", { class: "f" }, "Expires", exp)),
+            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: add }, "Add user"))));
+      },
+      async poll(force) {
+        if (editing && force !== true) return;
+        const r = (await api("GET", "/api/users")).data;
+        users = r.users || [];
+        group = r.group;
+        draw();
       },
     };
   })();

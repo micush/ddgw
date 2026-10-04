@@ -105,6 +105,16 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
      change afterwards (group, `/etc/pam.d/ddgw`, `/var/lib/ddgw`, `/run/ddgw`, units).
      Never let the uninstaller delete a config/cert without `--purge`, or a
      PAM file/group it didn't create.
+   - **Touched the Users page (`users.go`, `users_cli.go`, `/api/users`)?** These run
+     `useradd`/`usermod`/`userdel`/`chpasswd` as root, so the unit tests (fake `usersRun`) are
+     not enough: with a real PAM setup (as in the web check) add a user through the CLI, sign in
+     as it over HTTPS, add/expire/re-password/delete another through the API, and check an
+     expired account and an old password are refused. Names are validated before they reach a
+     command, passwords go to `chpasswd` on stdin only, and only members of the GUI group can be
+     changed. Every change is also sent to the other cluster nodes (`/cluster/users`, as the hash): check it
+     with two daemons where the second runs in its own mount namespace with a private copy of `/etc`
+     (`unshare -m`, `mount --bind etc2 /etc`), because on one host both would share one passwd file.
+     Remove the test users, group and PAM file afterwards.
    - **Touched engine start-up, `startGroupWhenReadyLocked` or resume?** A gateway
      that serves DNS must not join the election before its pool answers
      (`warmThenStart`); every path that starts engines for a group goes through

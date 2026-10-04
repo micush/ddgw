@@ -24,6 +24,8 @@ type cliFlags struct {
 	versionShow, versionDiff, versionRestore, versionExport, configImport, note                                                                         *string
 	certFile, keyFile, cn, san                                                                                                                          *string
 	clusterJoin, clusterRemove, clusterUnremove                                                                                                         *string
+	users                                                                                                                                               *bool
+	userAdd, userPasswd, userExpiry, userDel, expires                                                                                                   *string
 	power, powerAt                                                                                                                                      *string
 	powerIn                                                                                                                                             *int
 	bgp, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus                                                                    *bool
@@ -58,6 +60,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		failThreshold: fs.Int("fail-threshold", 0, ""), maxAttempts: fs.Int("max-attempts", 0, ""), latencyAlpha: fs.Float64("latency-alpha", 0, ""),
 		vip: s("vip"), ifname: s("interface"), server: s("server"), name: s("name"), qtype: s("type"),
 		group: fs.Int("group", 0, ""),
+		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), expires: s("expires"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
 		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
@@ -363,6 +366,9 @@ func (f *cliFlags) run(sock string) bool {
 		} else {
 			fmt.Println("This node is running.")
 		}
+	// ── console users ──
+	case *f.users || *f.userAdd != "" || *f.userPasswd != "" || *f.userExpiry != "" || *f.userDel != "":
+		runUsers(sock, f)
 	// ── power ──
 	case *f.power != "":
 		runPower(sock, f)

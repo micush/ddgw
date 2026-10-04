@@ -180,7 +180,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 label.f { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
 label.f.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); }
-input[type=text], input[type=password], input[type=number], input[type=time], select, textarea {
+input[type=text], input[type=password], input[type=number], input[type=time], input[type=date], select, textarea {
   font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
   border-radius: 7px; padding: .42rem .6rem; width: 100%; min-width: 0;
 }
@@ -349,6 +349,8 @@ fieldset.radios .opt { flex-wrap: wrap; }
 
 td input[type=text], td input[type=password], td input[type=number] { width: 100%; min-width: 5.5rem; }
 td input[type=number], td input.as { max-width: 8rem; }
+td input.inline { width: 12rem; }
+td input[type=date] { width: 11rem; }
 
 /* Monitor → Log */
 .logbox { height: calc(100vh - 20rem); min-height: 16rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-family: var(--mono); font-size: .78rem; }

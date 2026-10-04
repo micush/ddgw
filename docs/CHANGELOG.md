@@ -1,5 +1,37 @@
 # Changelog
 
+## [v178] - 2026-10-04 — Users: cluster-wide changes, root never listed
+
+### Changed
+- **User changes apply to every cluster node.** Add, delete, password and expiry are made on the node you are on and sent to the other members over the cluster channel (`POST /cluster/users`, signed, pinned TLS) as the password *hash*, applied with `chpasswd -e` on standard input; the plaintext password never leaves the node that received it. The reply (GUI notice, CLI) says on how many nodes it was applied and names those that were not and why; the CLI then exits with 2 and the GUI shows a warning. A receiving node applies the same rules as a local change: it never takes over an existing account outside the GUI group, never touches root, accepts a delete of an account that is already gone, and keeps its own last-account guard. *Password* re-sends the whole account (hash and expiry) and creates it where it is missing, which repairs a node that was down; `--user-del` for an account that is not here still tells the other nodes.
+- `root` is never listed and cannot be added, changed or deleted here, even when it is in the GUI group; it does not count as "another account that can sign in".
+
+### Verified
+- gofmt, vet, `go test -race ./...`, five cross-compiles, `CGO_ENABLED=0`, `node --check`; CodeQL (go-code-scanning): no alerts.
+- Unit tests: root hidden and untouchable, a peer cannot touch root, exact `useradd`/`chpasswd -e`/`usermod` calls for an account arriving from another node (hash on stdin only), malformed hashes (plaintext, `!`, line break, colon), bad names, existing accounts never taken over, delete idempotent.
+- Two real daemons joined into a cluster, the second in its own mount namespace with a private copy of `/etc` (so the two have separate account databases): add (account, hash and expiry identical on both), password change, expiry, delete all reached node 2; a user created on node 1 signed in on node 2 with the same password; with node 2 stopped an add reported "NOT applied on 127.0.0.1:53862" (exit 2); after node 2 was back, setting the password again created the missing account there; `root` in the group is not listed. Test users, group and PAM file removed afterwards.
+
+### Not verified
+- Nodes on different versions (a node without `/cluster/users` answers 404 and is reported as not applied; not tried). The GUI warning for a partial result was not looked at in Chromium. Three or more nodes were not tried.
+
+## [v177] - 2026-10-04 — Users page, installer adds the installing user
+
+### Added
+- **Configure ▸ Users** (CLI `--users`, `--user-add NAME [--expires YYYY-MM-DD]`, `--user-passwd`, `--user-expiry NAME --expires DATE|never`, `--user-del`): list, add, re-password, set or clear the expiry of, and delete the accounts that may sign in to the GUI (members of `web.group`). Done with `useradd` (no shell, no home directory, primary group = the GUI group), `usermod --expiredate`, `userdel` and `chpasswd`; passwords go to `chpasswd` on standard input, never a command line, and the CLI asks for them without echo. Names are validated (1-32 of `a-z0-9_-`, starting with a letter or `_`) before any command runs. Only members of the group can be changed (never root or another system account); *Add* refuses an account that already exists; you cannot delete yourself or the last account that can sign in. Any member can manage the others; every change is logged with who made it. Accounts are per node and the Node menu picks the node (`/api/users` is relayed). Help topic, README section and CLI table row added.
+- `users_test.go`: name validation, listing (group line, primary-group members, expiry from shadow), add (exact `useradd` arguments, password only on stdin, refusals run nothing, rollback when `chpasswd` fails), password/expiry/delete only for members, self and last-account guards.
+
+### Changed
+- `install.sh` now always adds the user who ran it (the one behind `sudo`, or root itself) to the `ddgw` group, at the end, instead of asking; `--add-user` still adds others. README and QUICKSTART updated.
+- `input[type=date]` is styled like the other inputs.
+
+### Verified
+- gofmt, vet, `go test -race ./...`, `node --check`, help tests; the five cross-compiles and `CGO_ENABLED=0` vet/tests; CodeQL (go-code-scanning): no alerts.
+- Real PAM run (group, `/etc/pam.d/ddgw`, real daemon): `--user-add` through the CLI (with piped password; bad names, an existing account and an empty password refused), sign-in over HTTPS as the new user, add / delete-self refused / password of root refused / expiry in the past (that account's sign-in refused) / expiry cleared / new password (old one refused, new one works) / delete over the API, a request without the CSRF token refused, log lines show who did what and no passwords. The page looked at in Chromium, light and dark (add through the form, password editor); test users, group and PAM file removed afterwards.
+- `bash -n`, shellcheck and `install.sh --dry-run` (with and without `SUDO_USER`) show the `usermod -aG` for the installing user.
+
+### Not verified
+- The installer change was not run for real (no full install in the sandbox this time); the expiry editor, the delete button and the Node-menu relay of `/api/users` were not clicked through in Chromium. The CLI's no-echo password prompt was not tried on a real terminal (only the piped path).
+
 ## [v176] - 2026-10-04 — Cluster connections verified properly, CodeQL findings fixed
 
 ### Changed

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // Web routes for configuration history, the certificate, the cluster and
@@ -49,6 +50,11 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/qstats", w.authed(w.op("qstats.get", []string{"from", "to", "rcode", "client", "domain"})))
 	mux.HandleFunc("GET /api/nodepause", w.authed(w.op("node.status", nil)))
 	mux.HandleFunc("POST /api/nodepause", w.authed(w.op("node.pause", nil)))
+	mux.HandleFunc("GET /api/users", w.authed(w.op("users.list", nil)))
+	mux.HandleFunc("POST /api/users/add", w.authed(w.op("users.add", nil)))
+	mux.HandleFunc("POST /api/users/password", w.authed(w.op("users.password", nil)))
+	mux.HandleFunc("POST /api/users/expiry", w.authed(w.op("users.expiry", nil)))
+	mux.HandleFunc("POST /api/users/delete", w.authed(w.op("users.delete", nil)))
 	mux.HandleFunc("GET /api/power", w.authed(w.op("power.status", nil)))
 	mux.HandleFunc("POST /api/power", w.authed(w.op("power.do", nil)))
 	mux.HandleFunc("GET /api/update", w.authed(w.op("update.status", nil)))
@@ -80,7 +86,7 @@ func (w *WebServer) op(cmd string, query []string) func(http.ResponseWriter, *ht
 			}
 			args = body
 		}
-		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" {
+		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" || strings.HasPrefix(cmd, "users.") && cmd != "users.list" {
 			warnf("web: %q ran %s (from %s)", s.user, cmd, clientIP(r))
 		}
 		data, err := w.mg.Op(cmd, args, s.user)

@@ -13,10 +13,10 @@ ddgw gives a group of machines one shared DNS address (a **gateway**). Clients p
 ```
 tar xzf ddgw_v*.tgz
 cd ddgw
-sudo ./install.sh --add-user alice
+sudo ./install.sh
 ```
 
-Replace `alice` with an existing Linux user who will log in to the GUI. The installer installs what is missing, builds ddgw, creates the `ddgw` group and the PAM login file, and starts the `ddgw` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
+The user running the installer (you, behind `sudo`) can log in to the GUI; add others with `--add-user NAME` or later on the Users page. The installer installs what is missing, builds ddgw, creates the `ddgw` group and the PAM login file, and starts the `ddgw` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
 
 Who can log in: a user whose Linux password PAM accepts **and** who is in the `ddgw` group. `root` is not special; add it to the group only if you want it to log in (`sudo usermod -aG ddgw alice` adds a user later).
 
