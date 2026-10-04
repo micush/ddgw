@@ -1,5 +1,23 @@
 # Changelog
 
+## [v176] - 2026-10-04 — Cluster connections verified properly, CodeQL findings fixed
+
+### Changed
+- Cluster connections (`clusterpin.go`) no longer disable certificate checking. A node's identity certificate is still pinned by its SHA-256 fingerprint, but the connection now verifies against exactly that certificate through the normal TLS verification: the first connection to a fingerprint only learns the certificate the peer offers and accepts it only if the fingerprint matches; the real connection then verifies the peer (name, validity, key usage) against it. The certificate is remembered in memory, so later connections do one handshake.
+- Requests to peers go to a fixed URL (`https://ddgw-node/...`) and the connection is dialled to the peer's address (still validated by `validHostPort`), so no peer-supplied text is ever part of a URL.
+- A config version's file name is built from the version number, not from the id's text; `validVersionID` now accepts only the canonical decimal form of a positive number.
+- This resolves the four CodeQL alerts (disabled TLS certificate check, two uncontrolled-data-in-network-request, uncontrolled-data-in-path-expression). The same four showed up in a local CodeQL run (go-code-scanning suite, CodeQL 2.27.1) before the change and none after.
+
+### Added
+- `clusterpin_test.go`: a pinned peer connects (twice, the second from the remembered certificate); a wrong pin, an impostor on the right address, a pin that matches a certificate for another name, and an invalid address are all refused. `TestVersionPathStaysInside` rewritten for the new path rule.
+
+### Verified
+- gofmt, build, vet, `go test -race ./...`, the five cross-compiles, `CGO_ENABLED=0` vet and tests; CodeQL on the final tree: no alerts.
+- Two real daemons: join with a code, replica listed as reachable, a gateway added on the replica appeared on the primary and both agreed.
+
+### Not verified
+- Certificate install/revert, promotion and an update push through the new connection were not re-run live (they use the same call path). 
+
 ## [v175] - 2026-10-04 — No more references to the Python predecessor
 
 ### Changed

@@ -121,18 +121,17 @@ func canonicalConfig(raw []byte) (*DaemonConfig, []byte, error) {
 	return dc, b, nil
 }
 
-func (s *VersionStore) path(id string) string { return filepath.Join(s.dir, id+".json") }
+// path is the file of a version. The id is a number (validVersionID), and the
+// file name is built from that number, not from the text it came in as.
+func (s *VersionStore) path(id string) string {
+	n, _ := strconv.ParseInt(id, 10, 64)
+	return filepath.Join(s.dir, strconv.FormatInt(n, 10)+".json")
+}
 
+// validVersionID accepts the canonical decimal form of a positive number.
 func validVersionID(id string) bool {
-	if id == "" || len(id) > 20 {
-		return false
-	}
-	for _, c := range id {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
+	n, err := strconv.ParseInt(id, 10, 64)
+	return err == nil && n > 0 && strconv.FormatInt(n, 10) == id
 }
 
 func (s *VersionStore) ids() []string {

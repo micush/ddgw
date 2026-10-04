@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +16,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"sort"
 	"strconv"
@@ -334,12 +334,41 @@ func validPeer(p ClusterPeer) bool {
 		return false
 	}
 	for _, a := range p.Alts {
-		if _, _, err := net.SplitHostPort(a); err != nil || len(a) > 255 {
+		if !validHostPort(a) {
 			return false
 		}
 	}
-	_, _, err := net.SplitHostPort(p.Addr)
-	return err == nil
+	return validHostPort(p.Addr)
+}
+
+// validHostPort accepts only "host:port" where the host is an IP address or a
+// plain host name and the port is 1-65535.  Peer addresses end up in a URL, so
+// anything that could change where the request goes ("@", "/", "?", "#",
+// spaces, a zone) is refused.
+func validHostPort(a string) bool {
+	if a == "" || len(a) > 255 {
+		return false
+	}
+	host, port, err := net.SplitHostPort(a)
+	if err != nil || host == "" {
+		return false
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return false
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return !strings.Contains(host, "%")
+	}
+	if len(host) > 253 {
+		return false
+	}
+	for _, c := range host {
+		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '.' || c == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // ── client ───────────────────────────────────────────────────────────────────
@@ -351,29 +380,6 @@ type peerError struct {
 }
 
 func (e *peerError) Error() string { return e.Msg }
-
-func pinnedClient(fp string, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // identity is pinned below instead
-				MinVersion:         tls.VersionTLS12,
-				VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
-					if len(raw) == 0 {
-						return errors.New("no certificate presented")
-					}
-					sum := sha256.Sum256(raw[0])
-					if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(fp)) != 1 {
-						return errors.New("peer identity does not match the pinned fingerprint")
-					}
-					return nil
-				},
-			},
-		},
-	}
-}
 
 // call performs an authenticated request to peer.
 func (c *Cluster) call(ctx context.Context, peer ClusterPeer, method, path string, in, out any, timeout time.Duration) error {
@@ -438,12 +444,15 @@ func (c *Cluster) noteGoodAddr(peer ClusterPeer, addr string) {
 }
 
 func (c *Cluster) callAddr(ctx context.Context, addr string, peer ClusterPeer, method, path string, body []byte, onBody func(io.Reader) error, timeout time.Duration, hdr http.Header) error {
+	if !validHostPort(addr) || !strings.HasPrefix(path, "/") {
+		return errors.New("refusing to call " + strconv.Quote(addr) + path)
+	}
 	self := c.node.Self()
 	pj, _ := json.Marshal(self)
 	peerHdr := base64.StdEncoding.EncodeToString(pj)
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce := randHex(12)
-	req, err := http.NewRequestWithContext(ctx, method, "https://"+addr+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, peerURL(path), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -454,7 +463,7 @@ func (c *Cluster) callAddr(ctx context.Context, addr string, peer ClusterPeer, m
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := pinnedClient(peer.Fp, timeout).Do(req)
+	resp, err := pinnedClient(addr, peer.Fp, timeout).Do(req)
 	if err != nil {
 		return err
 	}
@@ -750,6 +759,11 @@ func decodeJoinCode(code string) (joinCode, error) {
 	if err != nil || json.Unmarshal(raw, &jc) != nil || jc.Token == "" || len(jc.Fp) != 64 || len(jc.Addrs) == 0 || len(jc.Addrs) > 32 {
 		return jc, errors.New("the join code is damaged — copy it again in full")
 	}
+	for _, a := range jc.Addrs {
+		if !validHostPort(a) {
+			return jc, errors.New("the join code is damaged — copy it again in full")
+		}
+	}
 	return jc, nil
 }
 
@@ -772,15 +786,19 @@ func (c *Cluster) Join(ctx context.Context, code, by string) error {
 	req := joinRequest{Token: jc.Token, Peer: c.node.Self(), ExplicitSelf: explicit}
 	var errs []string
 	for _, addr := range jc.Addrs {
+		if !validHostPort(addr) {
+			errs = append(errs, "skipped an invalid address in the join code")
+			continue
+		}
 		var res joinResponse
 		body, _ := json.Marshal(req)
-		hreq, err := http.NewRequestWithContext(ctx, "POST", "https://"+addr+"/cluster/join", bytes.NewReader(body))
+		hreq, err := http.NewRequestWithContext(ctx, "POST", peerURL("/cluster/join"), bytes.NewReader(body))
 		if err != nil {
 			errs = append(errs, err.Error())
 			continue
 		}
 		hreq.Header.Set("Content-Type", "application/json")
-		resp, err := pinnedClient(jc.Fp, 8*time.Second).Do(hreq)
+		resp, err := pinnedClient(addr, jc.Fp, 8*time.Second).Do(hreq)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", addr, err))
 			continue
