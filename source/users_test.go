@@ -315,3 +315,38 @@ func TestPeerNeverTakesOverAnExistingAccount(t *testing.T) {
 		t.Errorf("nothing may run: %+v", *calls)
 	}
 }
+
+func TestUsersSeedOnJoin(t *testing.T) {
+	// this node already has alice (member), carol (not a member) and svc
+	m, calls := usersFixture(t, fxGroup, fxPasswd+"svc:x:999:999::/:/bin/bash\n", "")
+	exp := time.Date(2027, 1, 2, 12, 0, 0, 0, time.UTC).Unix()
+	list := []usersMsg{
+		{Op: "apply", Name: "alice", Hash: testHash},
+		{Op: "apply", Name: "carol", Hash: testHash},
+		{Op: "apply", Name: "svc", Hash: testHash},
+		{Op: "apply", Name: "root", Hash: testHash},
+		{Op: "apply", Name: "bad name", Hash: testHash},
+		{Op: "delete", Name: "zed"},
+		{Op: "apply", Name: "dave", Hash: testHash, Expires: exp},
+	}
+	added, skipped := m.usersSeed(list, "n1")
+	if added != 1 || skipped != 6 {
+		t.Fatalf("added %d skipped %d", added, skipped)
+	}
+	var names []string
+	for _, c := range *calls {
+		names = append(names, c.name+" "+strings.Join(c.args, " "))
+	}
+	if len(names) != 3 || !strings.HasPrefix(names[0], "useradd ") || !strings.Contains(names[0], "dave") || names[1] != "chpasswd -e" {
+		t.Fatalf("only dave may be created: %q", names)
+	}
+}
+
+func TestUsersExport(t *testing.T) {
+	shadow := "alice:" + testHash + ":19000:0:99999:7:::\nbob:!:19000::::::\n"
+	m, _ := usersFixture(t, fxGroup, fxPasswd, shadow)
+	got := m.usersExport()
+	if len(got) != 1 || got[0].Name != "alice" || got[0].Hash != testHash || got[0].Op != "apply" {
+		t.Fatalf("%+v", got)
+	}
+}

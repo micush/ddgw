@@ -256,7 +256,7 @@ input[type=file] { margin-top: .5rem; }
 svg.cv { max-width: none; outline: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .cv-wrap.panning, .cv-wrap.panning * { cursor: grabbing !important; user-select: none; }
 svg.cv .edge { stroke: var(--border); stroke-width: 2; }
-svg.cv .edge.spread { stroke: var(--accent); }
+svg.cv .edge.spread { stroke: var(--accent); stroke-width: 4; }
 svg.cv .edge.down { stroke: var(--bad); stroke-dasharray: 7 5; }
 svg.cv .shape { cursor: pointer; outline: none; }
 svg.cv .shape.drag { cursor: grab; }

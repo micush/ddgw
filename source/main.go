@@ -193,10 +193,10 @@ Web GUI ("web" block): everything above is also available in a browser.
   The certificate is managed with --tls-* / Settings ▸ Web GUI (the old
   cert_file/key_file settings still work and take precedence).
   Pages: Topology (--canvas, --canvas-add/-del: draw gateways, DNS servers and
-  the domains to test as circle, squares and trapezoids), Gateways (--show-gateways, --assert-agc), Nodes
-  (--show-neighbors, --cluster-status), DNS (--show-dns), Settings (--show-config,
+  the domains to test as circle, squares and trapezoids), Gateways (--show-gateways, --show-neighbors),
+  Cluster monitor (--cluster-status), DNS (--show-dns), Settings (--show-config,
   --configure: form), History (--versions...), Certificate
-  (--tls-...), Cluster (--cluster-...), Upgrade (--update-...), Power (--power); the ? at the top right
+  (--tls-...), Node (--assert-agc, --node-pause..., --power), Cluster (--cluster-...), Upgrade (--update-...); the ? at the top right
   opens help for the page. Version is in the header. A certificate installed through the GUI/CLI is
   picked up without restarting the GUI.
 

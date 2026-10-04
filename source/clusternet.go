@@ -61,7 +61,7 @@ type PeerStatusMsg struct {
 	// predate the field (their health is then assumed).
 	GwKnown  bool      `json:"gw_known,omitempty"`
 	Gateways []GwState `json:"gateways,omitempty"`
-	// NodePaused: the whole node is paused (Power page); shown on the Topology drawing.
+	// NodePaused: the whole node is paused (Operate ▸ Node); shown on the Topology drawing.
 	NodePaused bool `json:"node_paused,omitempty"`
 	// Host is this node's CPU, memory and disk use, for the Topology drawing (absent on older nodes).
 	Host *HostLoad `json:"host,omitempty"`
@@ -843,6 +843,7 @@ func (c *Cluster) Join(ctx context.Context, code, by string) error {
 		if err := c.SyncOnce(ctx); err != nil {
 			warnf("cluster: joined, but the first sync failed: %v", err)
 		}
+		c.mg.usersPull(ctx, res.Server)
 		return nil
 	}
 	return fmt.Errorf("could not reach the cluster: %s", strings.Join(errs, "; "))
@@ -1619,6 +1620,12 @@ func (c *Cluster) handleUsers(rw http.ResponseWriter, r *http.Request, caller Cl
 	var m usersMsg
 	if json.Unmarshal(body, &m) != nil || m.Op == "" {
 		jsonError(rw, http.StatusBadRequest, "bad request")
+		return
+	}
+	if m.Op == "list" { // a node that has just joined asks for the accounts
+		b, _ := json.Marshal(map[string]any{"users": c.mg.usersExport()})
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(b)
 		return
 	}
 	if err := c.mg.usersPeer(m, firstNonEmpty(m.By, "a member")+" (via "+caller.Addr+")"); err != nil {

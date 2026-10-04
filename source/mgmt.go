@@ -34,7 +34,7 @@ type Mgmt struct {
 	reloadFn  func() error          // re-read the config file and apply it
 	restartFn func()                // gracefully re-exec this process
 	gwFn      func() []GwState      // which gateways this node is serving right now
-	pausedFn  func() bool           // whether this whole node is paused (Power page)
+	pausedFn  func() bool           // whether this whole node is paused (Operate ▸ Node)
 	anycastFn func() []AnycastState // the anycast addresses and whether each is announced now
 	servMu    sync.Mutex
 	servSince map[int]time.Time // when each gateway started being served continuously

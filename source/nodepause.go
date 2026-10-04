@@ -1,6 +1,6 @@
 package main
 
-// NodePauseState is what the Power page and `ddgw --node-status` show.
+// NodePauseState is what the Node page and `ddgw --node-status` show.
 type NodePauseState struct {
 	Paused bool `json:"paused"`
 }

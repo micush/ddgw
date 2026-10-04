@@ -370,6 +370,14 @@ func (s *StatusServer) markAnycast(groups []CanvasGateway) {
 				}
 			}
 		}
+		if cfg.BGP.Active() {
+			peers, ok := liveBGPPeers()
+			for j := range st {
+				if st[j].Up && st[j].Paused == "" {
+					st[j].Status, st[j].Detail = anycastBGP(st[j].Addr, peers, ok, time.Now())
+				}
+			}
+		}
 		groups[i].Anycast = st
 	}
 }

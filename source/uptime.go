@@ -80,6 +80,9 @@ func (u *upTracker) annotate(groups []CanvasGateway, now time.Time) {
 				st = "bad"
 				if a.Up {
 					st = "ok"
+					if a.Status == "warn" || a.Status == "bad" {
+						st = a.Status
+					}
 				}
 			}
 			a.Uptime = u.observe(gk+"/a/"+a.Addr, st, now)

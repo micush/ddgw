@@ -155,9 +155,9 @@
   // Topology comes first; its items are the gateways themselves (filled in from the daemon).
   const TOPO = "Topology";
   const NAV_GROUPS = [
-    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Nodes"], ["dns", "DNS"], ["bgpstatus", "BGP"], ["log", "Log"]]],
+    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["bgpstatus", "BGP"], ["log", "Log"]]],
     ["Configure", [["config", "Settings"], ["bgp", "BGP"], ["users", "Users"], ["history", "History"]]],
-    ["Operate", [["cluster", "Cluster"], ["updates", "Upgrade"], ["power", "Power"]]],
+    ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["updates", "Upgrade"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
   const groupOf = (id) => (id === "topology" ? TOPO : (NAV_GROUPS.find(([, items]) => items.some(([i]) => i === id)) || [null])[0]);
@@ -228,6 +228,7 @@
     let wanted = location.hash.slice(1);
     if (wanted === "canvas") wanted = "topology"; // the page's old name: keep old bookmarks working
     if (wanted === "neighbors") wanted = "nodes"; // likewise
+    if (wanted === "power" || wanted === "gateway") wanted = "node"; // Power and the short-lived Gateway page became Operate ▸ Node
     if (wanted === "certificate") { wanted = "config"; state.cfgTab = "web"; } // moved under Settings ▸ Web GUI
     selectTab(TABS.some(([id]) => id === wanted) ? wanted : "topology");
   }
@@ -477,7 +478,7 @@
       // what is staged wins over the last live view, so the pause / resume shows at once
       const nodePaused = !!(v && v.node_paused);
       const gwPaused = !!(g.paused || g.paused_all);
-      if (gwPaused || nodePaused) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : nodePaused && !g.paused ? "This node is paused (Power page) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
+      if (gwPaused || nodePaused) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
       else if (circle === "paused") { circle = "idle"; why = "Resuming…"; }
       return { circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused ? v.uptime : null };
     }
@@ -550,22 +551,37 @@
         if (!!n.node_paused === w.want || Date.now() > w.until) { delete waiting[n.addr]; return n; }
         return { ...n, status: w.want ? "paused" : "idle", label: w.want ? "pausing…" : "resuming…" };
       }), NW = 190, NSL = 14;      // a node is a parallelogram: its name and what it is doing
-      // each side is four rows tall; the next ones go in a new column further out
-      const PER = 4, CG = 25, SIDE_GAP = 70;   // SIDE_GAP: room between the circle and the nodes on its left, the anycast pills on its right
-      const sideH = (n) => Math.min(PER, n) * (AH + AG) - (n ? AG : 0);
-      const aCols = Math.ceil(anys.length / PER), nCols = Math.ceil(nodes.length / PER);
-      const CY = R + 12, anyH = sideH(anys.length), nodeH = sideH(nodes.length);
-      const anyTop = Math.max(8, CY - anyH / 2), nodeTop = Math.max(8, CY - nodeH / 2);
-      const anyAt = (k) => ({ x: R + SIDE_GAP + Math.floor(k / PER) * (AW + CG), y: anyTop + (k % PER) * (AH + AG) });   // x from the circle's centre
-      const nodeAt = (k) => ({ x: -(R + SIDE_GAP + NW + Math.floor(k / PER) * (NW + CG)), y: nodeTop + (k % PER) * (AH + AG) });
-      const rightX = anys.length ? R + SIDE_GAP + aCols * AW + (aCols - 1) * CG : 0, leftX = nodes.length ? R + SIDE_GAP + nCols * NW + (nCols - 1) * CG : 0;
+      // each side is four rows tall, or three when a four-row side would have a server's line run through a box; the next ones go in a new column further out
+      const CG = 25, SIDE_GAP = 70;   // SIDE_GAP: room between the circle and the nodes on its left, the anycast pills on its right
       const SH = servers.some((a) => srvName(g, a)) ? 62 : 46;   // a named server has a third line, so every square in the row is taller
-      const sideBottom = Math.max(anys.length ? anyTop + anyH : 0, nodes.length ? nodeTop + nodeH : 0);
-      const SY = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0), DY0 = SY + SH + 34;   // servers' top, first domain's top
-      const W = Math.max(Math.max(servers.length, 1) * COLW + 20, 2 * R + 140, 2 * Math.max(rightX, leftX) + 20), H = DY0 + Math.max(maxDoms, 1) * DG + 6;
-      const cx = W / 2;
-      // a server column's x offset: the row of servers is centred under the circle
-      const rowW = Math.max(servers.length, 1) * COLW, rowX = (W - rowW) / 2;
+      const CY = R + 12;
+      const layout = (PER) => {
+        const sideH = (n) => Math.min(PER, n) * (AH + AG) - (n ? AG : 0);
+        const aCols = Math.ceil(anys.length / PER), nCols = Math.ceil(nodes.length / PER);
+        const anyH = sideH(anys.length), nodeH = sideH(nodes.length);
+        const anyTop = Math.max(8, CY - anyH / 2), nodeTop = Math.max(8, CY - nodeH / 2);
+        const anyAt = (k) => ({ x: R + SIDE_GAP + Math.floor(k / PER) * (AW + CG), y: anyTop + (k % PER) * (AH + AG) });   // x from the circle's centre
+        const nodeAt = (k) => ({ x: -(R + SIDE_GAP + NW + Math.floor(k / PER) * (NW + CG)), y: nodeTop + (k % PER) * (AH + AG) });
+        const rightX = anys.length ? R + SIDE_GAP + aCols * AW + (aCols - 1) * CG : 0, leftX = nodes.length ? R + SIDE_GAP + nCols * NW + (nCols - 1) * CG : 0;
+        const sideBottom = Math.max(anys.length ? anyTop + anyH : 0, nodes.length ? nodeTop + nodeH : 0);
+        const SY = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0), DY0 = SY + SH + 34;   // servers' top, first domain's top
+        const W = Math.max(Math.max(servers.length, 1) * COLW + 20, 2 * R + 140, 2 * Math.max(rightX, leftX) + 20), H = DY0 + Math.max(maxDoms, 1) * DG + 6;
+        const cx = W / 2, rowX = (W - Math.max(servers.length, 1) * COLW) / 2;   // the row of servers is centred under the circle
+        // does a line from the circle to a server pass through a node or a pill?
+        const boxes = [...anys.map((_, k) => ({ ...anyAt(k), w: AW })), ...nodes.map((_, k) => ({ ...nodeAt(k), w: NW }))];
+        let clash = false;
+        servers.forEach((_, i) => {
+          const x2 = rowX + i * COLW + COLW / 2;
+          for (let t = 0; t <= 1 && !clash; t += 0.02) {
+            const px = cx + (x2 - cx) * t - cx, py = CY + R + (SY - CY - R) * t;
+            if (boxes.some((b) => px > b.x - 3 && px < b.x + b.w + 3 && py > b.y - 3 && py < b.y + AH + 3)) clash = true;
+          }
+        });
+        return { PER, anyAt, nodeAt, SY, DY0, W, H, cx, rowX, clash };
+      };
+      let lay = layout(4);
+      if (lay.clash) lay = layout(3);
+      const { anyAt, nodeAt, SY, DY0, W, H, cx, rowX } = lay;
       const svg = sv("svg", { class: "cv", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group", "aria-label": "Gateway diagram", tabindex: "0",
         onkeydown: (e) => { if ((e.key === "Delete" || e.key === "Backspace") && cv.sel && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); delSel(); } },
         onclick: (e) => { if (e.target === svg) { cv.sel = null; refresh(); } } });
@@ -643,10 +659,10 @@
         // A pill is never more alarming than its gateway: green while announced,
         // otherwise it takes the gateway's own colour only when that is amber, red or paused.
         const pzAll = (g.paused_vips || []).includes(addr), pzHere = (g.paused_vips_here || []).includes(addr), pz = pzAll || pzHere;
-        const c = pz ? "paused" : noSrv || !a ? "idle" : a.up ? "ok" : ["warn", "bad", "paused"].includes(st.circle) ? st.circle : "idle";
+        const c = pz ? "paused" : noSrv || !a ? "idle" : a.up ? (a.status === "warn" || a.status === "bad" ? a.status : "ok") : ["warn", "bad", "paused"].includes(st.circle) ? st.circle : "idle";
         const why = pz ? "Paused on " + (pzAll ? "all nodes" : "this node") + ": not announced until resumed" : noSrv ? "Add a DNS server to this gateway: the address is only announced while a server answers"
           : g.paused || g.paused_all ? "Gateway paused on " + (g.paused_all ? "all nodes" : "this node") + ": not announced"
-          : !a ? "Applying…" : a.up ? "Announced from this node (on lo)" : "Withdrawn on this node" + (a.reason ? ": " + a.reason : "");
+          : !a ? "Applying…" : a.up ? "Announced from this node (on lo)" + (a.detail ? " — " + a.detail : "") : "Withdrawn on this node" + (a.reason ? ": " + a.reason : "");
         lines.push(sv("line", { x1: cx + R, y1: CY, x2: x, y2: y + AH / 2, class: "edge" }));
         shapes.push(sv("g", { class: "shape drag st-" + c + (sel("any", addr) ? " sel" : ""), tabindex: "0", role: "button", "aria-label": "Anycast address " + addr, onclick: pick("any", addr), oncontextmenu: rightClick("any", addr),
           onpointerdown: dragStart({ axis: "xy", n: anys.length, index: i, pos: { x, y }, slot: (k) => ({ x: cx + anyAt(k).x, y: anyAt(k).y }),
@@ -656,7 +672,7 @@
           sv("title", {}, "Anycast " + addr + " — " + why + (a && !noSrv && !g.paused && !g.paused_all && !pz ? upLine(a.uptime) : "")),
           sv("rect", { x, y, width: AW, height: AH, rx: 18 }),
           label(x + AW / 2, y + 17, addr, "ip"),
-          label(x + AW / 2, y + 32, c === "ok" ? "anycast · announced" : c === "paused" && pz ? "paused · " + (pzAll ? "all nodes" : "this node") : c === "paused" ? "anycast · paused" : a && !a.up && !noSrv ? "anycast · withdrawn" : "anycast", "t2")));
+          label(x + AW / 2, y + 32, a && a.up && !noSrv && !pz && a.status === "warn" ? "anycast · BGP connecting" : a && a.up && !noSrv && !pz && a.status === "bad" ? "anycast · no BGP session" : c === "ok" ? "anycast · announced" : c === "paused" && pz ? "paused · " + (pzAll ? "all nodes" : "this node") : c === "paused" ? "anycast · paused" : a && !a.up && !noSrv ? "anycast · withdrawn" : "anycast", "t2")));
       });
       // the cluster's nodes, left of the circle, as parallelograms (read-only: they cannot be dragged or deleted here)
       nodes.forEach((n, i) => {
@@ -665,8 +681,8 @@
         shapes.push(sv("g", { class: "shape st-" + n.status, tabindex: "0", role: "button", "aria-label": "Cluster node " + n.name, oncontextmenu: nodeMenu(n), onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
-          label(mid, y + 17, fitPx(n.name, NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
-          label(mid, y + 32, fitPx((n.self ? "this node · " : "") + n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2")));
+          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
+          label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2")));
       });
       servers.forEach((addr, i) => {
         const x = rowX + i * COLW + (COLW - SW) / 2, mx = x + SW / 2;
@@ -1075,7 +1091,7 @@
     // open another node (the Node menu, top right), optionally on one page; this node's own address stands for "this node"
     const openNode = (n, tab) => { const me = selfNode(); setTarget(me && n.addr === me.addr ? null : n.addr); if (tab) selectTab(tab); };
     // Pause or resume any reachable node from its shape: this node directly, another through the cluster relay (the same call the
-    // Power page makes on the node picked in the Node menu).  Until that node reports back (up to a sync interval) the shape shows
+    // Node page makes on the node picked in the Node menu).  Until that node reports back (up to a sync interval) the shape shows
     // "pausing…" / "resuming…" so the click is seen at once.
     const nodeCall = (n, method, path, body) => {
       const me = selfNode(), to = me && n.addr === me.addr ? null : n.addr;
@@ -1433,29 +1449,13 @@
     };
   })();
 
-  // Gateways  (CLI: --show-gateways, --assert-agc)
+  // Gateways  (CLI: --show-gateways, --show-neighbors)
   VIEWS.gateways = (() => {
-    let body, result;
+    let body;
     return {
       mount(main) {
-        result = h("div", { "aria-live": "polite" });
         body = h("div", {});
-        const btn = h("button", {
-          class: "btn warn", type: "button",
-          onclick: async () => {
-            if (!confirm("Make this node the active gateway for all groups?\n\nThe node that currently answers for the shared address is asked to hand over. Clients may notice a brief interruption.")) return;
-            btn.disabled = true;
-            try {
-              const r = await api("POST", "/api/assert-agc", {});
-              clear(result);
-              if (!r.ok) result.append(h("div", { class: "notice bad" }, r.error || "Could not take over as the active gateway"));
-              VIEWS.gateways.poll().catch(() => {});
-            } catch (ex) { if (ex.message !== "unauthenticated") errorBox(result, ex.message); }
-            finally { btn.disabled = false; }
-          },
-        }, "Make this node the active gateway");
-        main.append(h("div", { class: "toolbar" }, btn),
-          result, body, h("p", { class: "hint" }, "★ marks this node"));
+        main.append(body, h("p", { class: "hint" }, "★ marks this node"));
       },
       async poll() {
         const r = await api("GET", "/api/gateways");
@@ -1488,44 +1488,14 @@
     };
   })();
 
-  // Nodes  (CLI: --show-neighbors, --show-gateways, --cluster-status)
-  // Two things are watched here: the gateway protocol (who this node hears hellos from, per gateway) and the
-  // cluster (which nodes share the settings, and whether they are reachable). Each has its own card.
+  // Nodes  (CLI: --cluster-status): the cluster's members (the gateway protocol's neighbours are on Gateways)
   VIEWS.nodes = (() => {
     let body;
     return {
       mount(main) { body = h("div", {}); main.append(body, h("p", { class: "hint" }, "★ marks this node")); },
       async poll() {
-        const [r, c] = await Promise.all([api("GET", "/api/neighbors?all=1"), api("GET", "/api/cluster").catch(() => null)]);
+        const c = await api("GET", "/api/cluster").catch(() => null);
         clear(body);
-        // One line per node: its IPv4 address and IPv6 link-local address together. The two engines of a node
-        // share the forwarder slot, which is how they are matched; a row with no partner stands alone.
-        const nb = [];
-        for (const p of (r.data || []).filter((x) => x.af !== "v6")) nb.push({ v4: p, v6: null });
-        for (const p of (r.data || []).filter((x) => x.af === "v6")) {
-          const m = p.afn_id ? nb.find((e) => !e.v6 && e.v4 && e.v4.group_id === p.group_id && e.v4.afn_id === p.afn_id && e.v4.local === p.local) : null;
-          if (m) m.v6 = p; else nb.push({ v4: null, v6: p });
-        }
-        const stateCell = (e) => {
-          const ps = [e.v4, e.v6].filter(Boolean);
-          const pillOf = (p, tip) => { const el = pill(p.state, p.state === "expired" ? "bad" : "ok"); if (tip) el.title = tip; return el; };
-          const same = ps.every((p) => p.state === ps[0].state);
-          return [same ? pillOf(ps[0]) : ps.map((p) => [pillOf(p, p.af === "v6" ? "IPv6" : "IPv4"), " "]),
-            ps.some((p) => p.preempt) ? [" ", pill("preempt")] : null];
-        };
-        body.append(h("div", { class: "card" },
-          h("header", {}, h("h2", {}, "Gateway members"), h("span", { class: "muted" }, "Addresses of every node in a group.")),
-          !nb.length ? h("div", { class: "empty" }, "No gateway groups running here.") : h("div", { class: "scroll" }, h("table", {},
-            h("thead", {}, h("tr", {}, ["Group", "Node", "Pri", "AFN", "Weight", "Age (ms)", "State"].map((t, i) => h("th", { class: i >= 2 && i <= 5 ? "num" : "" }, t)))),
-            h("tbody", {}, nb.map((e) => {
-              const p = e.v4 || e.v6, ps = [e.v4, e.v6].filter(Boolean);
-              return h("tr", { class: p.local ? "local" : "" },
-                h("td", {}, p.group_id),
-                h("td", { class: "mono" }, ps.map((x) => x.peer_ip).join(" / "), p.local ? " ★" : ""),
-                h("td", { class: "num" }, p.priority), h("td", { class: "num" }, p.afn_id),
-                h("td", { class: "num" }, p.weight), h("td", { class: "num" }, p.local ? "local" : Math.max(...ps.map((x) => x.age_ms))),
-                h("td", {}, stateCell(e)));
-            }))))));
         if (c && c.data) {
           const v = c.data;
           body.append(h("div", { class: "card" },
@@ -1767,7 +1737,7 @@
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },
         cluster: cluster.get(),
         ...(cfg.bgp ? { bgp: cfg.bgp } : {}), // edited on the BGP page
-        ...(cfg.node_paused ? { node_paused: true } : {}), // set on the Power page
+        ...(cfg.node_paused ? { node_paused: true } : {}), // set on the Node page
         ...(cfg.paused_servers_here ? { paused_servers_here: cfg.paused_servers_here } : {}), // set on the Topology page
         ...(cfg.paused_queries_here ? { paused_queries_here: cfg.paused_queries_here } : {}),
       });
@@ -1880,7 +1850,7 @@
   // What the memory guard did (Statistics and Host): it drops the oldest history when memory use reaches its limit.
   const guardNote = (g) => (g && g.trims ? [h("br"), h("span", { class: "warnline" }, "Memory guard: the oldest history was dropped " + g.trims + " time" + (g.trims === 1 ? "" : "s") + " to keep memory use under " + g.limit_pct + "%. Last: " + new Date(g.last * 1000).toLocaleString() + " — " + g.last_note)] : []);
   const when = (t) => (t && !String(t).startsWith("0001") ? new Date(t).toLocaleString() : "–");
-  // The cluster's member table: the Cluster page passes a remove handler (a Remove button per other node), the Nodes page none.
+  // The cluster's member table: the Cluster page passes a remove handler (a Remove button per other node), the Monitor page none.
   const membersTable = (v, onRemove) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
     const rows = v.peers.map((p) => h("tr", { class: p.self ? "local" : "" },
@@ -3118,14 +3088,37 @@
     };
   })();
 
-  // ── Power  (CLI: --power restart|shutdown|cancel|status) ───────────────────
-  VIEWS.power = (() => {
-    let status, pending, act, whenSel, mins, clock;
+  // ── Node, Operate  (CLI: --assert-agc, --node-pause/-resume/-status, --power) ──
+  VIEWS.node = (() => {
+    let status, pending, act, whenSel, mins, clock, takeBtn, npBtn, npPaused = false;
     const radio = (name, value, label, checked, ...extra) => {
       const r = h("input", { type: "radio", name, value, checked: !!checked });
       return h("label", { class: "opt" }, r, " ", label, ...extra);
     };
     const val = (name) => { const r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : ""; };
+
+    const showNodePause = () => {
+      npBtn.textContent = npPaused ? "Resume this node" : "Pause this node";
+      npBtn.className = npPaused ? "btn primary" : "btn danger";
+    };
+    async function takeOver() {
+      if (!confirm("Make this node the gateway controller for all groups?\n\nThe node that currently answers for the shared address is asked to hand over. Clients may notice a brief interruption.")) return;
+      takeBtn.disabled = true;
+      try {
+        const r = await api("POST", "/api/assert-agc", {});
+        if (!r.ok) say(status, "warn", r.error || "Could not take over as the gateway controller");
+        else clear(status);
+      } catch (e) { fail(status)(e); }
+      finally { takeBtn.disabled = false; }
+    }
+    async function toggleNodePause() {
+      const want = !npPaused;
+      if (want && !confirm("Pause this node?\n\nAll of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.")) return;
+      try {
+        await api("POST", "/api/nodepause", { paused: want });
+        npPaused = want; showNodePause();
+      } catch (e) { fail(status)(e); }
+    }
 
     async function go(req) {
       const verb = req.action === "restart" ? "restart" : "shut down";
@@ -3136,11 +3129,11 @@
       try {
         const r = (await api("POST", "/api/power", req)).data;
         say(status, "info", "Host " + (req.action === "restart" ? "restart" : "shutdown") + " " + r.when + ".");
-        await VIEWS.power.poll();
+        await VIEWS.node.poll();
       } catch (e) {
         // a gateway would lose its last serving member: say so and let the admin decide
         if (/^not safe to /.test(e.message || "") && confirm(e.message.replace(/ \(to go ahead anyway.*$/, "") + "\n\nGo ahead anyway? Clients of that gateway will be interrupted.")) {
-          try { const r = (await api("POST", "/api/power", { ...req, force: true })).data; say(status, "info", "Host " + (req.action === "restart" ? "restart" : "shutdown") + " " + r.when + "."); await VIEWS.power.poll(); } catch (e2) { fail(status)(e2); }
+          try { const r = (await api("POST", "/api/power", { ...req, force: true })).data; say(status, "info", "Host " + (req.action === "restart" ? "restart" : "shutdown") + " " + r.when + "."); await VIEWS.node.poll(); } catch (e2) { fail(status)(e2); }
           return;
         }
         fail(status)(e);
@@ -3159,33 +3152,18 @@
       go(req);
     }
 
-    let npBtn, npPaused = false;
-    function showNodePause() {
-      npBtn.textContent = npPaused ? "Resume this node" : "Pause this node";
-      npBtn.className = npPaused ? "btn primary" : "btn danger";
-    }
-    async function toggleNodePause() {
-      const want = !npPaused;
-      if (want && !confirm("Pause this node?\n\nAll of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.")) return;
-      try {
-        await api("POST", "/api/nodepause", { paused: want });
-        npPaused = want; showNodePause();
-      } catch (e) { fail(status)(e); }
-    }
-
     return {
       mount(main) {
         status = h("div", { "aria-live": "polite" });
         pending = h("div", {});
         mins = h("input", { type: "number", min: "1", max: "10080", value: "5", class: "narrow", "aria-label": "Minutes", onfocus: () => { document.querySelector('input[name="power-when"][value="in"]').checked = true; } });
         clock = h("input", { type: "time", "aria-label": "Time of day", onfocus: () => { document.querySelector('input[name="power-when"][value="at"]').checked = true; } });
+        takeBtn = h("button", { class: "btn warn", type: "button", onclick: takeOver }, "Make this node the gateway controller");
         npBtn = h("button", { class: "btn", type: "button", onclick: toggleNodePause }, "…");
         main.append(status, pending,
-          section("Take this node out of service",
-            h("p", { class: "hint" }, "Pauses every gateway on this node at once: it resigns, stops answering and stops probing, and the other nodes carry the traffic. Nothing is shut down and the setting survives a restart. Use the Node menu (top right) to pause another member. Resume it when you are done."),
-            h("div", { class: "toolbar" }, npBtn)),
-          section("Restart or shut down this host",
-            h("p", { class: "hint" }, "Acts on the whole machine, not just ddgw. Use the Node menu (top right) to pick another member. An immediate action is refused, unless you confirm, when this node is the only one serving a gateway."),
+          section("Gateway controller", h("div", { class: "toolbar" }, takeBtn)),
+          section("Maintenance", h("div", { class: "toolbar" }, npBtn)),
+          section("Host",
             h("fieldset", { class: "radios" }, h("legend", {}, "Action"),
               radio("power-act", "restart", "Restart host", true), radio("power-act", "shutdown", "Shut down host", false)),
             h("fieldset", { class: "radios" }, h("legend", {}, "When"),
@@ -3203,7 +3181,7 @@
           pending.append(h("div", { class: "notice warn", role: "status" },
             "A " + p.action + " is scheduled for " + when(p.at) + ". ",
             h("button", { class: "btn", type: "button", onclick: async () => {
-              try { await api("POST", "/api/power", { action: "cancel" }); say(status, "info", "The scheduled " + p.action + " is cancelled."); await VIEWS.power.poll(); } catch (e) { fail(status)(e); }
+              try { await api("POST", "/api/power", { action: "cancel" }); say(status, "info", "The scheduled " + p.action + " is cancelled."); await VIEWS.node.poll(); } catch (e) { fail(status)(e); }
             } }, "Cancel it")));
         }
       },

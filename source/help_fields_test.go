@@ -66,7 +66,7 @@ func TestHelpCoversEveryField(t *testing.T) {
 		"stats":    {"Time range", "From", "To"},
 		"host":     {"Time range", "From", "To"},
 		"log":      {"Filter text", "Level", "Time range", "Lines", "Live"},
-		"power":    {"Action", "When", "Minutes", "Time of day"},
+		"node":     {"Action", "When", "Minutes", "Time of day"},
 		"users":    {"Name", "Password", "Expires"},
 	}
 	for tp, ls := range extra {

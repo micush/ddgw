@@ -483,3 +483,54 @@ func (m *Mgmt) requireMember(name string) error {
 	}
 	return nil
 }
+
+// ── joining a cluster ────────────────────────────────────────────────────────
+
+// usersExport is every account that can sign in here, as the changes that would
+// create it elsewhere (accounts with no usable password hash are left out).
+func (m *Mgmt) usersExport() []usersMsg {
+	out := []usersMsg{}
+	for _, n := range groupMembers(m.guiGroup()) {
+		if n == "root" || !validUserName(n) {
+			continue
+		}
+		if h := shadowHash(n); cryptHashRe.MatchString(h) {
+			out = append(out, usersMsg{Op: "apply", Name: n, Hash: h, Expires: localExpiry(n)})
+		}
+	}
+	return out
+}
+
+// usersSeed creates the accounts a cluster already has on a node that has just
+// joined.  An account that already exists here, in the group or not, is left
+// exactly as it is.  It returns how many were created and how many were skipped.
+func (m *Mgmt) usersSeed(list []usersMsg, from string) (added, skipped int) {
+	for _, u := range list {
+		if u.Op != "apply" || !validUserName(u.Name) || u.Name == "root" || userExists(u.Name) {
+			skipped++
+			continue
+		}
+		if err := m.usersPeer(u, "the cluster ("+from+") on joining"); err != nil {
+			warnf("users: could not create %q from the cluster: %v", u.Name, err)
+			skipped++
+			continue
+		}
+		added++
+	}
+	return added, skipped
+}
+
+// usersPull fetches the accounts of a member and seeds them here.  A failure is
+// only logged: the node is in the cluster either way, and re-setting a password
+// on the Users page sends the account to every node.
+func (m *Mgmt) usersPull(ctx context.Context, from ClusterPeer) {
+	var res struct {
+		Users []usersMsg `json:"users"`
+	}
+	if err := m.cl.call(ctx, from, "POST", "/cluster/users", usersMsg{Op: "list"}, &res, 20*time.Second); err != nil {
+		warnf("users: could not get the accounts from %s: %v (the users of that cluster were not copied)", from.Addr, err)
+		return
+	}
+	added, skipped := m.usersSeed(res.Users, from.Addr)
+	infof("users: copied %d account(s) from %s on joining (%d already existed or were refused)", added, from.Addr, skipped)
+}

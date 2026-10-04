@@ -79,7 +79,7 @@ Both nodes now answer on the shared address and one of them is the controller (s
 - **Settings** (Configure) holds everything else, and every field saves on its own: probe timing, cache, spread of queries over servers of similar speed, `down_percent`, DNS over TLS and DNS over HTTPS ports for clients, and more. Each page's **?** help lists the command-line equivalent.
 - **History** keeps every saved change as a version. You can compare a version with the live one and restore any of them.
 - **Operate ▸ Upgrade**: upload a newer ddgw tarball, tick the nodes to update and press the button in the Nodes card (none ticked = this node). A bad update rolls back by itself.
-- **Operate ▸ Power**: restart or shut down a node, now or later.
+- **Operate ▸ Node**: make this node the gateway controller, put it in maintenance (pause), or restart or shut down the host, now or later.
 - Bind the GUI to a management address or firewall port 53853: it can reconfigure a daemon that runs as root.
 - To start over on a node: stop the service, `sudo rm -rf /var/lib/ddgw/*`, start it again.
 - To remove ddgw: `sudo ddgw-uninstall` (add `--purge` to delete its settings too).

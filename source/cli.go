@@ -675,6 +675,9 @@ func showCanvas(sock string) {
 			if !a.Up {
 				state = "withdrawn: " + orDefault(a.Reason, "not held")
 			}
+			if a.Up && a.Detail != "" {
+				state += " — " + a.Detail
+			}
 			if a.Paused != "" && !strings.Contains(state, "paused on") {
 				state += " (paused on " + map[string]string{"node": "this node", "all": "all nodes"}[a.Paused] + ")"
 			}

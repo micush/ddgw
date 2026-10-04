@@ -687,3 +687,101 @@ func (m *Mgmt) BGPSet(c BGPConfig, actor string) error {
 	dc.BGP = &cc
 	return m.PutConfig(dc, actor, note)
 }
+
+// ── anycast colour ───────────────────────────────────────────────────────────
+
+// anycastBGPStatus says how an announced anycast address looks given the live
+// BGP neighbors of its family: green with an established session, amber while a
+// session is still coming up (Connect, Active, OpenSent, OpenConfirm), red with
+// none.  A session that stays unestablished for bgpGrace is down, so red too.
+// waited is how long the address has been without a session.  known is false when FRR could not be asked.
+func anycastBGPStatus(addr string, peers []BGPPeer, known bool, waited time.Duration) (status, detail string) {
+	af := "ipv4"
+	if ip, err := netip.ParseAddr(addr); err == nil && ip.Unmap().Is6() {
+		af = "ipv6"
+	}
+	label := "IPv4"
+	if af == "ipv6" {
+		label = "IPv6"
+	}
+	if !known {
+		return "bad", "BGP is not answering: no session, so the address is not reachable"
+	}
+	var n, coming int
+	for _, p := range peers {
+		if p.AF != af {
+			continue
+		}
+		n++
+		switch p.State {
+		case "Established":
+			return "ok", ""
+		case "Connect", "Active", "OpenSent", "OpenConfirm":
+			coming++
+		}
+	}
+	switch {
+	case coming > 0 && waited < bgpGrace:
+		return "warn", "BGP session to the " + label + " neighbor is coming up (not established yet)"
+	case coming > 0:
+		return "bad", "BGP session to the " + label + " neighbor has not established for " + waited.Round(time.Second).String()
+	case n > 0:
+		return "bad", "No established BGP session with an " + label + " neighbor"
+	}
+	return "bad", "No " + label + " BGP neighbor is configured: the address is not announced to anyone"
+}
+
+var bgpLive struct {
+	sync.Mutex
+	at    time.Time
+	peers []BGPPeer
+	ok    bool
+}
+
+// liveBGPPeers is the neighbor list from FRR, kept for 3 s so a busy canvas does
+// not run vtysh on every poll.
+func liveBGPPeers() ([]BGPPeer, bool) {
+	bgpLive.Lock()
+	defer bgpLive.Unlock()
+	if !bgpLive.at.IsZero() && time.Since(bgpLive.at) < 3*time.Second {
+		return bgpLive.peers, bgpLive.ok
+	}
+	bgpLive.at, bgpLive.peers, bgpLive.ok = time.Now(), nil, false
+	if _, err := os.Stat(frrDir); err != nil {
+		return nil, false
+	}
+	if raw, err := vtyshBGP(); err == nil {
+		if p, err := parseBGPSummary(raw); err == nil {
+			bgpLive.peers, bgpLive.ok = p, true
+		}
+	}
+	return bgpLive.peers, bgpLive.ok
+}
+
+// bgpGrace is how long a session may take to come up before it counts as down.
+const bgpGrace = 30 * time.Second
+
+var bgpWaits = struct {
+	sync.Mutex
+	m map[string]struct{ first, last time.Time }
+}{m: map[string]struct{ first, last time.Time }{}}
+
+// anycastBGP is anycastBGPStatus with the waiting time kept per address: it
+// starts when the address is first seen without a session and resets when one
+// is established or the address was not looked at for a while (withdrawn).
+func anycastBGP(addr string, peers []BGPPeer, known bool, now time.Time) (string, string) {
+	bgpWaits.Lock()
+	defer bgpWaits.Unlock()
+	w, seen := bgpWaits.m[addr]
+	if !seen || now.Sub(w.last) > 10*time.Second {
+		w.first = now
+	}
+	w.last = now
+	st, why := anycastBGPStatus(addr, peers, known, now.Sub(w.first))
+	if st == "ok" {
+		delete(bgpWaits.m, addr)
+	} else {
+		bgpWaits.m[addr] = w
+	}
+	return st, why
+}

@@ -194,15 +194,15 @@ every domain that server has to answer.
   (which is this node, which is the gateway controller, each node's slot).
 
 * **Cluster nodes** (only with two or more nodes): each node of the cluster is a **parallelogram** to the left of the
-  circle, this node first, named by host name (by address when two nodes share a name), with how it stands for this gateway:
+  circle, this node first (marked with a star), named by host name (by address when two nodes share a name), with how it stands for this gateway:
   green *serving*, amber *not serving* (up, but not serving the gateway yet), amber *degraded* (serving, but its own view of the gateway is degraded, e.g. some of its DNS servers are down), dashed *paused* (the node is paused on the Power page, or
   the gateway is paused or absent there), red dashed *not answering*. A node whose **CPU, memory or fullest disk is over 85%** (the Monitor ▸ Host numbers: the last 10-second CPU sample, memory in use, the fullest of the tracked filesystems) is **solid yellow** (degraded) — whatever else it is doing, even paused — and names what is over ("CPU 91% · disk 88%"; the tooltip names the mount) until every one is back at 85% or below. The log records it too: a warning when a node goes over (naming CPU, memory and/or disk) and an info line when it is back at or under, for this node and every reachable member, checked each sync interval; a reading that only moves while still over is not logged again. Hover one for its address, role, last-seen time, version, whether it has caught up
-  with the primary's settings and any update under way. Right-click any reachable node ▸ *Pause node…* / *Resume node* (another node is paused through the cluster, like the Power page does
+  with the primary's settings and any update under way. Right-click any reachable node ▸ *Pause node…* / *Resume node* (another node is paused through the cluster, like the Node page does
   with the Node menu; its shape reads "pausing…" until it reports back), *Host statistics…*, and for another node *Open this node* (the Node menu, top right); an unreachable one ▸ *Cluster page…*. They are read-only here: add or remove nodes on the Cluster page.
   `ddgw --canvas` lists them as `/_/ cluster node` lines.
 
-* **Four rows per side.** The anycast addresses (right of the circle) and the cluster nodes (left) stand four to a column; the fifth starts a new
-  column further out, and so on. Anycast addresses can be dragged to any slot, in any column. The drawing grows wider as columns are added (pan with the mouse).
+* **Four rows per side, or three.** The anycast addresses (right of the circle) and the cluster nodes (left) stand four to a column; the fifth starts a new
+  column further out, and so on. When a four-row side would have a line to a server run through a box, both sides use three rows instead. Anycast addresses can be dragged to any slot, in any column. The drawing grows wider as columns are added (pan with the mouse).
 
 * Every tooltip ends with the item's **uptime**: how long the gateway, anycast address, server or
   domain has been online since it last came back, or how long it has been down, and how many failures
@@ -219,7 +219,7 @@ every domain that server has to answer.
   [--address ADDR] --scope node|all` (`--scope` defaults to node for a gateway, all for a server, and is
   required for a domain or an anycast address).
   To take the **whole node** out at once (every gateway on it, including ones added later), use
-  Operate ▸ Power ▸ *Pause this node* (or `--node-pause`); see Power below.
+  Operate ▸ Node ▸ *Maintenance* (or `--node-pause`); see Node below.
   **Resuming** (and starting the daemon, or adding a gateway) does not put the node
   back in service at once: it first probes its DNS servers and only joins the
   gateway when they all answer — or, after 10 s, when at least one does (after 60 s
@@ -330,7 +330,7 @@ paused, listener up, at least one DNS server healthy. Otherwise it is taken off
 10-second lifetime that ddgw renews every 3 s, so if ddgw crashes or hangs the
 kernel removes the address by itself within about 10 s instead of leaving a route
 that nothing answers. The drawing and `--canvas` show whether each address is
-announced from the node you are looking at.
+announced from the node you are looking at. When the node manages BGP, the pill is green with an established session to a neighbor of its family (IPv4 address → IPv4 neighbor, IPv6 → IPv6), amber while a session is coming up (Connect, Active, OpenSent, OpenConfirm) for up to 30 s, and red with none or when it still has not established after that.
 
 ## BGP (FRR)
 
@@ -454,9 +454,9 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--dns-lookup IP\|NAME` | Add DNS server form: the Name is filled in from the address (reverse DNS), or the address from a name |
 | `--server-stats ADDR --name DOMAIN` `[--type T]` | Topology page: right-click a domain ▸ **Statistics…** |
 | `--gateway-stats GROUP` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click the gateway circle ▸ **Statistics…** (answer time, errors, availability, queries) |
-| `--show-gateways` | Gateways page (roles, slots, vMACs, DNS listener state) |
-| `--assert-agc` | "Make this node the active gateway" button (asks to confirm) |
-| `--show-neighbors`, `--cluster-status` | Nodes tab (gateway neighbors and cluster members) |
+| `--show-gateways`, `--show-neighbors` | Gateways page (roles, slots, vMACs, DNS listener state) |
+| `--assert-agc` | Operate ▸ Node ▸ **Gateway controller**: "Make this node the gateway controller" (asks to confirm) |
+| `--cluster-status` | Monitor ▸ Cluster (the members) |
 | `--show-dns` | DNS tab (ranking, health, latency bars, counters) |
 | `--show-config`, `--configure` | Settings page (form; every edit saves and applies at once) |
 | `--versions`, `--version-show/-diff/-snapshot/-restore/-export`, `--config-import` | History tab |
@@ -469,8 +469,8 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d]` | Host page (Monitor) |
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
-| `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Power page (Operate) |
-| `--node-pause`, `--node-resume`, `--node-status` | Power page ▸ **Take this node out of service** (Pause / Resume this node) |
+| `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
+| `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
 | `--version`, `--help` | version in the header; the **?** at the top right of every page opens a slide-out help panel for that page (including its command-line equivalents and a description of every field on the page) |
 
 Saving applies immediately (same hot reload as editing the file).
@@ -538,6 +538,11 @@ applied and names any that were not (a node that was down misses the change; the
 To bring such a node in line, set the password again (that re-sends the whole account and creates it
 where it is missing), or repeat `--user-del` (a node where the account is already gone accepts it).
 A node never takes over an account that already exists there outside the GUI group.
+
+**A node that joins a cluster gets the cluster's accounts**: right after joining, it copies the
+GUI-group accounts (name, password hash, expiry) from the node it joined through. An account that
+already exists on the new node is left exactly as it is, and accounts with no password are not
+copied. If that fails the join still succeeds and the log says so; set a password again to send it.
 
 ## Config history
 
@@ -716,9 +721,11 @@ matching log.
     ddgw --log --log-min warn --log-since 6h
     ddgw --log --log-grep "server 192.0.2.53" --log-lines 200
 
-### Power
+### Node
 
-**Pause this node.** Operate ▸ Power ▸ *Take this node out of service* (or `ddgw --node-pause`,
+**Make this node the gateway controller.** Operate ▸ Node (or `ddgw --assert-agc`) asks the current controller to hand the shared address to this node; clients may notice a brief interruption. To prefer a node permanently, raise its priority and turn on preemption in Settings.
+
+**Maintenance: pause this node.** Operate ▸ Node ▸ *Maintenance* (or `ddgw --node-pause`,
 `--node-resume`, `--node-status`) pauses every gateway on the node in one step: it resigns,
 stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut
 down. The flag (`node_paused` in the config file) is local to the node, never replicated, and
@@ -731,7 +738,7 @@ pause the others instead of shutting them down.
     ddgw --node-resume
     ddgw --node-status
 
-**Restart or shut down the host.** Operate ▸ Power (or `ddgw --power`) restarts or shuts down the whole host, now,
+**Restart or shut down the host.** Operate ▸ Node ▸ *Host* (or `ddgw --power`) restarts or shuts down the whole host, now,
 in 1–10080 minutes, or at a time of day; a scheduled action is kept by the
 operating system (`shutdown(8)`, so it survives a restart of ddgw), shows on the
 page and can be cancelled. An action started *now* is refused when this node is

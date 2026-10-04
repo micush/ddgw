@@ -19,7 +19,7 @@ type CanvasNode struct {
 	Role      Role      `json:"role"`
 	Host      *HostLoad `json:"host,omitempty"`        // its CPU, memory and disk use
 	Strain    []string  `json:"strain,omitempty"`      // what is over the limit (the shape is yellow while there is anything)
-	Paused    bool      `json:"node_paused,omitempty"` // the whole node is paused (Power page), as opposed to this gateway being paused there
+	Paused    bool      `json:"node_paused,omitempty"` // the whole node is paused (Operate ▸ Node), as opposed to this gateway being paused there
 	Reachable bool      `json:"reachable"`
 	Version   string    `json:"version,omitempty"`
 	VerDiff   bool      `json:"version_differs,omitempty"`
@@ -100,7 +100,7 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 			n.Paused = pi.Msg.NodePaused
 			switch {
 			case pi.Msg.NodePaused:
-				n.Status, n.Label, n.Detail = "paused", "paused", "This node is paused (Power page): it is not serving; the others carry on"
+				n.Status, n.Label, n.Detail = "paused", "paused", "This node is paused (Operate ▸ Node): it is not serving; the others carry on"
 			case !pi.Msg.GwKnown:
 				n.Status, n.Label, n.Detail = "idle", "online", "Running an older version that does not say what it serves"
 			case gs == nil:

@@ -62,6 +62,8 @@ type AnycastState struct {
 	Up     bool    `json:"up"`               // currently on lo (announced by the routing daemon)
 	Reason string  `json:"reason,omitempty"` // why it is not, when it is not
 	Paused string  `json:"paused,omitempty"` // "node" (paused on this node) or "all" (paused on every node), when it is
+	Status string  `json:"status,omitempty"` // ok | warn | bad: the BGP session picture, set only while the address is on lo and BGP is managed here
+	Detail string  `json:"detail,omitempty"` // what Status means
 	Uptime *UpInfo `json:"uptime,omitempty"` // filled in for the topology view
 }
 

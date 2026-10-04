@@ -1,5 +1,111 @@
 # Changelog
 
+## [v187] - 2026-10-04 — Operate ▸ Node; Monitor ▸ Cluster (less confusing names)
+
+### Changed
+- **Operate ▸ Node** replaces Power and the short-lived Operate ▸ Gateway. Three cards: **Gateway controller** (Make this node the gateway controller; was "active gateway"), **Maintenance** (Pause / Resume this node) and **Host** (restart or shut down). The explanatory paragraph in the Host card is gone (it is in the help). Operate is now Node, Cluster, Upgrade. Old `#power` / `#gateway` bookmarks open Node.
+- **Monitor ▸ Nodes is now Monitor ▸ Cluster** (it only shows the cluster members). Words used throughout: *node* = this machine, *cluster* = the group of nodes, *gateway* = the DNS service (the circle).
+- Tooltips that said "(Power page)" now say "(Operate ▸ Node)". Help has a Node topic (the Power and Gateway topics are merged into it) and a Cluster title for the Monitor page; README, QUICKSTART and `--help` follow. CLI flags are unchanged.
+
+### Verified
+- `node --check` on app.js and help.js; gofmt, build, vet, `go test -race -count=1 ./...` (including `TestEveryPageHasHelp`); five linux cross-compiles; `CGO_ENABLED=0` vet and test.
+
+### Not verified
+- Not clicked in Chromium against a live daemon (the page, the three cards and the old-bookmark redirect); the endpoints are the unchanged ones.
+
+
+## [v186] - 2026-10-04 — Operate ▸ Gateway; Monitor only watches
+
+### Changed
+- New page **Operate ▸ Gateway** with two cards: **Active gateway** ("Make this node the active gateway", moved off Monitor ▸ Gateways, where Monitor now only shows the tables) and **Take this node out of service** (Pause / Resume this node, moved from Power). Same calls, confirmations and CLI (`--assert-agc`, `--node-pause`, `--node-resume`, `--node-status`) as before; the explanatory line under the pause button is gone (it is in the help).
+- **Operate ▸ Power** keeps only restart / shut down the host.
+- Help has a Gateway topic and Power's was trimmed; README, QUICKSTART and `--help` follow.
+
+### Verified
+- `node --check` on app.js and help.js; gofmt, build, vet, `go test -race -count=1 ./...` (including `TestEveryPageHasHelp`); five linux cross-compiles; `CGO_ENABLED=0` vet and test.
+
+### Not verified
+- Not clicked in Chromium against a live daemon; the endpoints are the unchanged ones.
+
+
+## [v185] - 2026-10-04 — Monitor ▸ Nodes: the duplicate "Gateway members" card is gone
+
+### Removed
+- The "Gateway members" card on Monitor ▸ Nodes. Monitor ▸ Gateways shows the same election data (one card per group and address family, with priority, slot, weight, role, state, preempt, age, vMAC and DNS state), so nothing is lost. Nodes now shows only the cluster members and no longer asks for `/api/neighbors`.
+
+### Changed
+- Help and README: `--show-neighbors` is listed under Gateways; the "nothing is listed on a network that should have peers" advice moved to the Gateways topic.
+
+### Verified
+- `node --check` on app.js and help.js; gofmt, build, vet, `go test -race -count=1 ./...` (including `TestEveryPageHasHelp`); five linux cross-compiles; `CGO_ENABLED=0` vet and test.
+
+### Not verified
+- Not looked at in Chromium against a live daemon.
+
+
+## [v184] - 2026-10-04 — Topology: this node is marked with a star
+
+### Changed
+- On the Topology drawing, this node's parallelogram now shows a star after its name (`ns1 *`, as on the other pages) instead of "this node · " before its state; the second line is just the state. The tooltip still says "(this node)".
+
+### Verified
+- `node --check` on app.js and help.js; gofmt, build, vet, `go test -race -count=1 ./...`; five linux cross-compiles; `CGO_ENABLED=0` vet and test.
+
+### Not verified
+- Not looked at in Chromium against a live daemon.
+
+
+## [v183] - 2026-10-04 — Topology: lines no longer run through boxes; thicker blue lines
+
+### Changed
+- The nodes (left) and anycast pills (right) stand four to a column as before, but when a line from the circle to a server would pass through one of those boxes with four rows, both sides use three rows instead. The check is geometric and done when the drawing is built, so it follows the number of nodes, pills and servers.
+- The blue lines (servers within the load-balancing band) are twice as thick (4 px).
+
+### Verified
+- `node --check webui/app.js`; gofmt, build, vet, `go test -race -count=1 ./...`; five linux cross-compiles; `CGO_ENABLED=0` vet and test. The same geometry in a standalone script: 4 nodes, 4 pills and 8 servers (your picture) clashes with four rows and not with three; small drawings (1–3 nodes, up to 4 pills, 4 servers) keep four rows.
+
+### Not verified
+- Not looked at in Chromium against a live daemon (light and dark); only the geometry was checked outside the browser.
+
+
+## [v182] - 2026-10-04 — A node that joins a cluster gets its users
+
+### Added
+- After a node joins a cluster it now copies the cluster's GUI-group accounts (name, password hash, expiry) from the node it joined through (new `list` op on `/cluster/users`). Before, only changes made after the join reached it, so it had no one who could sign in.
+- An account that already exists on the new node (in the group or not) is left untouched, `root` and accounts with no usable password are never copied. If the copy fails the join still succeeds and the log says so.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1 ./...`; five linux cross-compiles; `CGO_ENABLED=0` vet and test; new tests `TestUsersSeedOnJoin`, `TestUsersExport`.
+- Live: two real daemons (the second in its own mount namespace with a private `/etc`): alice and bob on the first, a different bob on the second, then `--cluster-join`: alice appeared on the second with the identical hash, the second's own bob kept its password and no expiry, the log named both counts. Test users, group and processes removed afterwards.
+
+### Not verified
+- Expiry of a copied account was covered by the unit test only, not live; joining an older-version cluster (it refuses the new op, so nothing is copied and the log says so); 3+ nodes; joining through a replica.
+
+
+## [v181] - 2026-10-04 — Anycast pill: a session that never establishes is red
+
+### Changed
+- Amber ("BGP connecting") now lasts at most 30 seconds. An announced anycast address whose neighbor is still in Connect, Active, OpenSent or OpenConfirm after that turns red, and the tooltip says how long it has been waiting. The clock starts when the address is first seen without a session, restarts when a session establishes, and starts over if the address was withdrawn in between.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1 ./...`; five linux cross-compiles; `CGO_ENABLED=0` vet and test; `TestAnycastBGPGrace` steps through amber → red → green → amber → a gap.
+
+### Not verified
+- Not run against a live FRR peer or looked at in Chromium. The 30 s is a fixed value, not a setting.
+
+
+## [v180] - 2026-10-04 — Anycast pills follow the BGP sessions
+
+### Changed
+- When this node manages BGP (a local AS is set), an announced anycast address is green only with an established session to a neighbor of its family, amber while a session is coming up (Connect, Active, OpenSent, OpenConfirm), and red when there is none (no neighbor of that family, all Idle, or FRR not answering). The pill reads "anycast · BGP connecting" / "anycast · no BGP session" and the tooltip says why. Without a local AS the colours are unchanged.
+- Computed once in the daemon (`AnycastState.Status`/`Detail`, from `show bgp summary json`, cached 3 s), so the GUI and `ddgw --canvas` agree; a red or amber pill counts as down in the uptime tooltip.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1 ./...`; five linux cross-compiles; `CGO_ENABLED=0` vet and test; `node --check webui/app.js`; new tests for every state/family combination (`TestAnycastBGPStatus`) and through the supervisor with a fake `vtysh` (`TestMarkAnycastBGPColour`).
+
+### Not verified
+- Not run against a live FRR peer or looked at in Chromium; the FRR output is the existing parser's, the colours are covered by the unit tests only.
+
 ## [v179] - 2026-10-04 — Users: no success bar
 
 ### Changed
