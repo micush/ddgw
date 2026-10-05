@@ -866,7 +866,11 @@
       window.removeEventListener("resize", closeMenu);
     }
     let subEl = null;
-    function closeSub() { if (subEl) { subEl.remove(); subEl = null; } }
+    function closeSub() {
+      if (subEl) { subEl.remove(); subEl = null; }
+      // the parent item's "open" highlight must go with its submenu, or it stays lit after the pointer moves on
+      if (menuEl) menuEl.querySelectorAll("button.open").forEach((b) => b.classList.remove("open"));
+    }
     const outsideClick = (e) => { if (!(menuEl && menuEl.contains(e.target)) && !(subEl && subEl.contains(e.target))) closeMenu(); };
     function menuKey(e) {
       if (!menuEl) return;

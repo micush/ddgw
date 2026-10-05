@@ -1,5 +1,20 @@
 # Changelog
 
+## [v188] - 2026-10-04 — Right-click menu: "Pause gateway" no longer stays highlighted
+
+### Fixed
+- In the topology's right-click menu, moving the pointer off **Pause gateway** onto another item closed its submenu but left the item highlighted, so two rows looked selected. The highlight is the `open` class that `openSub()` puts on the parent item; `closeSub()` removed the submenu but never the class. `closeSub()` now clears it too, so the parent is lit only while its submenu is showing. The Left-arrow key still returns focus to the parent item (it looks the item up before closing the submenu). Front end only (`webui/app.js`); no daemon, API, config or protocol change.
+
+### Verified
+- gofmt (clean), build, vet, `go test -race -count=1 ./...`; `CGO_ENABLED=0` vet and test; `node --check webui/app.js`; five linux cross-compiles (amd64, arm64, arm, 386, riscv64; all but amd64 build the fail-closed PAM stub).
+- Real PAM login against a native (cgo) build on `127.0.0.1:53853` with a throwaway group and two users: the group member gets in; a wrong password, a valid user outside the group and root are all refused with the same message. Users, group and `/etc/pam.d/ddgw` removed afterwards.
+- Real daemon, real GUI in headless Chromium (light and dark), driving the actual right-click menu on a gateway: with the v187 `app.js` the parent item keeps its highlight after the pointer moves to another item (reproduced); with this build it does not. Also checked: the parent stays lit while its submenu is open and while the pointer is inside the submenu, it is lit again when the submenu is reopened, Right/Left arrow keys open and close the submenu (Left refocuses the parent), Escape closes the menu, and there were no page errors.
+
+### Not verified
+- No new automated test: the menu is DOM code with no unit-test harness in the repo, so this is covered only by the manual Chromium run above (a throwaway script kept outside the repo).
+- Only Chromium was used; Firefox and Safari were not tried (the change is a plain `classList` call). Touch input was not tried.
+- The cross-compiled non-amd64 builds were compiled, not run, and the PAM-backed GUI was checked only on native amd64.
+
 ## [v187] - 2026-10-04 — Operate ▸ Node; Monitor ▸ Cluster (less confusing names)
 
 ### Changed
