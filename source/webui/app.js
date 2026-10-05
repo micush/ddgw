@@ -26,6 +26,9 @@
     return el;
   }
   const clear = (el) => { while (el.firstChild) el.removeChild(el.firstChild); return el; };
+  // Width (in chart units) the y-axis labels need: the chart's left margin grows with the longest label so big
+  // numbers are never cut off.  ~6.6 units a character at the 11px axis font, plus the gap and a little edge room.
+  const axisMargin = (labels, min) => Math.max(min, Math.ceil(Math.max(0, ...labels.map((t) => String(t).length)) * 6.6) + 14);
   const pill = (text, kind) => h("span", { class: "pill " + (kind || "") }, text);
   const fmtMs = (n) => (n == null ? "–" : Number(n).toFixed(2));
 
@@ -108,8 +111,7 @@
           user.focus();
           return;
         }
-        const m = Math.floor(left / 60), sec = String(left % 60).padStart(2, "0");
-        err.textContent = "Too many failed attempts. Try again in " + m + ":" + sec + ".";
+        err.textContent = "Too many failed attempts.";
         err.classList.remove("hidden");
       };
       tick();
@@ -940,9 +942,9 @@
     };
     function tsChart(title, d, series, o) {
       const n = series[0].values.length;
-      const W = 620, H = 230, L = 62, R = 12, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const peak = Math.max(0, ...series.flatMap((s) => s.values));
       const max = o.fixedMax || niceMaxV(peak, o.floor || 10);
+      const W = 620, H = 230, L = axisMargin([0, 1, 2, 3, 4].map((g) => o.axis((max * g) / 4)), 62), R = 12, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const x = (i) => L + (n <= 1 ? pw / 2 : (pw * i) / (n - 1));
       const y = (v) => T + ph - (ph * Math.min(v, max)) / max;
       const svg = sv("svg", { class: "qchart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title + " over time" });
@@ -2334,7 +2336,8 @@
       const tile = (cls, label, value, sub, key, tip) => h(key === undefined ? "div" : "button", key === undefined ? { class: "qtile " + cls, title: tip || null } :
         { type: "button", class: "qtile pick " + cls, "aria-pressed": (KINDS[key] || "") === sel ? "true" : "false", title: key ? "Show only " + label + " in the chart and lists" : "Show everything",
           onclick: () => pick(KINDS[key] || "") },
-        h("div", { class: "qv" }, typeof value === "string" ? value : n0(value)), h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
+        (() => { const huge = typeof value !== "string" && value >= 1e12, text = typeof value === "string" ? value : huge ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value), qv = h("div", { class: "qv", title: huge ? n0(value) : null }, text); qv.style.setProperty("--len", String(Math.max(1, text.length - (text.match(/[,.\s]/g) || []).length / 2))); return qv; })(), // CSSOM, allowed by the CSP
+        h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
       clear(tiles).append(
         tile("q-total", "Total Queries", t, t ? "100%" : "", ""),
         tile("q-ok", "No Error", d.sums.no_error, pct(d.sums.no_error, t), "no_error"),
@@ -2359,14 +2362,15 @@
           onclick: () => { if (hidden.has(s.key)) hidden.delete(s.key); else hidden.add(s.key); drawChart(d); } },
           h("span", { class: "sw" }), s.label)));
       const n = d.total.length;
-      const W = 1000, H = 300, L = 52, R = 14, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const max = niceMax(Math.max(1, ...shown.flatMap((s) => d[s.key])));
+      const yLabels = [0, 1, 2, 3, 4].map((g) => n0(Math.round((max * g) / 4)));
+      const W = 1000, H = 300, L = axisMargin(yLabels, 52), R = 14, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const x = (i) => L + (n <= 1 ? pw / 2 : (pw * i) / (n - 1));
       const y = (v) => T + ph - (ph * v) / max;
       const svg = sv("svg", { class: "qchart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Queries over time" });
       for (let g = 0; g <= 4; g++) {
         const v = (max * g) / 4;
-        svg.append(sv("line", { class: "qgrid", x1: L, x2: W - R, y1: y(v), y2: y(v) }), sv("text", { class: "qax", x: L - 6, y: y(v) + 4, "text-anchor": "end" }, n0(Math.round(v))));
+        svg.append(sv("line", { class: "qgrid", x1: L, x2: W - R, y1: y(v), y2: y(v) }), sv("text", { class: "qax", x: L - 6, y: y(v) + 4, "text-anchor": "end" }, yLabels[g]));
       }
       const ticks = Math.min(8, n);
       for (let k = 0; k < ticks; k++) {
@@ -2621,9 +2625,9 @@
     // One line chart: series = [{ label, cls, values, text(i) }]; values below 0 are gaps.
     function lineChart(title, d, series, o) {
       const n = d.cpu.length;
-      const W = 620, H = 230, L = 62, R = 12, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const peak = Math.max(0, ...series.flatMap((s) => s.values));
       const max = o.fixedMax || niceMax(peak, o.floor || 10);
+      const W = 620, H = 230, L = axisMargin([0, 1, 2, 3, 4].map((g) => o.axis((max * g) / 4)), 62), R = 12, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const x = (i) => L + (n <= 1 ? pw / 2 : (pw * i) / (n - 1));
       const y = (v) => T + ph - (ph * Math.min(v, max)) / max;
       const svg = sv("svg", { class: "qchart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title + " over time" });
@@ -3044,7 +3048,7 @@
     function draw() {
       clear(box);
       if (!users.length) {
-        box.append(h("div", { class: "empty" }, "No account is in the " + group + " group, so nobody can sign in. Add one below."));
+        box.append(h("div", { class: "empty" }, "No account is in the " + group + " group, so nobody can sign in. Add one above."));
         return;
       }
       box.append(h("div", { class: "scroll" }, h("table", {},
@@ -3074,13 +3078,13 @@
         const exp = h("input", { type: "date" });
         const add = () => call("add", { username: name.value.trim(), password: pw.value, expires: toUnix(exp.value) }, () => { name.value = ""; pw.value = ""; exp.value = ""; });
         main.append(status,
-          section("Users", box),
           section("Add user",
             h("div", { class: "grid c3" },
               h("label", { class: "f" }, "Name", name),
               h("label", { class: "f" }, "Password", pw),
               h("label", { class: "f" }, "Expires", exp)),
-            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: add }, "Add user"))));
+            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: add }, "Add user"))),
+          section("Users", box));
       },
       async poll(force) {
         if (editing && force !== true) return;

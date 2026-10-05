@@ -1,5 +1,33 @@
 # Changelog
 
+## [v189] - 2026-10-05 — Cache and client limits now follow Settings on every gateway; four GUI fixes
+
+### Fixed
+- **Switching the cache off, and client rate limiting, had no effect on a gateway with its own DNS pool** (any gateway drawn on Topology with servers). A gateway's own pool kept the cache and client-rule values it was created with; only the six load-balancing values followed Settings (`DaemonConfig.poolFor`). Settings is the only place these are edited, so a change there never reached such gateways. `poolFor` now takes `cache`, `cache_entries`, `cache_max_ttl`, `allowed_clients`, `client_rate`, `client_burst`, `client_action` and `client_exempt` from Settings (`DNSConfig.followSettings`). The pool is rebuilt on a change as before, so it applies on save without a restart.
+- **Login lockout message.** It now reads just "Too many failed attempts." The form still stays disabled until the lockout ends. (It used to add "Try again in m:ss.")
+- **Monitor ▸ Statistics: y-axis labels were cut off** when the numbers were big. The chart's left margin now grows with the longest label. The same fixed margin was in the Host charts and in the per-server statistics dialog; both got the same fix.
+- **Monitor ▸ Statistics: big numbers in the tiles (Total Queries, No Error, …) were cut off.** A number now shrinks to fit its tile; from 1,000,000,000,000 up it is shown compact (for example `600T`) with the full number in the tooltip.
+
+### Changed
+- **Configure ▸ Users:** the *Add user* card is now above the *Users* list (the empty-list text says "above").
+- **Behaviour change:** the cache and client-rule keys inside a gateway's own `dns` block are now ignored, because Settings wins. They are still read and written back unchanged, so an older version can still open the file. README and the Settings help say so.
+- README and help no longer say the lockout page shows a countdown.
+
+### Verified
+- gofmt (clean), build, vet, `go test -race -count=1 ./...`; `CGO_ENABLED=0` vet and test; five linux cross-compiles (amd64, arm64, arm, 386, riscv64). All of this on a Go 1.22 toolchain in a scratch copy with the `go` line of `go.mod` lowered to 1.22 (Go 1.24 could not be downloaded here); the tree's `go.mod` is unchanged.
+- New test `TestGatewayPoolFollowsSettingsCacheAndClientRules`; it fails with the `followSettings` call removed and passes with it.
+- Live, native cgo build, one daemon: a gateway with its own pool on a veth (VIP 10.99.0.1/24 on `v0`), a stub DNS server, and a client in a network namespace. v188 with the cache off in Settings: 20 identical queries, 1 upstream hit; with a rate of 5/s in Settings: 50 of 50 answered (both bugs reproduced). This version, same setup: cache off gives 20 upstream hits, cache on gives 1, switching back and forth by config edit applies without a restart; a rate of 5/s answers 32 of 50 from a client that waits 0.3 s per dropped query (burst 5 plus refill), a rate of 0 answers all 50.
+- The same cache check through the real Settings page in Chromium (untick the box, wait, query): 20 of 20 queries reached the upstream while the gateway's own pool still said `"cache": true` in the file.
+- Real PAM login (`contrib/pam.d/ddgw.debian`, throwaway group and users): the member gets in; a wrong password, a valid user outside the group and root get the same refusal. A locked-out address gets 429 and the real login page, in Chromium (light and dark), says "Too many failed attempts." and the text does not change while it waits.
+- Users page against the real daemon in Chromium (light and dark): *Add user* first; adding a user through the form created the account. Statistics page loads (the only console message was the 401 of the session probe before sign-in). Charts and tiles with very large values checked against a mocked API in Chromium (light and dark, 1300 and 700 px wide): no label or tile number is clipped.
+- `node --check webui/app.js` and `help.js`. Test users, group, PAM file, namespace and links removed afterwards.
+
+### Not verified
+- The loopback exemption was not checked live (the VIP is not reachable from loopback in this setup); it is covered only by the existing unit tests.
+- The very large tile and axis values were checked with a mocked API, not with a node that really counted that many queries. The tile sizing was fitted using this sandbox's fallback bold font; another font with narrower or wider digits may leave more or less spare room.
+- Cross-compiled non-amd64 builds were compiled, not run. PAM was checked only on native amd64.
+- No cluster of two or more daemons was run (nothing here touched cluster code); no `install.sh`/`uninstall.sh` run. Only Chromium was used.
+
 ## [v188] - 2026-10-04 — Right-click menu: "Pause gateway" no longer stays highlighted
 
 ### Fixed

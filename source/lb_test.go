@@ -165,3 +165,41 @@ func TestCanvasShowsLoadBalancingInUse(t *testing.T) {
 		t.Fatalf("own: %+v own=%v", cg.LB, cg.LBOwn)
 	}
 }
+
+// The answer cache and the client rules are edited on the Settings page only, so a gateway's own pool must follow
+// them: switching the cache off, or setting a rate, there has to reach every gateway.
+func TestGatewayPoolFollowsSettingsCacheAndClientRules(t *testing.T) {
+	dc := lbTestConfig()
+	dc.DNS.Cache = false
+	dc.DNS.ClientRate, dc.DNS.ClientBurst, dc.DNS.ClientAction = 5, 7, "refused"
+	dc.DNS.AllowedClients = []string{"10.0.0.0/8"}
+	dc.DNS.ClientExempt = []string{"10.1.0.0/16"}
+	_, c := dc.poolFor(&dc.Groups[0])
+	if c.Cache || c.ClientRate != 5 || c.ClientBurst != 7 || c.ClientAction != "refused" ||
+		len(c.AllowedClients) != 1 || len(c.ClientExempt) != 1 {
+		t.Fatalf("own pool must follow Settings: %+v", c)
+	}
+	if c.Servers[0] != "192.0.2.9:53" {
+		t.Fatalf("the gateway's own servers must stay: %v", c.Servers)
+	}
+	p := NewPool(c)
+	if p.cache != nil {
+		t.Fatal("cache switched off in Settings, but the gateway's pool still has one")
+	}
+	if p.lim == nil {
+		t.Fatal("rate set in Settings, but the gateway's pool has no limiter")
+	}
+	// and back again
+	dc.DNS.Cache, dc.DNS.ClientRate, dc.DNS.AllowedClients, dc.DNS.ClientExempt = true, 0, nil, nil
+	_, c = dc.poolFor(&dc.Groups[0])
+	if p := NewPool(c); p.cache == nil || p.lim != nil {
+		t.Fatalf("settings turned back: cache %v limiter %v", p.cache != nil, p.lim != nil)
+	}
+	// the Settings slices are not shared with the pool's copy
+	dc.DNS.AllowedClients = []string{"192.0.2.0/24"}
+	_, c = dc.poolFor(&dc.Groups[0])
+	c.AllowedClients[0] = "x"
+	if dc.DNS.AllowedClients[0] != "192.0.2.0/24" {
+		t.Fatal("poolFor must copy the lists")
+	}
+}

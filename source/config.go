@@ -843,9 +843,26 @@ func (dc *DaemonConfig) poolFor(g *GroupConfig) (int, DNSConfig) {
 		}
 		c.setLBValues(lb)
 		c.LB = nil
+		c.followSettings(dc.DNS)
 		return g.GroupID, c
 	}
 	return 0, dc.DNS
+}
+
+// followSettings makes c use the answer cache and client rules (allowed clients, rate, burst, action, exemptions)
+// of the shared Settings.  They are edited only on the Settings page, so a gateway's own pool must not keep the copy
+// it was made with: it would go on caching, or limiting, after Settings said otherwise.
+func (c *DNSConfig) followSettings(shared DNSConfig) {
+	c.Cache, c.CacheEntries, c.CacheMaxTTL = shared.Cache, shared.CacheEntries, shared.CacheMaxTTL
+	c.AllowedClients = append([]string(nil), shared.AllowedClients...)
+	if len(c.AllowedClients) == 0 {
+		c.AllowedClients = nil
+	}
+	c.ClientExempt = append([]string(nil), shared.ClientExempt...)
+	if len(c.ClientExempt) == 0 {
+		c.ClientExempt = nil
+	}
+	c.ClientRate, c.ClientBurst, c.ClientAction = shared.ClientRate, shared.ClientBurst, shared.ClientAction
 }
 
 func (dc *DaemonConfig) Validate() error {

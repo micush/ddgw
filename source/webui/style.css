@@ -397,7 +397,9 @@ td input[type=date] { width: 11rem; }
 .qtile.pick { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
 .qtile.pick:hover { border-color: var(--c); }
 .qtile.pick[aria-pressed="true"] { outline: 2px solid var(--c); outline-offset: -1px; }
-.qtile .qv { font-size: 1.35rem; font-weight: 700; }
+.qtile { container-type: inline-size; min-width: 0; }
+/* a long number shrinks to fit the tile instead of being cut off: app.js sets --len to its width in digits (a comma counts half) */
+.qtile .qv { --len: 1; font-size: clamp(.5rem, calc(100cqi / (var(--len) * .72)), 1.35rem); font-weight: 700; white-space: nowrap; }
 .qtile .qs { font-size: .75rem; color: var(--muted); min-height: 1em; }
 .qtile .ql { font-size: .8rem; font-weight: 600; }
 .qlegend { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
