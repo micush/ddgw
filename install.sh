@@ -337,7 +337,7 @@ find_go() {
     GO=$OPT_GO; return 0
   fi
   [ -n "${DDGW_FORCE_GO_DOWNLOAD:-}" ] && return 1
-  for c in "$(command -v go 2>/dev/null || true)" /usr/local/go/bin/go /usr/lib/go/bin/go /usr/lib/golang/bin/go /usr/lib/go-*/bin/go "$SHARE/go/bin/go"; do
+  for c in "$(command -v go 2>/dev/null || true)" /usr/local/go/bin/go /usr/lib/go/bin/go /usr/lib/golang/bin/go /snap/bin/go /usr/lib/go-*/bin/go "$SHARE/go/bin/go"; do
     [ -n "$c" ] && go_ok "$c" && { GO=$c; return 0; }
   done
   return 1

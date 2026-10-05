@@ -1,5 +1,17 @@
 # Changelog
 
+## [v192] - 2026-10-05 — Updates and the installer find a snap-installed Go
+
+### Fixed
+- **A Go installed as a snap (`/snap/bin/go`) was not found by an update.** The daemon runs as a service whose `PATH` does not include `/snap/bin`, and the fixed list of places it tried did not either, so Operate ▸ Upgrade (and `--update-apply`/`--update-push`) stopped with "no Go toolchain >= 1.24 found". `/snap/bin/go` is now in that list (`update.go`, `findGo`), and in the installer's search (`install.sh`). It still has to be Go 1.24 or newer.
+
+### Verified
+- gofmt (clean), vet, `go test -count=1 -run 'Update|FindGo|Version'` (passes); `bash -n install.sh`.
+
+### Not verified
+- Not tried with a real snap Go: whether the snap's `go` wrapper runs when started by the daemon as root with `HOME` pointed at ddgw's state directory (the build sets `HOME` there), or under the service's systemd restrictions, is unchecked. If it does not work, install a distribution Go package (`/usr/lib/go-1.24`) or let `install.sh` keep one under `/usr/local/share/ddgw/go`.
+- No full test run, cross-compile or live update for this version; `shellcheck` was not available here, and `install.sh` was not run.
+
 ## [v191] - 2026-10-05 — Anycast pill colours follow the neighbors; spacing on Operate ▸ Anycast
 
 Rebuild of v190 so it can be applied over a v190 that was already installed. The v190 entry below was edited while v190 was being finished, so it also describes these changes.

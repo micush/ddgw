@@ -649,7 +649,7 @@ func (u *Updater) findGo() (string, error) {
 	if p, err := exec.LookPath("go"); err == nil {
 		cands = append(cands, p)
 	}
-	cands = append(cands, "/usr/local/go/bin/go", "/usr/lib/go/bin/go", "/usr/lib/golang/bin/go")
+	cands = append(cands, "/usr/local/go/bin/go", "/usr/lib/go/bin/go", "/usr/lib/golang/bin/go", "/snap/bin/go") // /snap/bin is not on a service's PATH
 	if m, _ := filepath.Glob("/usr/lib/go-*/bin/go"); len(m) > 0 {
 		sort.Sort(sort.Reverse(sort.StringSlice(m)))
 		cands = append(cands, m...)
