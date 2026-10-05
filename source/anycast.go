@@ -64,6 +64,7 @@ type AnycastState struct {
 	Paused string  `json:"paused,omitempty"` // "node" (paused on this node) or "all" (paused on every node), when it is
 	Status string  `json:"status,omitempty"` // ok | warn | bad: the BGP session picture, set only while the address is on lo and BGP is managed here
 	Detail string  `json:"detail,omitempty"` // what Status means
+	BGP    string  `json:"bgp,omitempty"`    // why Status is not ok: disabled | none | down | partial (for the drawing's label)
 	Uptime *UpInfo `json:"uptime,omitempty"` // filled in for the topology view
 }
 

@@ -40,7 +40,10 @@ type BGPNeighbor struct {
 	// Multihop is the eBGP hop limit (2-255) for a peer that is not on a directly connected subnet, e.g. an AWS VPC
 	// Route Server endpoint.  0 = off (directly connected).  FRR then runs BFD to that peer in multihop mode too, so
 	// the peer must be set up the same way.  Ignored for an iBGP neighbor.
-	Multihop  int  `json:"multihop,omitempty"`
+	Multihop int `json:"multihop,omitempty"`
+	// Disabled keeps the neighbor in the settings but shuts the session down (Operate ▸ Anycast); it is
+	// not announced to until enabled again.
+	Disabled  bool `json:"disabled,omitempty"`
 	LegacyBFD bool `json:"bfd,omitempty"` // v41 setting; ignored (BFD is always on), dropped on the next save
 }
 
@@ -67,6 +70,9 @@ type BGPConfig struct {
 	Keepalive int           `json:"keepalive,omitempty"` // seconds; 0 = 3
 	Hold      int           `json:"hold,omitempty"`      // seconds; 0 = 9
 	Neighbors []BGPNeighbor `json:"neighbors"`
+	// Disabled stops BGP on this node without forgetting the settings (Operate ▸ Anycast): the BGP section is
+	// removed from frr.conf as if the AS were cleared, and put back when it is enabled again.
+	Disabled bool `json:"disabled,omitempty"`
 
 	// v41 settings, read so that a config written by v41 still loads and
 	// ignored (BGP runs when ASN is set, BFD is always on); dropped on the next save.
@@ -74,8 +80,11 @@ type BGPConfig struct {
 	LegacyBFD     bool `json:"bfd,omitempty"`
 }
 
-// Active reports whether BGP runs on this node: an AS number is set.
-func (b *BGPConfig) Active() bool { return b != nil && b.ASN != 0 }
+// Configured reports whether an AS number is set (the prerequisite for everything else).
+func (b *BGPConfig) Configured() bool { return b != nil && b.ASN != 0 }
+
+// Active reports whether BGP runs on this node: an AS number is set and BGP is not disabled.
+func (b *BGPConfig) Active() bool { return b.Configured() && !b.Disabled }
 
 func (b *BGPConfig) clone() *BGPConfig {
 	if b == nil {
@@ -93,6 +102,11 @@ func (b *BGPConfig) Validate() error {
 		b.Neighbors = []BGPNeighbor{}
 	}
 	b.LegacyEnabled, b.LegacyBFD = false, false
+	if b.ASN == 0 {
+		// Without an AS there is nothing to run, so nothing to disable and no router ID to keep.  (An older file may
+		// still hold a router ID next to a cleared AS; it is dropped here rather than refusing to load.)
+		b.RouterID, b.Disabled = "", false
+	}
 	if b.RouterID != "" {
 		a, err := netip.ParseAddr(strings.TrimSpace(b.RouterID))
 		if err != nil || !a.Is4() || a.IsUnspecified() {
@@ -223,6 +237,9 @@ func renderFRR(b *BGPConfig, v4, v6 []string, hostname string) string {
 			o.WriteString(fmt.Sprintf(" neighbor %s password %s\n", n.Peer, n.Password))
 		}
 		o.WriteString(fmt.Sprintf(" neighbor %s bfd\n", n.Peer)) // fast failure detection, always
+		if n.Disabled {
+			o.WriteString(fmt.Sprintf(" neighbor %s shutdown\n", n.Peer)) // administratively down: kept, not announced to
+		}
 	}
 	// an IPv4 address goes to the IPv4 neighbors, an IPv6 address to the IPv6 ones
 	o.WriteString(" address-family ipv4 unicast\n")
@@ -665,14 +682,30 @@ func (m *Mgmt) BGPStatus() (*BGPStatus, error) {
 	return st, nil
 }
 
-// BGPSet replaces this node's BGP settings.
+// BGPSet replaces this node's BGP settings.  The disabled flags (Operate ▸ Anycast) are not part of the settings
+// and are carried over from the running config, so editing the settings never switches anything on or off.
 func (m *Mgmt) BGPSet(c BGPConfig, actor string) error {
 	dc, _, err := m.LiveConfig()
 	if err != nil {
 		return err
 	}
+	if c.ASN == 0 && strings.TrimSpace(c.RouterID) != "" {
+		return fmt.Errorf("bgp: a router id needs a local AS number; set the AS first")
+	}
 	if err := c.Validate(); err != nil {
 		return err
+	}
+	was := map[string]bool{}
+	if dc.BGP != nil {
+		for _, n := range dc.BGP.Neighbors {
+			was[n.Peer] = n.Disabled
+		}
+		if c.ASN != 0 {
+			c.Disabled = dc.BGP.Disabled
+		}
+	}
+	for i := range c.Neighbors {
+		c.Neighbors[i].Disabled = was[c.Neighbors[i].Peer]
 	}
 	note := "bgp: "
 	switch {
@@ -688,47 +721,94 @@ func (m *Mgmt) BGPSet(c BGPConfig, actor string) error {
 	return m.PutConfig(dc, actor, note)
 }
 
+// BGPOperateArgs switches the BGP process (Peer empty) or one neighbor on or off.
+type BGPOperateArgs struct {
+	Peer    string `json:"peer,omitempty"`
+	Enabled bool   `json:"enabled"`
+}
+
+// BGPOperate enables or disables BGP on this node, or one of its neighbors, without touching the settings.
+// A disabled process leaves frr.conf as if the AS were cleared; a disabled neighbor stays in frr.conf, shut down.
+func (m *Mgmt) BGPOperate(a BGPOperateArgs, actor string) error {
+	dc, _, err := m.LiveConfig()
+	if err != nil {
+		return err
+	}
+	if !dc.BGP.Configured() {
+		return fmt.Errorf("bgp: set a local AS number first")
+	}
+	c := dc.BGP.clone()
+	var note string
+	if p := strings.TrimSpace(a.Peer); p == "" {
+		if c.Disabled == !a.Enabled {
+			return nil
+		}
+		c.Disabled = !a.Enabled
+		note = "bgp: " + map[bool]string{true: "enabled", false: "disabled"}[a.Enabled]
+	} else {
+		ip, err := netip.ParseAddr(p)
+		if err != nil {
+			return fmt.Errorf("bgp: %q is not a neighbor address", a.Peer)
+		}
+		p = ip.Unmap().String()
+		found := false
+		for i := range c.Neighbors {
+			if c.Neighbors[i].Peer != p {
+				continue
+			}
+			found = true
+			if c.Neighbors[i].Disabled == !a.Enabled {
+				return nil
+			}
+			c.Neighbors[i].Disabled = !a.Enabled
+		}
+		if !found {
+			return fmt.Errorf("bgp: there is no neighbor %s", p)
+		}
+		note = "bgp: neighbor " + p + map[bool]string{true: " enabled", false: " disabled"}[a.Enabled]
+	}
+	dc.BGP = c
+	return m.PutConfig(dc, actor, note)
+}
+
 // ── anycast colour ───────────────────────────────────────────────────────────
 
-// anycastBGPStatus says how an announced anycast address looks given the live
-// BGP neighbors of its family: green with an established session, amber while a
-// session is still coming up (Connect, Active, OpenSent, OpenConfirm), red with
-// none.  A session that stays unestablished for bgpGrace is down, so red too.
-// waited is how long the address has been without a session.  known is false when FRR could not be asked.
-func anycastBGPStatus(addr string, peers []BGPPeer, known bool, waited time.Duration) (status, detail string) {
-	af := "ipv4"
+// anycastBGPStatus says how an announced anycast address looks given this node's BGP neighbors of its family:
+// green when every one of them has an established session, amber when at least one does and at least one does not,
+// red when none does (or none is configured, or FRR does not answer).  A neighbor that is disabled or still
+// connecting counts as not established.  known is false when FRR could not be asked.  kind says what red or amber
+// means ("" when green): down, none or partial; the drawing words its label from it.
+func anycastBGPStatus(addr string, nbrs []BGPNeighbor, peers []BGPPeer, known bool) (status, detail, kind string) {
+	af, label := "ipv4", "IPv4"
 	if ip, err := netip.ParseAddr(addr); err == nil && ip.Unmap().Is6() {
-		af = "ipv6"
-	}
-	label := "IPv4"
-	if af == "ipv6" {
-		label = "IPv6"
+		af, label = "ipv6", "IPv6"
 	}
 	if !known {
-		return "bad", "BGP is not answering: no session, so the address is not reachable"
+		return "bad", "BGP is not answering: no session, so the address is not reachable", "down"
 	}
-	var n, coming int
+	state := map[string]string{}
 	for _, p := range peers {
-		if p.AF != af {
+		state[p.Peer] = p.State
+	}
+	var n, est int
+	for _, nb := range nbrs {
+		if ip, err := netip.ParseAddr(nb.Peer); err != nil || ip.Is6() != (af == "ipv6") {
 			continue
 		}
 		n++
-		switch p.State {
-		case "Established":
-			return "ok", ""
-		case "Connect", "Active", "OpenSent", "OpenConfirm":
-			coming++
+		if !nb.Disabled && state[nb.Peer] == "Established" {
+			est++
 		}
 	}
 	switch {
-	case coming > 0 && waited < bgpGrace:
-		return "warn", "BGP session to the " + label + " neighbor is coming up (not established yet)"
-	case coming > 0:
-		return "bad", "BGP session to the " + label + " neighbor has not established for " + waited.Round(time.Second).String()
-	case n > 0:
-		return "bad", "No established BGP session with an " + label + " neighbor"
+	case n == 0:
+		return "bad", "No " + label + " BGP neighbor is configured: the address is not announced to anyone", "none"
+	case est == n:
+		return "ok", "", ""
+	case est > 0:
+		return "warn", fmt.Sprintf("%d of %d %s BGP neighbors are not established", n-est, n, label), "partial"
 	}
-	return "bad", "No " + label + " BGP neighbor is configured: the address is not announced to anyone"
+	return "bad", "No " + label + " BGP neighbor is established: the address is not reachable", "down"
 }
 
 var bgpLive struct {
@@ -756,32 +836,4 @@ func liveBGPPeers() ([]BGPPeer, bool) {
 		}
 	}
 	return bgpLive.peers, bgpLive.ok
-}
-
-// bgpGrace is how long a session may take to come up before it counts as down.
-const bgpGrace = 30 * time.Second
-
-var bgpWaits = struct {
-	sync.Mutex
-	m map[string]struct{ first, last time.Time }
-}{m: map[string]struct{ first, last time.Time }{}}
-
-// anycastBGP is anycastBGPStatus with the waiting time kept per address: it
-// starts when the address is first seen without a session and resets when one
-// is established or the address was not looked at for a while (withdrawn).
-func anycastBGP(addr string, peers []BGPPeer, known bool, now time.Time) (string, string) {
-	bgpWaits.Lock()
-	defer bgpWaits.Unlock()
-	w, seen := bgpWaits.m[addr]
-	if !seen || now.Sub(w.last) > 10*time.Second {
-		w.first = now
-	}
-	w.last = now
-	st, why := anycastBGPStatus(addr, peers, known, now.Sub(w.first))
-	if st == "ok" {
-		delete(bgpWaits.m, addr)
-	} else {
-		bgpWaits.m[addr] = w
-	}
-	return st, why
 }

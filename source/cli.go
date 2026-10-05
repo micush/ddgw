@@ -28,9 +28,9 @@ type cliFlags struct {
 	userAdd, userPasswd, userExpiry, userDel, expires                                                                                                   *string
 	power, powerAt                                                                                                                                      *string
 	powerIn                                                                                                                                             *int
-	bgp, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus                                                                    *bool
+	bgp, bgpDisable, bgpEnable, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus                                             *bool
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, dnsLookup, hostRange                              *string
-	asn, routerID, nbrAdd, nbrDel, remoteAS, descr, passwd, multihop, keepalive, hold                                                                   *string
+	asn, routerID, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                            *string
 	updateUpload, updatePush, updateCancel, updateAuto                                                                                                  *string
 	canvas                                                                                                                                              *bool
 	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope *string
@@ -64,7 +64,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
 		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
-		bgp: b("bgp"), asn: s("asn"), routerID: s("router-id"),
+		bgp: b("bgp"), bgpDisable: b("bgp-disable"), bgpEnable: b("bgp-enable"), nbrDisable: s("bgp-neighbor-disable"), nbrEnable: s("bgp-neighbor-enable"), asn: s("asn"), routerID: s("router-id"),
 		nbrAdd: s("bgp-neighbor-add"), nbrDel: s("bgp-neighbor-del"), remoteAS: s("remote-as"), descr: s("description"),
 		passwd:       s("password"),
 		multihop:     s("multihop"),
@@ -322,7 +322,8 @@ func (f *cliFlags) run(sock string) bool {
 		printCluster(v)
 
 	// ── bgp ──
-	case *f.bgp || *f.asn != "" || *f.routerID != "" || *f.keepalive != "" || *f.hold != "" || *f.nbrAdd != "" || *f.nbrDel != "":
+	case *f.bgp || *f.asn != "" || *f.routerID != "" || *f.keepalive != "" || *f.hold != "" || *f.nbrAdd != "" || *f.nbrDel != "" ||
+		*f.bgpDisable || *f.bgpEnable || *f.nbrDisable != "" || *f.nbrEnable != "":
 		runBGP(sock, f)
 	// ── statistics ──
 	case *f.statsShow:

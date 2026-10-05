@@ -370,11 +370,18 @@ func (s *StatusServer) markAnycast(groups []CanvasGateway) {
 				}
 			}
 		}
-		if cfg.BGP.Active() {
+		switch {
+		case cfg.BGP.Active():
 			peers, ok := liveBGPPeers()
 			for j := range st {
 				if st[j].Up && st[j].Paused == "" {
-					st[j].Status, st[j].Detail = anycastBGP(st[j].Addr, peers, ok, time.Now())
+					st[j].Status, st[j].Detail, st[j].BGP = anycastBGPStatus(st[j].Addr, cfg.BGP.Neighbors, peers, ok)
+				}
+			}
+		case cfg.BGP.Configured(): // BGP is disabled here (Operate ▸ Anycast): nothing is announced
+			for j := range st {
+				if st[j].Up && st[j].Paused == "" {
+					st[j].Status, st[j].Detail, st[j].BGP = "bad", "BGP is disabled on this node (Operate ▸ Anycast): the address is not announced", "disabled"
 				}
 			}
 		}

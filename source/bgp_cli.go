@@ -12,6 +12,8 @@ import (
 //	--asn N|off [--router-id A.B.C.D|-]     set the local AS (BGP runs while one is set; off clears it)
 //	--bgp-neighbor-add ADDR --remote-as N [--description T] [--password P]
 //	--bgp-neighbor-del ADDR
+//	--bgp-disable | --bgp-enable            stop / restart BGP on this node, keeping the settings
+//	--bgp-neighbor-disable ADDR | --bgp-neighbor-enable ADDR   shut one neighbor down / bring it back
 func runBGP(sock string, f *cliFlags) {
 	var st BGPStatus
 	decode(op(sock, "bgp.status", nil), &st)
@@ -20,7 +22,7 @@ func runBGP(sock string, f *cliFlags) {
 
 	if *f.asn != "" {
 		if v := strings.ToLower(*f.asn); v == "off" || v == "0" {
-			c.ASN = 0
+			c.ASN, c.RouterID = 0, "" // a router id means nothing without an AS
 		} else {
 			n, err := strconv.ParseUint(*f.asn, 10, 32)
 			if err != nil || n == 0 {
@@ -31,6 +33,9 @@ func runBGP(sock string, f *cliFlags) {
 		changed = true
 	}
 	if *f.routerID != "" {
+		if *f.routerID != "-" && c.ASN == 0 {
+			fatalf("--router-id needs a local AS number: give --asn N too (or set it first)")
+		}
 		if *f.routerID == "-" {
 			c.RouterID = ""
 		} else {
@@ -89,11 +94,33 @@ func runBGP(sock string, f *cliFlags) {
 	if changed {
 		decode(op(sock, "bgp.set", c), &st)
 	}
+	// switching things on and off (Operate ▸ Anycast) is separate from the settings
+	switch {
+	case *f.bgpDisable && *f.bgpEnable:
+		fatalf("--bgp-disable and --bgp-enable cannot be used together")
+	case *f.bgpDisable:
+		decode(op(sock, "bgp.operate", BGPOperateArgs{Enabled: false}), &st)
+	case *f.bgpEnable:
+		decode(op(sock, "bgp.operate", BGPOperateArgs{Enabled: true}), &st)
+	}
+	if *f.nbrDisable != "" && *f.nbrEnable != "" {
+		fatalf("--bgp-neighbor-disable and --bgp-neighbor-enable cannot be used together")
+	}
+	if *f.nbrDisable != "" {
+		decode(op(sock, "bgp.operate", BGPOperateArgs{Peer: *f.nbrDisable, Enabled: false}), &st)
+	}
+	if *f.nbrEnable != "" {
+		decode(op(sock, "bgp.operate", BGPOperateArgs{Peer: *f.nbrEnable, Enabled: true}), &st)
+	}
 	printBGP(st)
 }
 
 func printBGP(st BGPStatus) {
 	c := st.Config
+	if c.Configured() && c.Disabled {
+		fmt.Printf("BGP is disabled on this node (AS %d, %d neighbor(s) kept); enable it with --bgp-enable\n", c.ASN, len(c.Neighbors))
+		return
+	}
 	if !c.Active() {
 		fmt.Println("BGP is off on this node (no local AS set).")
 		if len(c.Neighbors) > 0 {
@@ -142,6 +169,9 @@ func printBGP(st BGPStatus) {
 		}
 		if p, ok := live[n.Peer]; ok && p.BFD != "" {
 			line += " bfd " + p.BFD
+		}
+		if n.Disabled {
+			line += " disabled"
 		}
 		if n.Description != "" {
 			line += "  " + n.Description

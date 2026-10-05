@@ -1,5 +1,27 @@
 # Changelog
 
+## [v190] - 2026-10-05 — Anycast pages renamed, Operate ▸ Anycast, router ID needs an AS, node addresses in the tooltip
+
+### Added
+- **Operate ▸ Anycast.** A *BGP* card with **Disable BGP** / **Enable BGP**, and a neighbors table with **Disable** / **Enable** per neighbor. Disabling BGP renders `frr.conf` as if the AS were cleared (no BGP section, `bgpd`/`bfdd` off) but keeps the AS, router ID, timers and neighbors. Disabling a neighbor keeps it configured and renders `neighbor X shutdown`. New per-node config keys `disabled` (BGP and neighbor), written only when true. New `POST /api/bgp/operate` (relayable to another node), op `bgp.operate`, and CLI `--bgp-disable`, `--bgp-enable`, `--bgp-neighbor-disable ADDR`, `--bgp-neighbor-enable ADDR`. Saving the settings (`PUT /api/bgp`, `--asn` and friends) never changes these flags: they are carried over from the running config. Monitor ▸ Anycast shows a disabled neighbor as *disabled* and says so when BGP is disabled.
+- **Topology: a node's tooltip lists its Ethernet interfaces** with their IPv4 and IPv6 global unicast (`2000::/3`) addresses and prefix lengths. "Ethernet" is a physical device, bridge or bond (type 1); veth, macvlan (including ddgw's own), tunnels and loopback are left out, as are link-local and ULA addresses. Carried in a new optional `addrs` field of the cluster status message, so nodes on an older version show nothing.
+
+### Changed
+- **Monitor ▸ BGP is now Monitor ▸ Anycast, Configure ▸ BGP is now Configure ▸ Anycast**, and the Configure card *This node* is now *BGP*. Old `#bgp` and `#bgpstatus` bookmarks still open the right page. Help topics, README, QUICKSTART and CLAUDE.md follow.
+- **A router ID needs a local AS.** The field on Configure ▸ Anycast is disabled until an AS is set and clearing the AS clears it; the API and `--router-id` refuse one without an AS; `--asn off` clears it. A stored router ID next to no AS (written by an older version) is dropped when the config is read, rather than stopping it from loading.
+- **Anycast pill colours on Topology:** per address family, counting the configured neighbors: **green** when every neighbor is established, **amber** ("anycast · neighbor down") when at least one is and at least one is not, **red** when none is, when there is no neighbor of that family, or when BGP is disabled on the node ("anycast · BGP disabled"). A disabled or still-connecting neighbor counts as not established. This replaces the old rule (green with any one session) and **removes the 30-second amber grace** for a session that is still coming up: it is red until a session is established. New optional `bgp` field on each anycast state (`disabled`, `none`, `down`, `partial`) words the label.
+- **Behaviour note:** a config with `"disabled": true` is not readable by older versions (they reject unknown keys); one that never uses it is unchanged.
+
+### Verified
+- gofmt (clean), build, vet, `go test -race -count=1 ./...`; `CGO_ENABLED=0` vet and test; five linux cross-compiles (amd64, arm64, arm, 386, riscv64), on Go 1.24.13. `node --check` on `app.js` and `help.js`.
+- New tests: the pill colour table (partial, connecting, disabled neighbor, all disabled, unknown to FRR, other family) and BGP disabled turning the pill red; router ID rule (set, API, old file), `shutdown` and disabled-process rendering, operate on process and neighbor, settings edits not changing the flags, the API route and its relay, the interface filter (link-local, ULA, 169.254, virtual links).
+- Chromium (light and dark), the real `webui/` files against a mocked API: Operate ▸ Anycast disable/enable of BGP and of each neighbor sent the expected calls and redrew; neighbor buttons are off while BGP is disabled; `#bgp` and `#bgpstatus` redirect; the router ID field is disabled with no AS, cleared and saved as empty when the AS is cleared, enabled when one is typed; no page errors. A mocked two-node canvas showed the interface lines in the node tooltip.
+
+### Not verified
+- Not run against a real FRR: that `neighbor X shutdown` and a disabled process behave as intended, and the BFD state of a shut-down neighbor, were not checked live. No peer namespace was set up.
+- The real daemon, real PAM login, and two clustered daemons were not run; the UI was checked against a mocked API only. The interface addresses were not carried between two real nodes, and the filter was tested with faked interfaces, not a host with real NICs, bridges and bonds.
+- Cross-compiled non-amd64 builds were compiled, not run. PAM was not exercised.
+
 ## [v189] - 2026-10-05 — Cache and client limits now follow Settings on every gateway; four GUI fixes
 
 ### Fixed

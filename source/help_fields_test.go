@@ -61,7 +61,7 @@ func TestHelpCoversEveryField(t *testing.T) {
 		"config":   {"Username", "Password", "Update every node automatically when a newer release is staged (one node at a time)", "Certificate", "Private key", "Main name", "Other names (one per line)", "IP addresses (one per line, optional)", "Pending CSR"},
 		"cluster":  {"Node", "Join code"},
 		"updates":  {"Release archive"},
-		"bgp":      {"Local AS number", "Router ID", "New neighbor address", "New neighbor AS", "New neighbor description", "New neighbor password"},
+		"anycast":  {"Local AS number", "Router ID", "New neighbor address", "New neighbor AS", "New neighbor description", "New neighbor password"},
 		"history":  {"Compare version", "Configuration file"},
 		"stats":    {"Time range", "From", "To"},
 		"host":     {"Time range", "From", "To"},

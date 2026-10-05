@@ -65,6 +65,9 @@ type PeerStatusMsg struct {
 	NodePaused bool `json:"node_paused,omitempty"`
 	// Host is this node's CPU, memory and disk use, for the Topology drawing (absent on older nodes).
 	Host *HostLoad `json:"host,omitempty"`
+	// Addrs are this node's Ethernet interfaces with their IPv4 and IPv6 GUA addresses, for the node's tooltip on the
+	// Topology drawing (absent on older nodes).
+	Addrs []NodeIface `json:"addrs,omitempty"`
 }
 
 type clusterStateMsg struct {
@@ -499,7 +502,7 @@ func (c *Cluster) statusMsg() PeerStatusMsg {
 		Peers: append(c.knownPeers(snap), c.node.Self()), Removed: snap.Removed,
 		Version: version(), SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(),
 		UpdateFailed: c.mg.upd.FailedFor(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
-		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(),
+		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(),
 	}
 }
 

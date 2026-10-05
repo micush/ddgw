@@ -60,11 +60,11 @@ sudo ddgw-uninstall [--purge] [--remove-group] [-y]
 Supported: Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch, Manjaro (and
 derivatives that list one of them in `ID_LIKE`). The installer builds from the
 source tree, installing only the prerequisites that are missing (gcc, PAM
-headers, iproute2, FRR for the BGP page, and a Go >= 1.24 toolchain — taken from the distribution's
+headers, iproute2, FRR for the Anycast page, and a Go >= 1.24 toolchain — taken from the distribution's
 own package (`golang-1.2x-go`/`golang-go`, `golang`, `go`) when that is recent
 enough, otherwise downloaded from go.dev with a checksum check; a downloaded one is kept in `/usr/local/share/ddgw/go` because
 the daemon rebuilds itself with it when you apply an update — `--no-keep-go`
-removes it). FRR is installed with the distribution's `frr` package (EPEL on the RHEL family); if that fails the installer only warns, and ddgw leaves FRR untouched until a local AS is set on the BGP page. It then installs
+removes it). FRR is installed with the distribution's `frr` package (EPEL on the RHEL family); if that fails the installer only warns, and ddgw leaves FRR untouched until a local AS is set on the Anycast page. It then installs
 `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager
 drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw`
 systemd unit.
@@ -330,12 +330,12 @@ paused, listener up, at least one DNS server healthy. Otherwise it is taken off
 10-second lifetime that ddgw renews every 3 s, so if ddgw crashes or hangs the
 kernel removes the address by itself within about 10 s instead of leaving a route
 that nothing answers. The drawing and `--canvas` show whether each address is
-announced from the node you are looking at. When the node manages BGP, the pill is green with an established session to a neighbor of its family (IPv4 address → IPv4 neighbor, IPv6 → IPv6), amber while a session is coming up (Connect, Active, OpenSent, OpenConfirm) for up to 30 s, and red with none or when it still has not established after that.
+announced from the node you are looking at. When the node manages BGP, the pill is green when every neighbor of its family has an established session (IPv4 address → IPv4 neighbors, IPv6 → IPv6), amber when some do and some do not, and red when none does, when it has no neighbor of that family, or when BGP is disabled on the node (Operate → Anycast). A neighbor that is disabled or still connecting counts as not established.
 
 ## BGP (FRR)
 
 ddgw can drive FRR on a node so the anycast addresses are announced without any
-hand-written routing config (GUI: **Configure → BGP**; CLI below). It is **per
+hand-written routing config (GUI: **Configure → Anycast**; CLI below). It is **per
 node** — the AS, router id and neighbors are never replicated, because a node
 usually peers with its own upstream router; only the anycast addresses are shared.
 
@@ -346,18 +346,20 @@ restart when a daemon is switched on or off). FRR must be installed, with its `f
 package (the installer adds both) — without it a reload cannot work, so ddgw restarts FRR for every
 change and the sessions drop briefly. An `frr.conf` that ddgw did not write is saved once as
 `frr.conf.pre-ddgw` before it is replaced. Clearing the
-AS number removes the BGP section and leaves FRR running; a node that never set an
+AS number removes the BGP section and leaves FRR running (the router ID can only be set while an AS is set, and clearing the AS clears it); **Operate → Anycast** does the same without forgetting any setting (*Disable BGP*), and can shut down a single neighbor (`neighbor … shutdown`, the neighbor stays configured); a node that never set an
 AS never has its FRR files touched. BFD is on for every neighbor. BGP keepalive and hold time are settings next to the router ID (default 3 s / 9 s; `--keepalive S --hold S`, `-` for the default); the session uses the lower hold time of the two ends. A neighbor can have a **multihop** limit (2-255, eBGP only) for a peer that is not on a connected subnet; FRR then runs BFD to it in multihop mode, so the peer must be set up the same way. Do not run this on a
 host whose FRR is managed by something else — they would overwrite each other.
 
     ddgw --bgp                                                    # settings, neighbor and BFD state, announced addresses
-    ddgw --asn 64512 --router-id 192.0.2.10
+    ddgw --asn 64512 --router-id 192.0.2.10        # --router-id needs an AS, set now or earlier
     ddgw --keepalive 3 --hold 9
     ddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core
     ddgw --bgp-neighbor-add 2001:db8::1 --remote-as 64500
     ddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2   # peer not on a connected subnet (e.g. AWS VPC Route Server)
     ddgw --bgp-neighbor-del 192.0.2.1
-    ddgw --asn off
+    ddgw --asn off                                 # also clears the router id
+    ddgw --bgp-disable                             # stop BGP on this node, settings kept (--bgp-enable)
+    ddgw --bgp-neighbor-disable 192.0.2.1          # shut one neighbor down, kept (--bgp-neighbor-enable)
 
 What the node does, and no more:
 
@@ -374,10 +376,10 @@ What the node does, and no more:
   to notice.
 - The neighbor password is an MD5 TCP session password; it is stored in the config
   file and its history (root-only), and `--password` on the command line is visible
-  to other users of the host — the BGP page is the safer place to set it.
-- **Monitor → BGP** shows each neighbor's session and BFD state, read from FRR
+  to other users of the host — the Anycast page is the safer place to set it.
+- **Monitor → Anycast** shows each neighbor's session and BFD state, read from FRR
   (`vtysh -c "show bgp summary json"`, `show bfd peers json`) every few seconds, and
-  which anycast addresses are announced. **Configure → BGP** has the AS, router ID
+  which anycast addresses are announced. **Configure → Anycast** (card *BGP*) has the AS, router ID
   and the neighbor table (**+** adds a row, **−** removes the highlighted one).
 
 The generated config looks like this:
@@ -406,7 +408,7 @@ in any cloud**:
   when the node has an address in the VIP's subnet), and list **every node's address** under
   *Neighbors (unicast mode)* so the nodes find each other without multicast. The list is shared, so
   you fill it in once. The VIP forms but nobody uses it.
-- Add the anycast addresses to that gateway and announce them with BGP (Configure ▸ BGP). For a
+- Add the anycast addresses to that gateway and announce them with BGP (Configure ▸ Anycast). For a
   peer that is not on a connected subnet, such as an AWS VPC Route Server endpoint, set the
   neighbor's **Multihop** (usually 2); the peer must use multihop BFD as well.
 - The gateway joins the election only after its DNS servers answer, and an anycast address is
@@ -471,6 +473,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
+| `--bgp-disable`, `--bgp-enable`, `--bgp-neighbor-disable ADDR`, `--bgp-neighbor-enable ADDR` | Operate ▸ Anycast (Disable / Enable BGP, and per neighbor) |
 | `--version`, `--help` | version in the header; the **?** at the top right of every page opens a slide-out help panel for that page (including its command-line equivalents and a description of every field on the page) |
 
 Saving applies immediately (same hot reload as editing the file).

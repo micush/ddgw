@@ -157,9 +157,9 @@
   // Topology comes first; its items are the gateways themselves (filled in from the daemon).
   const TOPO = "Topology";
   const NAV_GROUPS = [
-    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["bgpstatus", "BGP"], ["log", "Log"]]],
-    ["Configure", [["config", "Settings"], ["bgp", "BGP"], ["users", "Users"], ["history", "History"]]],
-    ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["updates", "Upgrade"]]],
+    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["log", "Log"]]],
+    ["Configure", [["config", "Settings"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
+    ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["updates", "Upgrade"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
   const groupOf = (id) => (id === "topology" ? TOPO : (NAV_GROUPS.find(([, items]) => items.some(([i]) => i === id)) || [null])[0]);
@@ -231,6 +231,8 @@
     if (wanted === "canvas") wanted = "topology"; // the page's old name: keep old bookmarks working
     if (wanted === "neighbors") wanted = "nodes"; // likewise
     if (wanted === "power" || wanted === "gateway") wanted = "node"; // Power and the short-lived Gateway page became Operate ▸ Node
+    if (wanted === "bgpstatus") wanted = "anycaststatus"; // Monitor ▸ BGP became Monitor ▸ Anycast
+    if (wanted === "bgp") wanted = "anycast"; // likewise Configure ▸ BGP
     if (wanted === "certificate") { wanted = "config"; state.cfgTab = "web"; } // moved under Settings ▸ Web GUI
     selectTab(TABS.some(([id]) => id === wanted) ? wanted : "topology");
   }
@@ -674,7 +676,7 @@
           sv("title", {}, "Anycast " + addr + " — " + why + (a && !noSrv && !g.paused && !g.paused_all && !pz ? upLine(a.uptime) : "")),
           sv("rect", { x, y, width: AW, height: AH, rx: 18 }),
           label(x + AW / 2, y + 17, addr, "ip"),
-          label(x + AW / 2, y + 32, a && a.up && !noSrv && !pz && a.status === "warn" ? "anycast · BGP connecting" : a && a.up && !noSrv && !pz && a.status === "bad" ? "anycast · no BGP session" : c === "ok" ? "anycast · announced" : c === "paused" && pz ? "paused · " + (pzAll ? "all nodes" : "this node") : c === "paused" ? "anycast · paused" : a && !a.up && !noSrv ? "anycast · withdrawn" : "anycast", "t2")));
+          label(x + AW / 2, y + 32, a && a.up && !noSrv && !pz && a.status === "warn" ? "anycast · neighbor down" : a && a.up && !noSrv && !pz && a.status === "bad" ? (a.bgp === "disabled" ? "anycast · BGP disabled" : "anycast · no BGP session") : c === "ok" ? "anycast · announced" : c === "paused" && pz ? "paused · " + (pzAll ? "all nodes" : "this node") : c === "paused" ? "anycast · paused" : a && !a.up && !noSrv ? "anycast · withdrawn" : "anycast", "t2")));
       });
       // the cluster's nodes, left of the circle, as parallelograms (read-only: they cannot be dragged or deleted here)
       nodes.forEach((n, i) => {
@@ -1087,6 +1089,7 @@
     const nodeTip = (n) => [
       n.name + (n.self ? " (this node)" : "") + " — " + n.detail,
       "Address: " + n.addr + (n.hostname && n.hostname !== n.name ? " (host " + n.hostname + ")" : ""),
+      ...(n.addrs || []).map((i) => i.name + ": " + [...(i.v4 || []), ...(i.v6 || [])].join(", ")),   // Ethernet interfaces: IPv4 and IPv6 GUA
       "Role: " + (n.role === "primary" ? "primary" : "replica"),
       n.self ? "" : n.reachable ? "Last seen: " + (n.last_seen ? spanText(Date.now() / 1000 - n.last_seen) + " ago" : "just now") : "",
       n.version ? "Version: " + n.version + (n.version_differs ? " (not the same as this node's)" : "") : "",
@@ -1742,7 +1745,7 @@
         // the certificate is managed under Web GUI; keep any file paths already in the config
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },
         cluster: cluster.get(),
-        ...(cfg.bgp ? { bgp: cfg.bgp } : {}), // edited on the BGP page
+        ...(cfg.bgp ? { bgp: cfg.bgp } : {}), // edited on the Anycast page
         ...(cfg.node_paused ? { node_paused: true } : {}), // set on the Node page
         ...(cfg.paused_servers_here ? { paused_servers_here: cfg.paused_servers_here } : {}), // set on the Topology page
         ...(cfg.paused_queries_here ? { paused_queries_here: cfg.paused_queries_here } : {}),
@@ -2840,8 +2843,8 @@
     };
   })();
 
-  // ── BGP, Monitor  (CLI: --bgp) ──────────────────────────────────────────────
-  VIEWS.bgpstatus = (() => {
+  // ── Anycast, Monitor  (CLI: --bgp) ──────────────────────────────────────────────
+  VIEWS.anycaststatus = (() => {
     let box;
     const stateKind = (st) => (st === "Established" ? "ok" : st === "Active" || st === "Connect" || st === "OpenSent" || st === "OpenConfirm" ? "warn" : "bad");
     const bfdKind = (st) => (st === "up" ? "ok" : st === "init" ? "warn" : st === "down" ? "bad" : "");
@@ -2851,7 +2854,12 @@
       clear(box);
       if (!c.asn) {
         box.append(section("BGP", h("div", { class: "notice info", role: "status" },
-          "BGP is off on this node. Set a local AS number under Configure → BGP and the anycast addresses of the gateways are announced to your neighbors.")));
+          "BGP is off on this node. Set a local AS number under Configure → Anycast and the anycast addresses of the gateways are announced to your neighbors.")));
+        return;
+      }
+      if (c.disabled) {
+        box.append(section("BGP", h("div", { class: "notice info", role: "status" },
+          "BGP is disabled on this node (AS " + c.asn + "). Enable it under Operate → Anycast.")));
         return;
       }
       box.append(section("Status", kv([
@@ -2865,14 +2873,14 @@
       const row = (n) => {
         const p = live.get(n.peer);
         return h("tr", {}, h("td", { class: "mono" }, n.peer), h("td", {}, String(n.remote_as)), h("td", {}, n.description || ""),
-          h("td", {}, p ? pill(p.state, stateKind(p.state)) : pill(st.running ? "not known yet" : "–", "")),
+          h("td", {}, n.disabled ? pill("disabled", "") : p ? pill(p.state, stateKind(p.state)) : pill(st.running ? "not known yet" : "–", "")),
           h("td", {}, p && p.bfd ? pill(p.bfd, bfdKind(p.bfd)) : "–"),
           h("td", {}, p && p.state === "Established" ? p.uptime : "–"),
           h("td", {}, p && p.state === "Established" ? String(p.sent) : "–"));
       };
       box.append(section("Neighbors", h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["Neighbor", "AS", "Description", "BGP", "BFD", "Up for", "Prefixes sent"].map((t) => h("th", {}, t)))),
-        h("tbody", {}, c.neighbors.length ? c.neighbors.map(row) : h("tr", {}, h("td", { colspan: 7, class: "empty" }, "No neighbors yet: add one under Configure → BGP.")))))));
+        h("tbody", {}, c.neighbors.length ? c.neighbors.map(row) : h("tr", {}, h("td", { colspan: 7, class: "empty" }, "No neighbors yet: add one under Configure → Anycast.")))))));
 
       box.append(section("Anycast addresses", h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["Address", "State", "Why"].map((t) => h("th", {}, t)))),
@@ -2894,8 +2902,8 @@
     };
   })();
 
-  // ── BGP, Configure  (CLI: --asn, --router-id, --bgp-neighbor-add/-del) ──────
-  VIEWS.bgp = (() => {
+  // ── Anycast, Configure  (CLI: --asn, --router-id, --bgp-neighbor-add/-del) ──────
+  VIEWS.anycast = (() => {
     let status, settings, nbrs, cfg = null, sel = null, draft = null, rows = new Map(), chain = Promise.resolve();
     const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -2976,14 +2984,19 @@
       const rid = h("input", { type: "text", value: cfg.router_id || "", placeholder: "192.0.2.1 (optional)", spellcheck: "false" });
       const secs = (v, d, label) => h("input", { class: "as", type: "text", inputmode: "numeric", pattern: "[0-9]*", autocomplete: "off", value: String(v || d), "aria-label": label });
       const ka = secs(cfg.keepalive, 3, "Keepalive"), hold = secs(cfg.hold, 9, "Hold time");
+      const needAS = () => { rid.disabled = !(Number(asn.value) > 0); };   // a router ID means nothing without an AS
+      needAS();
       const commit = () => {
+        if (!(Number(asn.value) > 0)) rid.value = "";   // clearing the AS clears the router ID with it
+        needAS();
         const next = clone(cfg);
         next.asn = Number(asn.value) || 0; next.router_id = rid.value.trim();
         next.keepalive = Number(ka.value) || 0; next.hold = Number(hold.value) || 0;
         save(next);
       };
+      asn.addEventListener("input", needAS);
       for (const el of [asn, rid, ka, hold]) el.addEventListener("change", commit);
-      clear(settings).append(section("This node",
+      clear(settings).append(section("BGP",
         h("p", { class: "hint" }, "When configured, BGP announces the gateways' anycast addresses and accepts no routes from its neighbors."),
         h("div", { class: "grid" },
           h("label", { class: "f" }, h("span", {}, "Local AS number"), asn, h("span", { class: "hint" }, "BGP runs on this node while an AS number is set; clear it to turn BGP off.")),
@@ -3004,6 +3017,58 @@
         main.append(status, settings, nbrs);
         try { await load(); } catch (e) { fail(status)(e); }
       },
+    };
+  })();
+
+  // ── Anycast, Operate  (CLI: --bgp-disable/-enable, --bgp-neighbor-disable/-enable) ──
+  VIEWS.anycastop = (() => {
+    let status, box;
+
+    async function call(body) {
+      try { draw((await api("POST", "/api/bgp/operate", body)).data); clear(status); }
+      catch (e) { fail(status)(e); }
+    }
+
+    function draw(st) {
+      const c = st.config;
+      clear(box);
+      if (!c.asn) {
+        box.append(section("BGP", h("div", { class: "notice info", role: "status" },
+          "BGP is off on this node. Set a local AS number under Configure → Anycast first.")));
+        return;
+      }
+      const live = new Map(st.peers.map((p) => [p.peer, p]));
+      const stateOf = (n) => {
+        const p = live.get(n.peer);
+        if (n.disabled) return pill("disabled", "");
+        if (c.disabled) return pill("–", "");
+        return p ? pill(p.state, p.state === "Established" ? "ok" : p.state === "Active" || p.state === "Connect" || p.state === "OpenSent" || p.state === "OpenConfirm" ? "warn" : "bad") : pill(st.running ? "not known yet" : "–", "");
+      };
+      const toggleBGP = h("button", { class: c.disabled ? "btn primary" : "btn danger", type: "button", onclick: () => {
+        if (!c.disabled && !confirm("Disable BGP on this node?\n\nIts sessions go down and the anycast addresses are no longer announced from this node. The settings are kept.")) return;
+        call({ enabled: !!c.disabled });
+      } }, c.disabled ? "Enable BGP" : "Disable BGP");
+      const row = (n) => h("tr", {}, h("td", { class: "mono" }, n.peer), h("td", {}, String(n.remote_as)), h("td", {}, n.description || ""), h("td", {}, stateOf(n)),
+        h("td", {}, h("button", { class: "btn small", type: "button", disabled: !!c.disabled, "aria-label": (n.disabled ? "Enable " : "Disable ") + n.peer, onclick: () => {
+          if (!n.disabled && !confirm("Disable neighbor " + n.peer + "?\n\nThe session is shut down and nothing is announced to it. The neighbor is kept.")) return;
+          call({ peer: n.peer, enabled: !!n.disabled });
+        } }, n.disabled ? "Enable" : "Disable")));
+      box.append(section("BGP",
+        kv([["Local AS", String(c.asn)], ["State", c.disabled ? pill("disabled", "") : pill("enabled", "ok")]]),
+        h("div", { class: "toolbar" }, toggleBGP)));
+      box.append(section("Neighbors", h("div", { class: "scroll" }, h("table", {},
+        h("thead", {}, h("tr", {}, ["Neighbor", "AS", "Description", "BGP", ""].map((t) => h("th", {}, t)))),
+        h("tbody", {}, c.neighbors.length ? c.neighbors.map(row) : h("tr", {}, h("td", { colspan: 5, class: "empty" }, "No neighbors yet: add one under Configure → Anycast.")))))));
+    }
+
+    return {
+      async mount(main) {
+        status = h("div", { "aria-live": "polite" }); box = h("div", {});
+        main.append(status, box);
+        try { draw((await api("GET", "/api/bgp")).data); } catch (e) { fail(status)(e); }
+      },
+      async poll() { draw((await api("GET", "/api/bgp")).data); },
+      poll_ms: 5000,
     };
   })();
 

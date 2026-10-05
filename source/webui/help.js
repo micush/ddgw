@@ -21,14 +21,14 @@ const DDGW_HELP = {
         "The **circle** is the gateway: the shared address (VIP) clients send DNS to. Hover it to see which cluster nodes are serving it right now, which one is the gateway controller, and each node's slot.",
         "The **squares** are the DNS servers it forwards to. Each shows its state and how fast it answers.",
         "The **trapezoids** are the domains each server must answer for it to count as healthy. Green means the test query answered; red means it did not.",
-        "The **parallelograms** to the left of the circle are the nodes of the cluster (shown when there are two or more), this node first and marked with a star (*): green is serving this gateway, amber is up but not serving it yet, or serving while its own DNS servers are partly down (degraded: the tooltip says why, the same view the circle gives for this node), dashed grey is paused, dashed red is not answering. A node whose CPU, memory or fullest disk goes **over 85%** turns solid yellow (degraded) and says which, until all are back at 85% or below (the tooltip shows the numbers). Hover one for its address, last-seen time, version and whether it has the primary's latest settings; right-click for **Pause node…** / **Resume node** (any reachable node, this one or another), **Host statistics…** or **Open this node**.",
+        "The **parallelograms** to the left of the circle are the nodes of the cluster (shown when there are two or more), this node first and marked with a star (*): green is serving this gateway, amber is up but not serving it yet, or serving while its own DNS servers are partly down (degraded: the tooltip says why, the same view the circle gives for this node), dashed grey is paused, dashed red is not answering. A node whose CPU, memory or fullest disk goes **over 85%** turns solid yellow (degraded) and says which, until all are back at 85% or below (the tooltip shows the numbers). Hover one for its address, its Ethernet interfaces' IPv4 and IPv6 global (GUA) addresses, last-seen time, version and whether it has the primary's latest settings; right-click for **Pause node…** / **Resume node** (any reachable node, this one or another), **Host statistics…** or **Open this node**.",
         "The **pills** to the right are the gateway's anycast addresses. Both sides stand four to a column (three when four would put a line to a server through a box) and spread outward in new columns after that; drag an anycast pill to any slot to change the order.",
         "Hover any item for its **uptime**: how long it has been online since it last came back (or how long it has been down) and how many failures it has had, for example “Online for 1m 1s - 0 failures”. A gateway, an anycast address, a server or a domain counts as online while it is green or yellow. ddgw notes the changes itself, even with no browser open, but only in memory, so the counting, failures included, starts again when ddgw restarts. Paused and grey items show nothing. `ddgw --canvas` prints the same.",
       ]],
       ["h", "Several subnets"],
       "A node runs a gateway only if its interface has an address in the gateway's subnet (IPv4, and IPv6 when the node has a global IPv6 address). On a node that does not, the gateway shows grey (“not running here”) and starts by itself once the node is addressed there; the cluster members on that subnet serve it meanwhile.",
       ["h", "Anycast addresses"],
-      "Right-click the circle → *Add anycast address…* adds an extra IPv4 or IPv6 address of **any subnet**; it appears as a pill to the right of the circle (right-click it to edit or delete, or press Delete). They are not checked against the interface and take no part in the election: every node running the gateway puts them on its loopback (`lo`) and answers DNS on them, using the same servers and domains. Announce them to your routers on the **BGP** page (Configure), or with your own routing daemon. An address is removed from `lo`, so the route is withdrawn, while no DNS server answers or the gateway is paused or stopped. It is added with a 10-second lifetime that ddgw keeps renewing, so if ddgw crashes the kernel removes it within seconds. The drawing shows whether each is announced from this node. When this node manages BGP, a pill is green with an established BGP session, amber while a session is coming up (Connect, Active, …) for up to 30 seconds, and red with none or when it has still not established after that (IPv4 addresses count IPv4 neighbors, IPv6 addresses IPv6 ones).",
+      "Right-click the circle → *Add anycast address…* adds an extra IPv4 or IPv6 address of **any subnet**; it appears as a pill to the right of the circle (right-click it to edit or delete, or press Delete). They are not checked against the interface and take no part in the election: every node running the gateway puts them on its loopback (`lo`) and answers DNS on them, using the same servers and domains. Announce them to your routers on the **Anycast** page (Configure), or with your own routing daemon. An address is removed from `lo`, so the route is withdrawn, while no DNS server answers or the gateway is paused or stopped. It is added with a 10-second lifetime that ddgw keeps renewing, so if ddgw crashes the kernel removes it within seconds. The drawing shows whether each is announced from this node. When this node manages BGP, a pill is green when every neighbor has an established BGP session, amber when some are not established and some are, and red when none is, when there is no neighbor of that family, or when BGP is disabled on this node (a neighbor that is disabled or still connecting counts as not established) (IPv4 addresses count IPv4 neighbors, IPv6 addresses IPv6 ones).",
       ["h", "Colours"],
       ["ul", [
         "**Green** — working. **Amber** — degraded (some servers down, or the gateway is still starting). **Red** — down: clients cannot be answered. **Grey** — not yet known. **Dashed** — paused. A **blue line** from the gateway to a server means spread is on and that server is within the band of the fastest one, so queries take turns across the blue ones (see the DNS page).",
@@ -315,27 +315,27 @@ const DDGW_HELP = {
       ["cli", "ddgw --update-status   (the 50 newest history events)\nddgw --update-history  (all of them)\nddgw --update-upload FILE\nddgw --update-apply\nddgw --update-push all|ADDR,...\nddgw --update-cancel all|ADDR,...\nddgw --update-auto on|off"],
     ],
   },
-  bgpstatus: {
-    title: "BGP (monitor)",
+  anycaststatus: {
+    title: "Anycast (monitor)",
     body: [
-      "What BGP is doing on this node right now. The page refreshes every few seconds. The settings are under **Configure → BGP**.",
+      "What BGP is doing on this node right now. The page refreshes every few seconds. The settings are under **Configure → Anycast**; switching BGP or a neighbor off and on is under **Operate → Anycast**.",
       ["h", "The page"],
       ["ul", [
         "**Status**: the local AS, whether FRR is installed and `bgpd` answers, and what the last apply did.",
-        "**Neighbors**: the BGP session state read from FRR (*Established* is a working session), the **BFD** state (*up* means the router answers fast failure detection, *down* means it does not), how long the session has been up and how many prefixes were sent to it.",
+        "**Neighbors**: the BGP session state read from FRR (*Established* is a working session; a neighbor you disabled shows *disabled*), the **BFD** state (*up* means the router answers fast failure detection, *down* means it does not), how long the session has been up and how many prefixes were sent to it.",
         "**Anycast addresses**: every anycast address of every gateway and whether this node announces it. An address is *withdrawn* while no DNS server answers, the gateway is paused or not running here, or the address could not be added to `lo`; the reason is shown.",
       ]],
       ["cli", "ddgw --bgp"],
     ],
   },
-  bgp: {
-    title: "BGP",
+  anycast: {
+    title: "Anycast",
     body: [
-      "Announce the gateways' **anycast addresses** to your routers with BGP. ddgw drives FRR on this node: it writes `/etc/frr/frr.conf` (BGP only), turns `bgpd` and `bfdd` on and reloads FRR. FRR must be installed on the node. What BGP is doing is shown under **Monitor → BGP**.",
+      "Announce the gateways' **anycast addresses** to your routers with BGP. ddgw drives FRR on this node: it writes `/etc/frr/frr.conf` (BGP only), turns `bgpd` and `bfdd` on and reloads FRR. FRR must be installed on the node. What BGP is doing is shown under **Monitor → Anycast**; switching BGP or a neighbor off and on is under **Operate → Anycast**.",
       ["h", "What it does"],
       ["ul", [
         "**Per node.** The AS, router ID and neighbors are not shared with the cluster — each node usually peers with its own upstream router. The anycast addresses themselves are shared (right-click a gateway on the Topology page → *Add anycast address…*).",
-        "**On when an AS is set.** BGP runs on this node while a local AS number is set. Clear the AS number to turn it off: the BGP section is removed from `frr.conf` and FRR keeps running.",
+        "**On when an AS is set.** BGP runs on this node while a local AS number is set. Clear the AS number to turn it off: the BGP section is removed from `frr.conf` and FRR keeps running. The **Router ID** can only be filled in while an AS number is set, and clearing the AS clears it too.",
         "**Announce only.** The node announces its anycast addresses and nothing else, and accepts no routes from its neighbors, so a peer cannot change this host's routing table.",
         "**Withdrawal.** An address exists in FRR's table only while ddgw holds it on `lo` (a DNS server answers, the gateway is not paused, ddgw is running), so the route is withdrawn when the node cannot answer. **BFD** is on for every neighbor; lower the timers on your router to shorten the time it takes to notice a dead node.",
         "An **IPv4** address is announced to IPv4 neighbors and an **IPv6** address to IPv6 neighbors; add a neighbor of each family to announce both.",
@@ -349,7 +349,7 @@ const DDGW_HELP = {
       ["h", "Fields"],
       ["fields", [
         ["Local AS number", "This node's AS number, for example `64512`. BGP runs on this node while it is set; clear it to turn BGP off."],
-        ["Router ID", "An IPv4 address that identifies this router. Optional; empty lets FRR pick one."],
+        ["Router ID", "An IPv4 address that identifies this router. Optional; empty lets FRR pick one. Needs a local AS number: the field is disabled until one is set."],
         ["Keepalive (seconds)", "How often this node sends a BGP keepalive. Default `3`. Must be shorter than the hold time."],
         ["Hold time (seconds)", "How long a silent peer is kept before the session is declared down. Default `9`, minimum `3`. The session uses the lower hold time of the two ends, so a peer with longer timers agrees down to this."],
         ["AS of (a neighbor's row)", "The neighbor's AS number. A neighbor is created once it has an address and an AS."],
@@ -362,7 +362,20 @@ const DDGW_HELP = {
         ["New neighbor description", "Optional note."],
         ["New neighbor password", "Optional MD5 session password."],
       ]],
-      ["cli", "ddgw --bgp\nddgw --asn 64512 --router-id 192.0.2.10\nddgw --keepalive 3 --hold 9\nddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core\nddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2\nddgw --bgp-neighbor-del 192.0.2.1\nddgw --asn off\n(--password on the command line is visible to other users of the host; the page is safer)"],
+      ["cli", "ddgw --bgp\nddgw --asn 64512 --router-id 192.0.2.10   (--router-id needs an AS, set now or earlier)\nddgw --keepalive 3 --hold 9\nddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core\nddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2\nddgw --bgp-neighbor-del 192.0.2.1\nddgw --asn off   (also clears the router ID)\n(--password on the command line is visible to other users of the host; the page is safer)"],
+    ],
+  },
+  anycastop: {
+    title: "Anycast (operate)",
+    body: [
+      "Switch BGP on this node, or one of its neighbors, off and on without losing any setting. The settings themselves are under **Configure → Anycast**; what BGP is doing is under **Monitor → Anycast**. The page needs a local AS number to be set.",
+      ["h", "The page"],
+      ["ul", [
+        "**BGP**: *Disable BGP* stops BGP on this node as if the AS were cleared (the BGP section leaves `frr.conf`, the sessions go down, nothing is announced) but keeps the AS, router ID, timers and neighbors. *Enable BGP* puts it back. The anycast addresses stay on `lo` and the gateways keep answering; only the announcing stops.",
+        "**Neighbors**: *Disable* shuts one session down (`neighbor … shutdown` in `frr.conf`) and nothing is announced to it; the neighbor stays configured and in the list. *Enable* brings it back. The buttons are off while BGP itself is disabled.",
+        "Per node, like the rest of the BGP settings: another node is switched from the node picker at the top right.",
+      ]],
+      ["cli", "ddgw --bgp-disable\nddgw --bgp-enable\nddgw --bgp-neighbor-disable 192.0.2.1\nddgw --bgp-neighbor-enable 192.0.2.1"],
     ],
   },
   stats: {

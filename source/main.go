@@ -97,7 +97,10 @@ the web GUI):
                    --asn N|off [--router-id A.B.C.D|-]     (BGP runs while an AS is set)
                    [--keepalive S] [--hold S]
                    --bgp-neighbor-add ADDR --remote-as N [--description T] [--password P] [--multihop N]
-                   --bgp-neighbor-del ADDR       (per node; ddgw then owns /etc/frr/frr.conf; BFD is always on)
+                   --bgp-neighbor-del ADDR
+                   --bgp-disable | --bgp-enable   (stop / restart BGP on this node, settings kept)
+                   --bgp-neighbor-disable ADDR | --bgp-neighbor-enable ADDR
+                                                 (per node; ddgw then owns /etc/frr/frr.conf; BFD is always on)
   Cluster          --cluster-status  --cluster-token  --cluster-join CODE
                    --cluster-promote  --cluster-remove ADDR
                    --cluster-unremove ADDR  --cluster-leave  --cluster-sync

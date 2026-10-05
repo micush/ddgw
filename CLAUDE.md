@@ -157,7 +157,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
      stopping the stub DNS servers withdraws it, `kill -9` removes it within ~10 s,
      SIGTERM at once; two clustered daemons (a gateway on a subnet the host is not
      on, so it only replicates) must agree after an edit on either.
-   - **Touched BGP (`bgp.go`, `bgp_cli.go`, `VIEWS.bgp`)?** The settings are per node
+   - **Touched BGP (`bgp.go`, `bgp_cli.go`, `VIEWS.anycast`/`VIEWS.anycastop`/`VIEWS.anycaststatus`)?** The settings are per node
      (never in `SharedConfig`), the config key is a pointer with `omitempty` so a config
      that never used BGP stays readable by older versions (they reject unknown keys), and
      every value that reaches `frr.conf` is validated (no injected lines). The sandbox can

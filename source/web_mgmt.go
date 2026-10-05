@@ -41,6 +41,7 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	// updates
 	mux.HandleFunc("GET /api/bgp", w.authed(w.op("bgp.status", nil)))
 	mux.HandleFunc("PUT /api/bgp", w.authed(w.op("bgp.set", nil)))
+	mux.HandleFunc("POST /api/bgp/operate", w.authed(w.op("bgp.operate", nil)))
 	mux.HandleFunc("GET /api/log", w.authed(w.op("log.view", []string{"level", "q", "since", "n"})))
 	mux.HandleFunc("GET /api/dnsupdates", w.authed(w.op("dnsupdates.get", nil)))
 	mux.HandleFunc("GET /api/host", w.authed(w.op("host.get", []string{"from", "to"})))
