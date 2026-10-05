@@ -1,5 +1,19 @@
 # Changelog
 
+## [v191] - 2026-10-05 — Anycast pill colours follow the neighbors; spacing on Operate ▸ Anycast
+
+Rebuild of v190 so it can be applied over a v190 that was already installed. The v190 entry below was edited while v190 was being finished, so it also describes these changes.
+
+### Changed
+- **Anycast pill colours on Topology** (per address family, counting the configured neighbors): green when every neighbor is established, amber ("anycast · neighbor down") when at least one is and at least one is not, red when none is, when there is no neighbor of that family, or when BGP is disabled on the node ("anycast · BGP disabled"). A disabled or still-connecting neighbor counts as not established. The 30-second amber grace for a session that is still coming up is gone. New optional `bgp` field on each anycast state.
+- **Operate ▸ Anycast:** space between the AS/State rows and the Disable/Enable BGP button.
+
+### Verified
+- Before this bump: gofmt, build, vet, `go test -race -count=1 ./...`, `CGO_ENABLED=0` vet and the five linux cross-compiles passed with the colour change. The spacing change was looked at in Chromium (dark).
+
+### Not verified
+- No tests were run for this version bump itself, by request; only `VERSION`, this entry and the archive name changed after the last run. The spacing CSS was not re-checked in light mode. Everything listed as not verified under v190 still applies.
+
 ## [v190] - 2026-10-05 — Anycast pages renamed, Operate ▸ Anycast, router ID needs an AS, node addresses in the tooltip
 
 ### Added
@@ -7,6 +21,7 @@
 - **Topology: a node's tooltip lists its Ethernet interfaces** with their IPv4 and IPv6 global unicast (`2000::/3`) addresses and prefix lengths. "Ethernet" is a physical device, bridge or bond (type 1); veth, macvlan (including ddgw's own), tunnels and loopback are left out, as are link-local and ULA addresses. Carried in a new optional `addrs` field of the cluster status message, so nodes on an older version show nothing.
 
 ### Changed
+- Operate ▸ Anycast: the Disable/Enable BGP button has space above it, below the AS and state (`.kv + .toolbar` in `style.css`).
 - **Monitor ▸ BGP is now Monitor ▸ Anycast, Configure ▸ BGP is now Configure ▸ Anycast**, and the Configure card *This node* is now *BGP*. Old `#bgp` and `#bgpstatus` bookmarks still open the right page. Help topics, README, QUICKSTART and CLAUDE.md follow.
 - **A router ID needs a local AS.** The field on Configure ▸ Anycast is disabled until an AS is set and clearing the AS clears it; the API and `--router-id` refuse one without an AS; `--asn off` clears it. A stored router ID next to no AS (written by an older version) is dropped when the config is read, rather than stopping it from loading.
 - **Anycast pill colours on Topology:** per address family, counting the configured neighbors: **green** when every neighbor is established, **amber** ("anycast · neighbor down") when at least one is and at least one is not, **red** when none is, when there is no neighbor of that family, or when BGP is disabled on the node ("anycast · BGP disabled"). A disabled or still-connecting neighbor counts as not established. This replaces the old rule (green with any one session) and **removes the 30-second amber grace** for a session that is still coming up: it is red until a session is established. New optional `bgp` field on each anycast state (`disabled`, `none`, `down`, `partial`) words the label.

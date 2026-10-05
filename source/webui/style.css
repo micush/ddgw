@@ -245,6 +245,7 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 details.fold[open] > summary { border-bottom: 1px solid var(--border); }
 .grid2 + .toolbar, .grid + .toolbar { margin-top: 1.25rem; }
 textarea + .toolbar { margin-top: .9rem; }
+.kv + .toolbar { margin-top: 1.1rem; }
 input[type=file] { margin-top: .5rem; }
 
 /* Canvas */
