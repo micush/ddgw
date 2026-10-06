@@ -37,7 +37,17 @@
   // you are logged in to) except the login itself.  The picker's own list of
   // nodes is asked of the login node explicitly (api(..., true)).
   const LOCAL_API = /^\/api\/(login|logout|session|proxy)(\/|\?|$)/;
+  // The Node menu's "Cluster" entry: Monitor ▸ Statistics and Monitor ▸ Host show every node's numbers added together
+  // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
+  // anything else a page asks goes to this node as before.
+  const CLUSTER = "*cluster";
+  const CLUSTER_TABS = ["stats", "host"];
+  const CLUSTER_API = [[/^\/api\/qstats(\?|$)/, "/api/clusterstats"], [/^\/api\/host(\?|$)/, "/api/clusterhost"]];
   function route(path) {
+    if (state.target === CLUSTER) {
+      for (const [re, to] of CLUSTER_API) if (re.test(path)) return path.replace(/^\/api\/[a-z]+/, to);
+      return path;
+    }
     if (!state.target || LOCAL_API.test(path)) return path;
     return "/api/proxy?node=" + encodeURIComponent(state.target) + "&path=" + encodeURIComponent(path);
   }
@@ -248,6 +258,8 @@
 
   function selectTab(id) {
     state.tab = id;
+    if (state.target === CLUSTER && !CLUSTER_TABS.includes(id)) state.target = null;   // the other pages are about one node: back to this one
+    renderTopbar();   // the Cluster entry is on the menu for Statistics and Host only
     history.replaceState(null, "", "#" + id);
     for (const b of root.querySelectorAll("nav.side .nav-item[data-tab]")) {
       if (b.dataset.tab === id) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -337,7 +349,7 @@
     try { v = (await api("GET", "/api/cluster", undefined, true)).data; } catch (_) { return; }
     state.clustered = !!(v && v.enabled && (v.peers || []).length > 1);
     state.nodes = state.clustered ? v.peers : [];
-    if (state.target && !state.nodes.some((n) => n.addr === state.target && !n.self)) setTarget(null);
+    if (state.target === CLUSTER ? state.nodes.length < 2 : state.target && !state.nodes.some((n) => n.addr === state.target && !n.self)) setTarget(null);
     renderTopbar();
   }
 
@@ -355,6 +367,7 @@
       if (!n.reachable && n.addr !== state.target) o.disabled = true;
       sel.append(o);
     }
+    if (CLUSTER_TABS.includes(state.tab)) sel.append(h("option", { value: CLUSTER }, "Cluster (" + state.nodes.length + ")"));
     sel.value = state.target || "";
     bar.append(h("label", { for: "node-pick", class: "muted small" }, "Node"), sel);
   }
@@ -362,7 +375,7 @@
   function setTarget(addr) {
     if ((addr || null) === state.target) return;
     state.target = addr || null;
-    document.body.classList.toggle("remote", !!state.target);
+    document.body.classList.toggle("remote", !!state.target && state.target !== CLUSTER);   // another node's page is marked; the cluster's is no node
     renderTopbar();
     state.topo = { list: [], gid: null, action: null };
     renderTopoNav();
@@ -1891,6 +1904,13 @@
   // ── shared helpers for the management pages ───────────────────────────────
   // What the memory guard did (Statistics and Host): it drops the oldest history when memory use reaches its limit.
   const guardNote = (g) => (g && g.trims ? [h("br"), h("span", { class: "warnline" }, "Memory guard: the oldest history was dropped " + g.trims + " time" + (g.trims === 1 ? "" : "s") + " to keep memory use under " + g.limit_pct + "%. Last: " + new Date(g.last * 1000).toLocaleString() + " — " + g.last_note)] : []);
+  // Nothing is said when every node answered (the Node menu says "Cluster"); when one could not, which and why, since the
+  // numbers are then missing its share
+  const clusterNote = (c) => {
+    const lost = c && c.nodes ? c.nodes.filter((n) => !n.ok) : [];
+    if (!lost.length) return [];
+    return [h("div", { class: "notice warn" }, "Not included in these numbers: " + lost.map((n) => n.name + " (" + n.error + ")").join(", "))];
+  };
   const when = (t) => (t && !String(t).startsWith("0001") ? new Date(t).toLocaleString() : "–");
   // The cluster's member table: the Cluster page passes a remove handler (a Remove button per other node), the Monitor page none.
   const membersTable = (v, onRemove) => {
@@ -2334,7 +2354,7 @@
     const n0 = (n) => Number(n || 0).toLocaleString();
     const pct = (n, t) => (t <= 0 ? "–" : n === 0 ? "0%" : (100 * n / t).toFixed(n / t < 0.001 ? 2 : 1) + "%");
 
-    let status, bar, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;
+    let status, bar, cnote, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;
     let range = "1h", sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false;
 
     // ── fetching ──
@@ -2555,6 +2575,7 @@
           { picked: pickClient, onPick: pickC, note: pickDomain ? "Clients that asked for " + pickDomain : "", onClear: () => pickD("") }),
         topTable("Top domains" + kindLabel(), d.domains, pickClient ? sumOf(d.domains) : shareBase(d), domainsMore, () => { domainsMore = !domainsMore; draw(last); }, false,
           { picked: pickDomain, onPick: pickD, note: pickClient ? "Domains that " + pickClient + " asked for" : "", onClear: () => pickC("") }));
+      clear(cnote).append(...clusterNote(d.cluster));   // which nodes are added together, when the Node menu says Cluster
       const gn = guardNote(d.guard).slice(1);   // only the memory-guard warning, when there is one
       clear(foot).append(...gn); foot.hidden = !gn.length;
     }
@@ -2614,7 +2635,8 @@
         tops = h("div", { class: "grid2" });
         upds = h("div", { class: "qupd" });
         foot = h("p", { class: "hint" });
-        main.append(status, bar, tiles, h("div", { class: "card" }, h("div", { class: "body" }, chartBox)), pies, tops, upds, foot);
+        cnote = h("div", {});
+        main.append(status, bar, cnote, tiles, h("div", { class: "card" }, h("div", { class: "body" }, chartBox)), pies, tops, upds, foot);
         setRange(range);
       },
       async poll() {
@@ -2655,7 +2677,7 @@
       return step >= 3600 || long ? d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + hm : hm;
     };
 
-    let status, bar, tiles, charts, tables, foot, rangeBtns, fromIn, toIn, customRow;
+    let status, bar, cnote, tiles, charts, tables, foot, rangeBtns, fromIn, toIn, customRow;
     let range = "1h", lastAt = 0, seq = 0;
 
     // One line chart: series = [{ label, cls, values, text(i) }]; values below 0 are gaps.
@@ -2743,6 +2765,7 @@
         h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Network interfaces")), h("div", { class: "body flush" }, ifRows.length
           ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Interface"), h("th", {}, "State"), h("th", { class: "num" }, "Speed"), h("th", { class: "num" }, "In"), h("th", { class: "num" }, "Out"), h("th", { class: "num" }, "Link use"))), h("tbody", {}, ifRows)))
           : h("div", { class: "empty" }, "No interfaces found."))));
+      clear(cnote).append(...clusterNote(d.cluster));   // which nodes are added together, when the Node menu says Cluster
       const gn = guardNote(d.guard).slice(1);   // only the memory-guard warning, when there is one (how the numbers are kept is in the help)
       clear(foot).append(...gn); foot.hidden = !gn.length;
     }
@@ -2787,7 +2810,8 @@
         charts = h("div", { class: "hostcharts" });
         tables = h("div", { class: "hosttables" });
         foot = h("p", { class: "hint" });
-        main.append(status, bar, tiles, charts, tables, foot);
+        cnote = h("div", {});
+        main.append(status, bar, cnote, tiles, charts, tables, foot);
         setRange(range);
       },
       async poll() {
@@ -3208,12 +3232,12 @@
       npBtn.className = npPaused ? "btn primary" : "btn danger";
     };
     async function takeOver() {
-      if (!confirm("Make this node the gateway controller for all groups?\n\nThe node that currently answers for the shared address is asked to hand over. Clients may notice a brief interruption.")) return;
+      if (!confirm("Make this node the gateway controller for all groups?\n\nThe node that currently answers for the shared address is asked to step down once this node has taken the role.")) return;
       takeBtn.disabled = true;
       try {
         const r = await api("POST", "/api/assert-agc", {});
         if (!r.ok) say(status, "warn", r.error || "Could not take over as the gateway controller");
-        else clear(status);
+        else say(status, "info", "Asked to take over: " + (r.messages || []).join(" · "));   // what happened, per group and address family
       } catch (e) { fail(status)(e); }
       finally { takeBtn.disabled = false; }
     }

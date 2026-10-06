@@ -111,9 +111,10 @@ the web GUI):
   Statistics       --stats [--stats-range 1h|1d|7d|30d]
                    [--stats-rcode nxdomain|servfail|refused|noerror|other|update]
                    [--stats-client ADDR | --stats-domain NAME]
+                   [--all-nodes]   (every cluster node's numbers added together)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
-  Host             --host [--host-range 1h|1d|7d|30d]   (CPU, memory, disk and network use)
+  Host             --host [--host-range 1h|1d|7d|30d] [--all-nodes]   (CPU, memory, disk and network use; the cluster as one)
   Log              --log [--log-min debug|info|warn|error] [--log-grep WORDS]
                    [--log-since 15m|6h|2d] [--log-lines N]   (the whole log if no --log-lines)
   Users            --users   (the accounts that may sign in to the web GUI)

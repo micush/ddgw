@@ -1,5 +1,81 @@
 # Changelog
 
+## [v208] - 2026-10-05 — Gateway controller hand-over without interruption: in-place step-down, make before break, repeated announcements
+
+### Changed
+- **A controller that steps down no longer takes its virtual MAC and its DNS down.** Giving up the role (the "Make this node the gateway controller" button on another node, a higher-ranked controller appearing, a coup) used to delete this node's macvlan (its own virtual MAC, with the VIP on it), close its DNS listener, and build all of it again as a forwarder: for that moment the node answered nothing on the MAC that clients which resolved the VIP to it were sending to, and those clients lost packets. Now the step-down is **in place**: the ARP/NS responder stops, the VIP goes onto `lo` **before** it comes off the macvlan (so the node answers for it at every instant), and the macvlan, the MACs the node covered for other nodes and the DNS listener stay up. A MAC the node no longer needs (slot 1, which belongs to the controller, or one it covered) stays up a while longer, twice the hold time but between 2 and 10 seconds, and is then released (also at once when the engine stops). A MAC on two nodes for that long costs nothing, since either can answer for the VIP; a MAC on none drops packets.
+- **"Make this node the gateway controller" is make before break.** The node takes the role first (VIP on its macvlan, ARP/NS answered, announced) and takes over slot 1's MAC if the incumbent held it; only then is the incumbent asked to step down. It used to ask first.
+- **A MAC that a node takes over is announced again and again for about two seconds** (ten more announcements, at 0.1 to 2.2 s), not once and then every two seconds. The node handing a MAC over keeps answering on it until it has gone, and each frame it sends from that MAC can move the switch's entry back to its port; one announcement at the start was undone that way, and nothing put it right until the periodic one. This applies to every take-over: a controller that stops, a forwarder that stops, a node that dies.
+- **A controller that stops (restart, update, Pause this node) says so twice**, as a forwarder already did: one lost multicast would leave the others to find out after the hold time, by which time the leaving controller (400 ms grace) has gone.
+- A controller that dies is still noticed after the hold time. That part is not changed, and a shorter hello and hold time (Settings ▸ Gateway) is what shortens it.
+- README, the Node page help and the confirmation text no longer say clients "may notice a brief interruption".
+
+### Added
+- `handover_test.go`: the order of the commands is checked with a hook (`cmdHook`) that records them: the VIP onto `lo` before it leaves the macvlan and no macvlan removed on a step-down; slot 1's MAC kept at first and released after the grace; the asking node's VIP up and slot 1 covered before the resign request is sent; the burst of announcements and that it stops when the MAC is let go; the resign sent twice. The earlier `assert_agc_test.go` mesh (which now also records the packets) still passes.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
+
+### Not verified
+- **No packet loss was measured, and nothing ran on a real network.** The sandbox has no `ip`, macvlan or switch: the changes follow from reading the code, and the tests check the order of the commands and packets the engines would issue, not what a switch or a client does with them. Whether the loss you saw is gone, and whether any is left, has to be measured on the cluster (a client pinging or querying the VIP every 10 to 50 ms while the controller is moved, stopped and paused).
+- A controller that fails (power, crash) is not helped, except by the announcements after the take-over.
+- A client's ARP entry that points to the old controller's MAC is not changed by any of this; the point is that the MAC keeps being answered.
+- Everything listed as not verified or not changed under v194 to v207 still applies.
+
+## [v207] - 2026-10-05 — Cluster view: no blue bar, and the menu entry reads "Cluster (N)"
+
+### Changed
+- **The blue "The whole cluster, added together: ns1, ns2, …" bar above the tiles on Statistics and Host is gone.** The Node menu already says it. The line comes back, in amber, only when a node could not answer, and then names it and says why (`Not included in these numbers: ns3 (not reachable)`), since the numbers are then missing that node's share.
+- **The menu entry is `Cluster (N)`** (N is the number of nodes), instead of `Cluster · all N nodes added together`.
+- The Statistics and Host help say the same. The command line is unchanged: `--stats --all-nodes` and `--host --all-nodes` still print which nodes were added, on their first line.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium: with two clustered daemons up, the menu reads `Cluster (2)` on Statistics and Host and the page has no notice; after one daemon was stopped, both pages showed the amber `Not included in these numbers: 127.0.0.1:53864 (not reachable)`.
+
+### Not verified
+- Everything listed as not verified or not changed under v194 to v206 still applies.
+
+## [v206] - 2026-10-05 — Monitor ▸ Statistics and Host: a "Cluster" entry in the Node menu adds the nodes together
+
+### Added
+- **"Cluster · all N nodes added together" in the Node menu, on Monitor ▸ Statistics and Monitor ▸ Host only** (it is the menu's last entry there, and not offered on any other page; choosing another page goes back to this node). The node you are logged in to asks every reachable node (itself directly, the others through the same cluster relay the Node menu already uses) over one absolute time range and adds the answers; a line above the tiles names the nodes added and, in amber, any that could not answer and why. The other pages' requests, and the dynamic-updates list on Statistics ("the last N of this node"), still go to this node. The cluster entry is not the page of "another node", so the amber frame is not drawn.
+- **Statistics, added together:** each line of the chart point by point (the nodes align their points to the same step; a node that answers with another time resolution is left out and named), all totals and the cache hit and miss counts, the record-type and transport donuts, and the Top clients and Top domains by name (the top 100 of the sum, "(others)" last, a client's reverse-DNS names kept). The **Clients** tile cannot be a sum (a client that asked two nodes is one client): it is the larger of the busiest node's count and the clients seen in the nodes' lists, a lower bound. "Counting since" is when the last node began; the memory guard's drops are added.
+- **Host, added together:** network rates, load averages, memory and swap sizes, disk sizes and cores are **summed**; percentages are those of the whole cluster taken as one machine: CPU weighted by cores (a 12-core node counts three times a 4-core one), memory and each filesystem by size, disk-busy the mean. A peak is the busiest node's (CPU, disk) and, for network rates, the sum of the nodes' peaks (an upper bound, since they need not coincide). The filesystem table sums sizes per mount and says `(several)` when the devices differ; the interface table lists every node's interfaces under the node's name (the address when two nodes share a host name).
+- **Command line:** `--stats --all-nodes` and `--host --all-nodes` (the same as the menu entry); `--all-nodes` alone is refused. They name the nodes added, and any that were not.
+- API: `GET /api/clusterstats` and `GET /api/clusterhost` (same arguments as `/api/qstats` and `/api/host`; the answers have the same shape plus a `cluster` object listing the nodes). They ask the other nodes themselves, so they cannot be relayed through `/api/proxy` (that is tested). Daemon operations `qstats.cluster` and `host.cluster`.
+- Help (Statistics, Host), `--help` and the README (including the CLI-to-GUI table) describe it.
+- Tests: `clusterstats_test.go`: the merge of statistics (series aligned by time, not by index, sums, lists, ties, the 100-row limit, another resolution left out), the merge of host load (every kind of quantity above, a missing point, a node with no sample yet), the whole path through two real cluster nodes and the relay (the sum is twice a node's here, since both nodes of the test share one process; a node that cannot answer is named and the rest still added), no cluster, node naming, and that the endpoints are not relayable. The merge test was checked to fail when the series alignment is broken.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards): two daemons joined into a cluster; the API answers `clusterstats` and `clusterhost` for both nodes (cores and memory twice one node's), a relayed `/api/clusterstats` is refused, `--stats --all-nodes` and `--host --all-nodes` print the note and the numbers, and in headless Chromium the Node menu offers "Cluster" on Statistics and Host and not on Node, picking it sends `/api/clusterstats` and `/api/clusterhost`, the page names the nodes, the choice stays from Statistics to Host and goes back to this node on another page.
+
+### Not verified
+- Not on nodes with different loads, memory sizes or histories: the sandbox's two nodes share one machine and the daemons had just started, so the charts were empty and only the tiles and tables showed numbers. The weighting is checked by the unit tests with made-up figures, not against real nodes. The light theme and the Statistics page's tiles and top lists in cluster mode were not looked at.
+- With one node of the cluster slow or down the page waits up to 12 seconds for it before showing the others; a node on a version older than this one answers (the relay and the two endpoints it asks are old), so mixed versions work, but that was not tried.
+- Everything listed as not verified or not changed under v194 to v205 still applies.
+
+## [v205] - 2026-10-05 — "Make this node the gateway controller" works when the node ranks lower
+
+### Fixed
+- **Operate ▸ Node ▸ "Make this node the gateway controller" (and `ddgw --assert-agc`) did nothing unless this node outranked the sitting controller.** It told the controller to resign and then ran an election on this node, which a node ranking below the controller (equal priority and a smaller address, as in a group of nodes at priority 100) lost, so it stayed a forwarder; and the controller, on the request, stepped down and ran its own election, which it won again, since it was the highest of the group (a brief bounce of the role and nothing else). The IPv6 table could show the controller as FORWARD for a moment while this happened. Now:
+  - this node takes the role at once (no election), and the sitting controller, on the request, steps down **in this node's favour**, with no election of its own;
+  - until the old controller stops saying it is the controller, this node does not give way to it (a controller outranking it would otherwise take the role straight back) and asks again with each of its hellos, for three hold times at least three seconds, so a lost request does not undo it;
+  - the other nodes follow the new controller's hellos; those that still have the old controller's last hello with the flag set ignore the new one until the old controller's next hello says it is no longer one (a hello interval).
+  The role stays with this node afterwards, until something that changes the group changes it (a restart, the controller leaving, a node with preemption that outranks it). Priority and preemption in Settings are still the way to prefer a node permanently.
+- **The button said nothing.** The page now shows what the daemon did, for each group and address family, for example `group 1 v4: asserting AGC (was AFN, asked 10.129.0.204 to step down)`; `already AGC — no change` on the controller itself. The same text is printed by `--assert-agc`.
+
+### Added
+- `assert_agc_test.go`: an in-memory mesh of three engines (the controller with the greatest address, a forwarder, and the node that asks, with the smallest) delivering each other's packets. Tests: the request from a node that ranks lower, shown failing before the fix (the controller stayed ACTIVE) and passing after, and stable through six more rounds of hellos; a lost request; the request on the controller itself changes nothing.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+
+### Not verified
+- Not on real nodes: the hand-over is exercised only by the in-memory mesh (IPv4 engines, hellos sent by hand), with no ARP/NS responder, virtual MAC or client in it; nothing here shows what clients see during the hand-over (the confirmation still warns of a brief interruption). IPv6 uses the same engine code but has no test of its own. The new message on the page was not looked at in a browser.
+- Everything listed as not verified or not changed under v194 to v204 still applies.
+
 ## [v204] - 2026-10-05 — This node's tooltip says what the other nodes' tooltips say
 
 ### Changed

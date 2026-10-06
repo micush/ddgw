@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -126,8 +127,14 @@ func vmacStr(groupID, afnID int) string {
 
 func vmacName(groupID, afnID int) string { return fmt.Sprintf("ddgw%d.%d", groupID, afnID) }
 
+// cmdHook lets a test see, and answer for, the commands the daemon would run (nil in production).
+var cmdHook atomic.Pointer[func(name string, args []string) bool]
+
 // runCmd runs a command without a shell; failures are only logged at debug.
 func runCmd(name string, args ...string) bool {
+	if h := cmdHook.Load(); h != nil {
+		return (*h)(name, args)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()

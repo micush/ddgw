@@ -339,8 +339,8 @@ func TestStoppingControllerResignsAndGoesQuiet(t *testing.T) {
 	e.Stop()
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
-	if len(cc.sent) != 1 {
-		t.Fatalf("expected exactly one packet (the resign), got %d", len(cc.sent))
+	if len(cc.sent) != 2 { // the resign, said twice (multicast is not reliable)
+		t.Fatalf("expected the resign twice and nothing else, got %d packets", len(cc.sent))
 	}
 	pkt, err := parsePacket(cc.sent[0], e.cfg.keyBytes())
 	if err != nil || pkt.Type != pktResign {

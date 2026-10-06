@@ -468,8 +468,8 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
 | `--update-auto` | Settings ▸ General ▸ **Upgrade** card |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
-| `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
-| `--host` `[--host-range 1h\|1d\|7d\|30d]` | Host page (Monitor) |
+| `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
+| `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
@@ -667,7 +667,8 @@ hover, by the daemon on the picked node (TCP port 43, through whois.iana.org to 
 registry; a node without outbound port 43 shows "not reachable". The registered name is the last two
 labels (three under common second-level suffixes such as co.uk), a heuristic rather than the public
 suffix list. `--whois NAME|ADDRESS` prints the same. Each node counts its own queries: in a
-cluster, pick a member in the top-bar Node menu to see its statistics. The proxy does not block or serve zones, so there are no Blocked or
+cluster, pick a member in the top-bar Node menu to see its statistics, or **Cluster** (its last entry, on Statistics and
+Host only) to see every node's numbers added together (`--all-nodes` on the command line). The proxy does not block or serve zones, so there are no Blocked or
 Authoritative figures; cache hits have their own tile.
 
     ddgw --stats
@@ -677,6 +678,7 @@ Authoritative figures; cache hits have their own tile.
     ddgw --whois example.com                     (registration data, from its registry)
     ddgw --stats --stats-range 1d
     ddgw --stats --stats-range 30d
+    ddgw --stats --all-nodes                     (every cluster node's numbers added together)
 
 ### Memory guard
 
@@ -708,6 +710,12 @@ of the network totals.
 
     ddgw --host
     ddgw --host --host-range 1d
+    ddgw --host --all-nodes                      (the cluster as one machine)
+
+With **Cluster** chosen in the Node menu (or `--all-nodes`) the nodes are added together: network rates, load
+averages, memory, swap, disk sizes and cores are summed; CPU is averaged over all the cores, memory and each filesystem
+per byte of the whole, disk-busy is the mean; a peak is the busiest node's (the network's is the sum of the nodes'
+peaks, an upper bound). A node that cannot answer is named and left out.
 
 ### Log
 
@@ -727,7 +735,7 @@ matching log.
 
 ### Node
 
-**Make this node the gateway controller.** Operate ▸ Node (or `ddgw --assert-agc`) asks the current controller to hand the shared address to this node; clients may notice a brief interruption. To prefer a node permanently, raise its priority and turn on preemption in Settings.
+**Make this node the gateway controller.** Operate ▸ Node (or `ddgw --assert-agc`) asks the current controller to hand the shared address to this node. The node takes the role first (the VIP on its macvlan, announced) and only then asks the old controller to step down; the old controller steps down in place, so it keeps its own virtual MAC, the MACs it covers and its DNS up (it only stops answering ARP/NS and moves the VIP onto `lo`) and releases a MAC it no longer needs after a few seconds. When a controller stops (a restart, an update, **Pause this node**) it tells the group twice and the node that takes over announces the MAC it inherits again and again for a couple of seconds, so the last word at the switch is the new owner's. A controller that dies is noticed after the hold time, as before. To prefer a node permanently, raise its priority and turn on preemption in Settings.
 
 **Maintenance: pause this node.** Operate ▸ Node ▸ *Maintenance* (or `ddgw --node-pause`,
 `--node-resume`, `--node-status`) pauses every gateway on the node in one step: it resigns,

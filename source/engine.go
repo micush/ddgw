@@ -80,6 +80,8 @@ type Engine struct {
 
 	failoverPrimary int
 	takeover        map[int]bool // AFN slots assumed on behalf of dead peers
+	lingering       map[int]bool // slots whose macvlan stays up for a while after a hand-over, see lingerLocked
+	assertUntil     time.Time    // until then this node has asked for the controller role (assertAGCLocked) and does not give way to the old controller
 	vipSlot         int          // the slot whose macvlan holds this engine's VIP (controller only), 0 = none
 	lastAnnounce    time.Time    // when a forwarder last told the network where its virtual MAC is
 
@@ -95,6 +97,21 @@ type Engine struct {
 // answers and virtual MAC after telling the group, so a peer has taken over
 // before they disappear.
 var leaveGrace = 400 * time.Millisecond
+
+// announceBurst is when, after this node has taken a virtual MAC over, it says again that the MAC is here.  The node that
+// is handing it over keeps answering on it until it has left, and each frame it sends from that MAC can move the switch's
+// entry back to its port; one announcement at the start is then undone, and nothing else would put it right until the
+// periodic one, up to reannounceEvery later.  The announcements go on past the hand-over's grace (leaveGrace) so the last
+// word is the new owner's.
+var announceBurst = []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 300 * time.Millisecond, 400 * time.Millisecond,
+	500 * time.Millisecond, 650 * time.Millisecond, 800 * time.Millisecond, 1000 * time.Millisecond, 1500 * time.Millisecond, 2200 * time.Millisecond}
+
+// How long a macvlan this node no longer needs stays up after a hand-over: twice the hold time, but not less than lingerMin
+// nor more than lingerMax.
+var (
+	lingerMin = 2 * time.Second
+	lingerMax = 10 * time.Second
+)
 
 // addVmacFn is addVmac, replaceable in tests.
 var addVmacFn = addVmac
@@ -191,6 +208,7 @@ func (e *Engine) Stop() {
 		if pkt, err := buildPacket(&e.cfg, pktResign, e.af, e.afnID, 0, e.myIP); err == nil {
 			e.leaving = true
 			e.broadcastLocked(pkt)
+			e.broadcastLocked(pkt) // multicast is not reliable and the grace is short: say it twice, as a forwarder does
 			infof("Leaving the group: told the others to take over (%s)", e.tag())
 			e.mu.Unlock()
 			time.Sleep(leaveGrace)
@@ -562,10 +580,15 @@ func (e *Engine) handleHelloLocked(sender string, pkt *Packet) {
 		}
 		e.runElectionLocked()
 	case stateActive:
-		if e.peerBeatsUs(pkt) && yieldsTo(pkt) {
+		switch {
+		case e.peerBeatsUs(pkt) && yieldsTo(pkt) && isController(pkt) && time.Now().Before(e.assertUntil):
+			// This node asked for the role and the controller it asked has not stepped down (the request was
+			// lost, or not yet read): ask it again instead of giving way, or the request would come to nothing.
+			e.sendResignToLocked(sender)
+		case e.peerBeatsUs(pkt) && yieldsTo(pkt):
 			warnf("Higher-priority peer %s detected — yielding AGC", sender)
 			e.becomeAFNLocked()
-		} else {
+		default:
 			e.assignAFNIDsLocked()
 		}
 	case stateListen:
@@ -628,9 +651,10 @@ func (e *Engine) handleResignLocked(sender string, pkt *Packet) {
 		e.runElectionLocked()
 		e.takeOverControllerSlotLocked(slot)
 	} else if e.state == stateActive {
-		// An AFN sent us a RESIGN as a directed assert-agc request.
-		infof("Resign request from AFN %s — stepping down from AGC (%s)", sender, e.tag())
-		e.becomeAFNLocked()
+		// An AFN sent us a RESIGN as a directed assert-agc request: the role goes to it, whatever the ranking.  (An
+		// election here would be won by this node again, as it was the highest of the group when it got the role.)
+		infof("Resign request from AFN %s — stepping down from AGC in its favour (%s)", sender, e.tag())
+		e.stepDownToLocked(sender)
 	}
 }
 
@@ -709,6 +733,7 @@ func (e *Engine) joinAsAFNLocked() {
 		// A controller that yielded still holds slot 1, which is now the new controller's (and its hellos
 		// with slot 1 would make everyone think it is a controller): take a forwarder slot instead.
 		infof("Giving up slot %d (%s)", e.afnID, e.tag())
+		e.lingerLocked(e.afnID) // its MAC is covered by the new controller; until then this node still answers on it
 		e.afnID = 0
 	}
 	if e.afnID == 0 {
@@ -758,20 +783,39 @@ func (e *Engine) sendResignToLocked(target string) {
 	}
 }
 
-// assertAGCLocked is directed failover on the target node: tell the incumbent
-// to resign, then run an election with no incumbent so we win immediately.
+// assertAGCLocked is directed failover on the target node: this node takes the controller role, whatever the two rank, and
+// then tells the incumbent to step down in its favour.  (It used to run an election with no incumbent, which a node that
+// ranked below the controller (equal priority, a smaller address) lost, and the controller stepped down only to win its own
+// election again: the button did nothing.)
+//
+// The order is make before break: this node is the controller (VIP on its macvlan, ARP/NS answered, announced) before the
+// incumbent is asked to step down, and the incumbent steps down in place (see leaveControllerLocked), so at every moment
+// somebody answers for the VIP.  Until the incumbent has stopped saying it is the controller, this node does not give way
+// to it and asks again (see handleHelloLocked).
 func (e *Engine) assertAGCLocked() string {
 	label := fmt.Sprintf("group %d %s", e.cfg.GroupID, e.af)
 	if e.state == stateActive {
 		return label + ": already AGC — no change"
 	}
-	old := e.agcIP
+	old, oldSlot := e.agcIP, 0
+	if p := e.peers[old]; p != nil {
+		oldSlot = p.AfnID
+	}
+	window := 3 * time.Duration(e.cfg.HoldMS) * time.Millisecond
+	if window < 3*time.Second {
+		window = 3 * time.Second
+	}
+	e.assertUntil = time.Now().Add(window)
+	e.agcIP = e.myIP
+	e.becomeAGCLocked()
+	if oldSlot == 1 {
+		// the incumbent gives slot 1 up (it is the controller's): clients that cached its MAC keep being answered
+		e.takeOverControllerSlotLocked(1)
+	}
 	if old != "" && old != e.myIP {
 		e.sendResignToLocked(old)
 	}
-	e.agcIP = ""
-	e.runElectionLocked()
-	return fmt.Sprintf("%s: asserting AGC (was AFN, resigned %s)", label, old)
+	return fmt.Sprintf("%s: asserting AGC (was AFN, asked %s to step down)", label, old)
 }
 
 func (e *Engine) becomeAGCLocked() {
@@ -791,13 +835,79 @@ func (e *Engine) becomeAGCLocked() {
 }
 
 func (e *Engine) becomeAFNLocked() {
-	e.stopRespondersLocked()
-	for slot := range e.takeover {
-		e.releaseTakeoverLocked(slot)
-	}
-	e.cleanupVmacsLocked()
-	e.state = stateStandby
+	e.leaveControllerLocked()
 	e.runElectionLocked()
+}
+
+// leaveControllerLocked gives up the controller role IN PLACE: the ARP/NS responder stops and the VIP moves off the
+// macvlan, and that is all.  The macvlans (this node's own slot and the MACs it covers for others) and the DNS proxy stay
+// up: clients that cached one of those MACs are still answered while the new controller takes them over, and the DNS
+// listener never closes.  Taking everything down and building it again, as this used to, left the node without its MAC and
+// its DNS for a moment, which the clients saw as lost packets.  The VIP goes onto lo before it comes off the macvlan, so
+// the node answers for it at every instant; the MACs it covered are released after a grace (lingerLocked).
+func (e *Engine) leaveControllerLocked() {
+	e.stopRespondersLocked()
+	e.state = stateStandby
+	if e.vipSlot != 0 {
+		slot := e.vipSlot
+		e.setupDNSLocked(true) // the VIP onto lo (and ARP not answered for it), the listener untouched
+		delVIPFn(e.cfg.GroupID, slot, e.cfg.vipFor(e.af))
+		e.vipSlot = 0
+	}
+	for slot := range e.takeover {
+		delete(e.takeover, slot)
+		e.lingerLocked(slot)
+	}
+}
+
+// lingerLocked keeps the macvlan of a slot this node no longer uses up for a while (see lingerMin), then releases it, unless the node has come to use the slot again.  Both the old and the new owner of a MAC
+// can answer for the VIP, so a MAC on two nodes for that long costs nothing, while a MAC on none drops packets.
+func (e *Engine) lingerLocked(slot int) {
+	if slot == 0 {
+		return
+	}
+	if e.lingering == nil {
+		e.lingering = map[int]bool{}
+	}
+	e.lingering[slot] = true
+	d := 2 * time.Duration(e.cfg.HoldMS) * time.Millisecond
+	if d > lingerMax {
+		d = lingerMax
+	}
+	if d < lingerMin {
+		d = lingerMin
+	}
+	time.AfterFunc(d, func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if !e.lingering[slot] {
+			return // released already (the engine stopped)
+		}
+		delete(e.lingering, slot)
+		if e.running && slot != e.afnID && !e.takeover[slot] {
+			e.releaseVmacLocked(slot)
+		}
+	})
+}
+
+// announceBurstLocked repeats the announcement of a MAC this node has taken over (see announceBurst).
+func (e *Engine) announceBurstLocked(slot int) {
+	for _, d := range announceBurst {
+		time.AfterFunc(d, func() {
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			if e.running && e.state == stateActive && e.takeover[slot] {
+				announceVmacFn(e.cfg.Interface, e.cfg.GroupID, slot, e.cfg.vipFor(e.af))
+			}
+		})
+	}
+}
+
+// stepDownToLocked is becomeAFNLocked for a hand-over to a named node: no election, the other node is the controller.
+func (e *Engine) stepDownToLocked(newAGC string) {
+	e.leaveControllerLocked()
+	e.agcIP = newAGC
+	e.joinAsAFNLocked()
 }
 
 func (e *Engine) assignAFNIDsLocked() {
@@ -1008,6 +1118,10 @@ func (e *Engine) cleanupVmacsLocked() {
 	for slot := range e.takeover {
 		e.releaseTakeoverLocked(slot)
 	}
+	for slot := range e.lingering {
+		delete(e.lingering, slot)
+		e.releaseVmacLocked(slot)
+	}
 }
 
 // takeoverAFNLocked assumes a dead peer's vMAC so clients with that MAC
@@ -1029,6 +1143,7 @@ func (e *Engine) takeoverAFNLocked(dead int) {
 		prepareV4InputFn(e.cfg.GroupID, dead, true, e.cfg.Interface)
 	}
 	announceVmacFn(e.cfg.Interface, e.cfg.GroupID, dead, e.cfg.vipFor(e.af))
+	e.announceBurstLocked(dead)
 	infof("MAC takeover: macvlan for slot %d up, no VIP assigned (ARP/NS responder maps VIP to this slot)", dead)
 }
 

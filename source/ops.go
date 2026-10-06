@@ -170,6 +170,23 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 			return nil, err
 		}
 		return qstats.Query(from, to, f), nil
+	// the same for the whole cluster: every node's numbers added together (Node menu ▸ Cluster, --stats --all-nodes)
+	case "qstats.cluster":
+		from, to, err := qstatsRange(a.QFrom, a.QTo)
+		if err != nil {
+			return nil, err
+		}
+		f, err := qstatsFilter(a.QRcode, a.QClient, a.QDomain)
+		if err != nil {
+			return nil, err
+		}
+		return m.clusterQStats(context.Background(), actor, from, to, f)
+	case "host.cluster":
+		from, to, err := hostRange(a.QFrom, a.QTo)
+		if err != nil {
+			return nil, err
+		}
+		return m.clusterHost(context.Background(), actor, from, to)
 	// host statistics: CPU, memory, disk, network
 	case "host.get":
 		from, to, err := hostRange(a.QFrom, a.QTo)

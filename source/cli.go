@@ -28,7 +28,7 @@ type cliFlags struct {
 	userAdd, userPasswd, userExpiry, userDel, expires                                                                                                   *string
 	power, powerAt                                                                                                                                      *string
 	powerIn                                                                                                                                             *int
-	bgp, bgpDisable, bgpEnable, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus                                             *bool
+	bgp, bgpDisable, bgpEnable, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes                                   *bool
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, dnsLookup, hostRange                              *string
 	asn, routerID, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                            *string
 	updateUpload, updatePush, updateCancel, updateAuto                                                                                                  *string
@@ -63,7 +63,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), expires: s("expires"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
-		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
+		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
 		bgp: b("bgp"), bgpDisable: b("bgp-disable"), bgpEnable: b("bgp-enable"), nbrDisable: s("bgp-neighbor-disable"), nbrEnable: s("bgp-neighbor-enable"), asn: s("asn"), routerID: s("router-id"),
 		nbrAdd: s("bgp-neighbor-add"), nbrDel: s("bgp-neighbor-del"), remoteAS: s("remote-as"), descr: s("description"),
 		passwd:       s("password"),
@@ -124,6 +124,9 @@ func splitCSV(s string) []string { return splitList(s) }
 
 // run executes the management command named by the flags, if any.
 func (f *cliFlags) run(sock string) bool {
+	if *f.allNodes && !*f.statsShow && !*f.hostShow {
+		fatalf("--all-nodes goes with --stats or --host (the cluster's numbers added together)")
+	}
 	switch {
 	// ── canvas ──
 	case *f.canvas:
@@ -808,7 +811,12 @@ func runStats(sock string, f *cliFlags) {
 		rng = "1h"
 	}
 	var r QStatsResult
-	decode(op(sock, "qstats.get", map[string]string{"from": rng, "rcode": *f.statsRcode, "client": *f.statsClient, "domain": *f.statsDomain}), &r)
+	cmd := "qstats.get"
+	if *f.allNodes {
+		cmd = "qstats.cluster"
+	}
+	decode(op(sock, cmd, map[string]string{"from": rng, "rcode": *f.statsRcode, "client": *f.statsClient, "domain": *f.statsDomain}), &r)
+	printClusterNote(r.Cluster)
 	pct := func(n uint64) string {
 		if r.Sums.Total == 0 {
 			return "  –"
@@ -868,7 +876,12 @@ func runHost(sock string, f *cliFlags) {
 		rng = "1h"
 	}
 	var r HostResult
-	decode(op(sock, "host.get", map[string]string{"from": rng}), &r)
+	cmd := "host.get"
+	if *f.allNodes {
+		cmd = "host.cluster"
+	}
+	decode(op(sock, cmd, map[string]string{"from": rng}), &r)
+	printClusterNote(r.Cluster)
 	n := r.Now
 	if n.At == 0 {
 		fmt.Println("No sample yet: the daemon has only just started.")
@@ -1095,4 +1108,24 @@ func runServerStats(sock string, f *cliFlags) {
 		fmt.Println("  (nothing recorded in this range)")
 	}
 	fmt.Println("\n  newest first; the cap is the latest 40 buckets with data")
+}
+
+// printClusterNote says which nodes a cluster-wide answer adds together, and which could not answer.
+func printClusterNote(c *ClusterInfo) {
+	if c == nil {
+		return
+	}
+	var used, missing []string
+	for _, n := range c.Nodes {
+		if n.OK {
+			used = append(used, n.Name)
+		} else {
+			missing = append(missing, n.Name+" ("+n.Error+")")
+		}
+	}
+	fmt.Printf("The whole cluster, added together: %s\n", strings.Join(used, ", "))
+	if len(missing) > 0 {
+		fmt.Printf("NOT included: %s\n", strings.Join(missing, ", "))
+	}
+	fmt.Println()
 }

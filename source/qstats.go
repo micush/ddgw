@@ -469,6 +469,7 @@ type QStatsResult struct {
 	Protos   []NameCount  `json:"protos"`
 	Clients  []NameCount  `json:"clients"`
 	Domains  []NameCount  `json:"domains"`
+	Cluster  *ClusterInfo `json:"cluster,omitempty"` // set when the numbers are those of several nodes added together
 }
 
 type QStatsSums struct {

@@ -252,23 +252,24 @@ func maxF(a, b float32) float32 {
 // HostResult is the answer to a query: one point per Step seconds from Start.  A value below
 // zero means no data for that point.
 type HostResult struct {
-	Start  int64          `json:"start"`
-	Step   int            `json:"step"`
-	From   int64          `json:"from"`
-	To     int64          `json:"to"`
-	Since  int64          `json:"since"`
-	CPU    []float64      `json:"cpu"`
-	CPUMax []float64      `json:"cpu_max"`
-	Mem    []float64      `json:"mem"`
-	IO     []float64      `json:"io"`
-	IOMax  []float64      `json:"io_max"`
-	Rx     []float64      `json:"rx"` // bits per second
-	RxMax  []float64      `json:"rx_max"`
-	Tx     []float64      `json:"tx"`
-	TxMax  []float64      `json:"tx_max"`
-	FS     []HostFSSeries `json:"fs"`
-	Now    HostNow        `json:"now"`
-	Guard  MemGuardInfo   `json:"guard"` // what the memory guard has dropped
+	Start   int64          `json:"start"`
+	Step    int            `json:"step"`
+	From    int64          `json:"from"`
+	To      int64          `json:"to"`
+	Since   int64          `json:"since"`
+	CPU     []float64      `json:"cpu"`
+	CPUMax  []float64      `json:"cpu_max"`
+	Mem     []float64      `json:"mem"`
+	IO      []float64      `json:"io"`
+	IOMax   []float64      `json:"io_max"`
+	Rx      []float64      `json:"rx"` // bits per second
+	RxMax   []float64      `json:"rx_max"`
+	Tx      []float64      `json:"tx"`
+	TxMax   []float64      `json:"tx_max"`
+	FS      []HostFSSeries `json:"fs"`
+	Now     HostNow        `json:"now"`
+	Guard   MemGuardInfo   `json:"guard"`             // what the memory guard has dropped
+	Cluster *ClusterInfo   `json:"cluster,omitempty"` // set when the numbers are those of several nodes added together
 }
 
 // HostFSSeries is the use of one filesystem over time, in percent.
