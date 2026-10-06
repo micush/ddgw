@@ -1,5 +1,18 @@
 # Changelog
 
+## [v211] - 2026-10-05 — DNS page: long server names are cut short
+
+### Fixed
+- **Monitor ▸ DNS: a long server name ran into the Server IP column.** The table has fixed column widths, and a name such as `lawsusw2ns02.net.axway.corp` has nowhere to break, so it was drawn over the next column. The Server name column is now wider (13 rem, and the table 5 rem wider), and a name that still does not fit is cut with an ellipsis at the end, so the host part, which tells the servers apart, stays in view. The whole name is the cell's tooltip.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium (dark) with eight servers named as in the report (`aphxipm02.phx.axway.int`, `lawsusw2ns01.net.axway.corp`, …): in a 1500 px and in a 700 px window no name reaches the Server IP column; the long ones are cut with an ellipsis and carry the full name as a tooltip.
+
+### Not verified
+- The light theme. The Node name columns of Monitor ▸ Gateways and Monitor ▸ Cluster were not changed: those tables size their columns to the content, so a long name widens the column instead of overlapping.
+- Everything listed as not verified or not changed under v194 to v210 still applies.
+
 ## [v210] - 2026-10-05 — Gateways: the node name comes first and carries the star; DNS: the server name comes first
 
 ### Changed

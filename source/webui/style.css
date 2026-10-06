@@ -142,16 +142,17 @@ td.wrap { white-space: normal; word-break: break-word; max-width: 28rem; }
 
 .bar-wrap { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--surface-2); vertical-align: middle; margin-right: .6rem; overflow: hidden; }
 /* the same column widths in every gateway's table, so the cards line up */
-table.dns { table-layout: fixed; min-width: 66rem; }
+table.dns { table-layout: fixed; min-width: 71rem; }
 table.dns th:nth-child(1) { width: 3.5rem; }
-table.dns th:nth-child(2) { width: 8rem; }
+table.dns th:nth-child(2) { width: 13rem; }
 table.dns th:nth-child(3) { width: 11.5rem; }
 table.dns th:nth-child(4) { width: 5rem; }
 table.dns th:nth-child(5) { width: 10rem; }
 table.dns th:nth-child(6) { width: 5.5rem; }
 table.dns th:nth-child(7), table.dns th:nth-child(8) { width: 3.5rem; }
 table.dns th:nth-child(9) { width: 5.5rem; }
-table.dns td:nth-child(2), table.dns td:nth-child(3) { overflow-wrap: anywhere; }
+table.dns td:nth-child(3) { overflow-wrap: anywhere; }
+table.dns td.sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 
 .notice { padding: .7rem .9rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid transparent; }

@@ -1608,7 +1608,7 @@
               h("thead", {}, h("tr", {}, ["Rank", "Server name", "Server IP", "State", "EWMA (ms)", "Last (ms)", "OK", "Fail", "Served", "Last error"].map((t, i) => h("th", { class: i >= 4 && i <= 8 ? "num" : "" }, t)))),
               h("tbody", {}, p.servers.map((s) => h("tr", {},
                 h("td", {}, s.healthy && s.rank ? s.rank : "–"),
-                h("td", {}, s.name || "–"),
+                h("td", { class: "sname", title: s.name || null }, s.name || "–"),   // a long name is cut short; the whole is the tooltip
                 h("td", { class: "mono" }, s.addr, s.fallback ? [h("span", { class: "muted small fb-tag", title: "Used only while every other server is down" }, "fallback")] : null),
                 h("td", {}, pill(s.healthy ? "up" : "down", s.healthy ? "ok" : "bad")),
                 h("td", { class: "num" }, s.healthy ? h("span", { class: "bar-wrap" }, h("span", { class: "bar-fill" })) : null, s.healthy ? fmtMs(s.ewma_ms) : "–"),
