@@ -456,3 +456,58 @@ func TestLeavingNodeIgnoresPackets(t *testing.T) {
 	e.mu.Unlock()
 	e.Stop()
 }
+
+// A peer's row shows the state its hellos imply, not "active" for everyone.
+func TestSnapshotShowsPeerStates(t *testing.T) {
+	e := newTestEngine()
+	e.cfg.HoldMS = 999
+	now := time.Now()
+	e.mu.Lock()
+	e.peers = map[string]*Peer{
+		"10.0.0.2": {IP: "10.0.0.2", AfnID: 2, Controller: true, LastSeen: now},
+		"10.0.0.3": {IP: "10.0.0.3", AfnID: 3, LastSeen: now},
+		"10.0.0.4": {IP: "10.0.0.4", AfnID: 0, LastSeen: now},
+		"10.0.0.5": {IP: "10.0.0.5", AfnID: 4, LastSeen: now.Add(-time.Minute)},
+		"10.0.0.6": {IP: "10.0.0.6", AfnID: 1, Controller: true, LastSeen: now.Add(-time.Minute)},
+	}
+	e.mu.Unlock()
+	want := map[string]string{"10.0.0.2": "active", "10.0.0.3": "forward", "10.0.0.4": "standby", "10.0.0.5": "expired", "10.0.0.6": "expired"}
+	for _, r := range e.snapshot() {
+		if r.Local {
+			continue
+		}
+		if r.State != want[r.PeerIP] {
+			t.Errorf("%s: state %q, want %q", r.PeerIP, r.State, want[r.PeerIP])
+		}
+		delete(want, r.PeerIP)
+	}
+	if len(want) != 0 {
+		t.Fatalf("rows missing: %v", want)
+	}
+}
+
+// The same, from real hellos: the controller flag makes a peer "active", a forwarder slot makes it "forward".
+func TestSnapshotPeerStatesFromHellos(t *testing.T) {
+	e := newTestEngine()
+	e.state = stateStandby
+	send := func(ip string, afn int, flags uint8) {
+		g := e.cfg
+		g.Priority = 100
+		b, err := buildPacket(&g, pktHello, afIPv4, afn, flags, ip)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.mu.Lock()
+		e.onPacketLocked(b, nil)
+		e.mu.Unlock()
+	}
+	send("10.0.0.9", 2, flagController) // an AGC that holds slot 2
+	send("10.0.0.7", 3, 0)              // a forwarder
+	got := map[string]string{}
+	for _, r := range e.snapshot() {
+		got[r.PeerIP] = r.State
+	}
+	if got["10.0.0.9"] != "active" || got["10.0.0.7"] != "forward" {
+		t.Fatalf("states from hellos: %v", got)
+	}
+}

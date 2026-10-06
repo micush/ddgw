@@ -35,6 +35,23 @@ func (p *Peer) expired(holdMS int) bool {
 	return time.Since(p.LastSeen) > time.Duration(holdMS)*time.Millisecond
 }
 
+// stateName is the state the peer's hellos say it is in, as the tables show it: "active" for the controller
+// (its hello carries the controller flag, set exactly while it is ACTIVE), "forward" for a node that holds a
+// forwarder slot (a forwarder takes its slot as it moves to FORWARD), "standby" for one that has no slot yet,
+// and "expired" for one not heard from within the hold time.  The hello does not carry the state itself (the
+// wire format is unchanged), so a node in the middle of an election (listen, speak) shows as "standby".
+func (p *Peer) stateName(holdMS int) string {
+	switch {
+	case p.expired(holdMS):
+		return "expired"
+	case p.Controller:
+		return "active"
+	case p.AfnID != 0:
+		return "forward"
+	}
+	return "standby"
+}
+
 // Engine is the protocol engine for one address family within one group.
 // For dual-stack groups the supervisor runs two engines.  All state is
 // guarded by mu; methods ending in "Locked" expect it to be held.
@@ -1176,10 +1193,7 @@ func (e *Engine) snapshot() []SnapshotRow {
 		r := row()
 		r.PeerIP, r.Priority, r.AfnID, r.Weight, r.Preempt = ip, p.Priority, p.AfnID, p.Weight, p.Preempt
 		r.AgeMS = time.Since(p.LastSeen).Milliseconds()
-		r.State = "active"
-		if p.expired(e.cfg.HoldMS) {
-			r.State = "expired"
-		}
+		r.State = p.stateName(e.cfg.HoldMS)
 		rows = append(rows, r)
 	}
 	return rows

@@ -97,7 +97,7 @@ const DDGW_HELP = {
       ["ul", [
         "**AGC** (active gateway controller) is the one node that owns the shared address and answers ARP/neighbour requests for it. **AFN** nodes forward traffic and share the load. A node that is listening or has not been heard from yet has no role.",
         "**Pri** is the election priority (higher wins). **Slot** is the node's virtual-MAC slot: slot 1 always belongs to the controller, other nodes take 2 and up. **Weight** is its share of client traffic.",
-        "**State** is where the node is in the protocol (listen, speak, standby, active, forward…); **preempt** marks nodes that take the role back as soon as they outrank the current controller. **Age** is how long since its last hello.",
+        "**State** is where the node is in the protocol: *active* for the controller, *forward* for a forwarder, *standby* for a node that has no slot yet (a node still in an election shows as standby too), *expired* for one not heard from within the hold time. The node you are on shows its own exact state (listen, speak…); **preempt** marks nodes that take the role back as soon as they outrank the current controller. **Age** is how long since its last hello.",
         "**DNS** says whether the node answers DNS on the address (“answering”) or only has it enabled.",
       ]],
       "If nothing is listed on a network that should have peers, check the group id, the HMAC key and the interface on both nodes, and that multicast (or the unicast neighbour list in Settings) can pass between them.",

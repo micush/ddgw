@@ -1,5 +1,22 @@
 # Changelog
 
+## [v196] - 2026-10-05 — Gateways and Neighbors show each peer's state
+
+### Changed
+- **A peer's STATE is what its hellos say, not "active" for everyone.** The row of another node used to say `active` whenever a hello had arrived within the hold time (and `expired` otherwise), so a forwarder looked different from the others only on the one row that showed its real state, the local one: on the controller's page the forwarders all said ACTIVE, on a forwarder's page its own row said FORWARD. Now, for both IPv4 and IPv6 (`Gateways`, `--show-gateways`, `--show-neighbors`, `/api/gateways`, `/api/neighbors`): **active** for the controller (its hello carries the controller flag, set only while it is ACTIVE), **forward** for a node that holds a forwarder slot, **standby** for a node with no slot yet, **expired** for one not heard from within the hold time. The local row is unchanged (its exact state).
+- The wire format is unchanged, and the hello carries no state field, so this is inferred from the controller flag and the slot: a peer in the middle of an election (listen, speak) shows as `standby`, and a controller from before the flag existed (slot 1) shows as `active`, as the election already treats it. The Gateways help text says so.
+- The GUI colours the new words as before (`active` and `forward` green, `expired` red, anything else amber). Nothing else reads a peer row's state as "alive": the topology drawing, the cluster's gateway status and the role column use other fields or only the local row.
+
+### Added
+- Tests in `engine_test.go`: `TestSnapshotShowsPeerStates` (controller, forwarder, no slot, expired forwarder, expired controller) and `TestSnapshotPeerStatesFromHellos` (from real hello packets).
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/help.js`. Only the native amd64 build was built with PAM headers.
+
+### Not verified
+- No live run: not on real nodes (the multi-node election on a real wire is not exercised here), and the Gateways page was not looked at in a browser.
+- Everything listed as not verified or not changed under v194 and v195 still applies.
+
 ## [v195] - 2026-10-05 — Fewer allocations: statistics, DoH requests, cluster nonces
 
 ### Changed
