@@ -1,5 +1,21 @@
 # Changelog
 
+## [v204] - 2026-10-05 — This node's tooltip says what the other nodes' tooltips say
+
+### Changed
+- **The tooltip of this node's parallelogram on Topology now has the same lines, in the same words, as another node's.** Before, the first line of this node's tooltip was the gateway's own status (`ns1 (this node) — IPv4: running and answering; IPv6: running and answering`) while another node's said `ns2 — Serving this gateway`, and this node had no `Last seen` line. Now, when the gateway is healthy on this node, the first line is `ns1 (this node) — Serving this gateway`, and there is a `Last seen: just now` line where the others show how long ago the node was last heard from. The rest was already the same: the address, the interface addresses, the role, the version, the settings and the host load. In any other state of this node (degraded, down, starting, paused, or the node itself paused) the first line is still the gateway's own reason on this node, which says more than the other nodes' wording would. The words `(this node)` stay in the name.
+
+### Added
+- Test `TestCanvasSelfNodeSaysWhatThePeersSay`; the strain test now expects the new wording after "Over 85%: …".
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards): two daemons joined into a cluster, headless Chromium; the tooltip texts of this node and the other node read from the page have the same lines in the same order (name and status, address, interface address, role, last seen, version, settings, host).
+
+### Not verified
+- The healthy wording ("Serving this gateway" for this node) comes from the unit test only: the test gateway was paused, so the live tooltips showed the paused texts. Not looked at as rendered tooltips.
+- Everything listed as not verified or not changed under v194 to v203 still applies.
+
 ## [v203] - 2026-10-05 — The gateway tooltip: a short summary, and how many nodes serve it
 
 ### Changed

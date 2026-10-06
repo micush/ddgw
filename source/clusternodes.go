@@ -81,6 +81,11 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 		case p.Self:
 			n.Status, n.Detail, n.Paused = selfStatus, selfDetail, selfPaused
 			n.Label = circleLabel[selfStatus]
+			if selfStatus == "ok" && !selfPaused {
+				// healthy: the same words as the other nodes' tooltips (what is said about a node should not depend on
+				// which node you ask); in any other state the gateway's own reason on this node is the more useful text
+				n.Detail = "Serving this gateway"
+			}
 		case !p.Reachable:
 			n.Status, n.Label = "bad", "not answering"
 			n.Detail = "Not answering"

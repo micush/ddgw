@@ -753,7 +753,7 @@ func TestCanvasNodeYellowWhenStrained(t *testing.T) {
 			t.Fatalf("node %d over the limit: %+v", i, n)
 		}
 	}
-	if ns[0].Detail == "fine" || !strings.Contains(ns[0].Detail, "Over 85%") || !strings.HasSuffix(ns[0].Detail, "fine") {
+	if !strings.Contains(ns[0].Detail, "Over 85%") || !strings.HasSuffix(ns[0].Detail, "Serving this gateway") {
 		t.Fatalf("detail: %q", ns[0].Detail)
 	}
 	// paused is not an excuse
@@ -822,5 +822,28 @@ func TestCanvasPeerShowsItsOwnHealth(t *testing.T) {
 	a.sync()
 	if n := peer(); n.Status != "ok" {
 		t.Fatalf("peer without health: %+v", n)
+	}
+}
+
+// This node's own entry says the same words as the other nodes' when it is healthy, and its own reason when it is not.
+func TestCanvasSelfNodeSaysWhatThePeersSay(t *testing.T) {
+	a, _ := twoNodeCluster(t)
+	self := func(status, detail string, paused bool) CanvasNode {
+		return a.mg.cl.canvasNodes(1, status, detail, paused)[0]
+	}
+	if n := self("ok", "IPv4: running and answering; IPv6: running and answering", false); !n.Self || n.Detail != "Serving this gateway" || n.Status != "ok" || n.Label != "serving" {
+		t.Fatalf("healthy: %+v", n)
+	}
+	for _, c := range []struct {
+		status, detail string
+		paused         bool
+	}{{"warn", "running, but some DNS servers are down", false}, {"bad", "no DNS server is healthy", false}, {"paused", "Paused on this node", true}, {"idle", "starting", false}} {
+		if n := self(c.status, c.detail, c.paused); n.Detail != c.detail {
+			t.Errorf("%s: detail %q, want the gateway's own reason %q", c.status, n.Detail, c.detail)
+		}
+	}
+	// a healthy colour does not hide that the node itself is paused
+	if n := self("ok", "fine", true); n.Detail != "fine" {
+		t.Errorf("paused node: detail %q", n.Detail)
 	}
 }
