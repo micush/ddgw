@@ -91,11 +91,23 @@ func isEthernetIface(name string) bool {
 	return false
 }
 
-// ethernetAddrs lists the Ethernet interfaces that hold an IPv4 address or an IPv6 GUA, sorted by name.
+// ethernetAddrs lists the Ethernet interfaces that hold an IPv4 address or an IPv6 GUA, sorted by name.  When no
+// interface of a kind counted as Ethernet has one (a virtual link of a kind not known, say), every other interface
+// that is not the loopback or ddgw's own holds the addresses instead, so the tooltip shows what the node has rather
+// than nothing.
 func ethernetAddrs() []NodeIface {
+	raw := nodeIfacesFn()
+	if out := collectAddrs(raw, func(r nodeIfaceRaw) bool { return r.Ethernet }); len(out) > 0 {
+		return out
+	}
+	return collectAddrs(raw, func(r nodeIfaceRaw) bool { return !strings.HasPrefix(r.Name, "ddgw") })
+}
+
+// collectAddrs lists the interfaces chosen by keep (never the loopback) that hold an IPv4 address or an IPv6 GUA.
+func collectAddrs(raw []nodeIfaceRaw, keep func(nodeIfaceRaw) bool) []NodeIface {
 	var out []NodeIface
-	for _, r := range nodeIfacesFn() {
-		if r.Loopback || !r.Ethernet {
+	for _, r := range raw {
+		if r.Loopback || !keep(r) {
 			continue
 		}
 		ni := NodeIface{Name: r.Name}

@@ -247,3 +247,26 @@ func TestIsEthernetIfaceKinds(t *testing.T) {
 		}
 	}
 }
+
+// When no interface of a kind that counts as Ethernet has an address, the others (not loopback, not ddgw's) are listed.
+func TestEthernetAddrsFallsBackToOtherInterfaces(t *testing.T) {
+	ipn := func(s string) net.Addr {
+		ip, n, _ := net.ParseCIDR(s)
+		n.IP = ip
+		return n
+	}
+	old := nodeIfacesFn
+	t.Cleanup(func() { nodeIfacesFn = old })
+	nodeIfacesFn = func() []nodeIfaceRaw {
+		return []nodeIfaceRaw{
+			{Name: "lo", Loopback: true, Addrs: []net.Addr{ipn("127.0.0.1/8")}},
+			{Name: "ddgw1.1", Addrs: []net.Addr{ipn("10.0.0.56/24")}},
+			{Name: "eth0", Ethernet: true, Addrs: []net.Addr{ipn("fe80::1/64")}}, // Ethernet, but nothing usable
+			{Name: "odd0", Addrs: []net.Addr{ipn("10.5.5.5/24"), ipn("2001:db8::5/64")}},
+		}
+	}
+	got := ethernetAddrs()
+	if len(got) != 1 || got[0].Name != "odd0" || strings.Join(got[0].V4, ",") != "10.5.5.5/24" || strings.Join(got[0].V6, ",") != "2001:db8::5/64" {
+		t.Fatalf("fallback: %+v (ddgw's own interface and the loopback must stay out)", got)
+	}
+}

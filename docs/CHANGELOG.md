@@ -1,5 +1,21 @@
 # Changelog
 
+## [v202] - 2026-10-05 — Node tooltips list addresses even for interface kinds not known
+
+### Changed
+- **A node's tooltip falls back to the node's other interfaces.** The addresses go in the tooltip of the node's parallelogram on Topology (not in the gateway circle's; its "Serving nodes" list is the older v16 feature and is unchanged). They are the IPv4 and IPv6 global unicast addresses of the node's Ethernet interfaces (physical, bridge, bond, VLAN, veth: see v199). When none of those holds a usable address, the tooltip now lists the addresses of every other interface that is not the loopback and not ddgw's own `ddgwN.M`, instead of nothing. Link-local, ULA and 169.254 addresses are still left out, and an interface with no usable address is not listed.
+
+### Added
+- Test `TestEthernetAddrsFallsBackToOtherInterfaces`: the fallback lists an unknown kind of interface and keeps the loopback and ddgw's own out, and an Ethernet interface with a usable address still wins (the existing test).
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub).
+- Live with real PAM (scratch user, group and PAM file, removed afterwards): two daemons joined into a cluster, headless Chromium; the tooltip text of both node parallelograms read from the page contains the line `eth0: 192.0.2.2/24` (this node and the other node, which sends it in its status message).
+
+### Not verified
+- Not run on the nodes where the tooltip was empty (containers, probably): their interface kinds were never seen here. If a tooltip is still empty there, the node reports no interface with an IPv4 address or a global IPv6 address at all, or the other nodes run a version older than v190 (which do not send the addresses).
+- Everything listed as not verified or not changed under v194 to v201 still applies.
+
 ## [v201] - 2026-10-05 — The node picker stays put when the page scrolls
 
 ### Fixed
