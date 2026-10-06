@@ -592,13 +592,13 @@
       // When the window is taller than the drawing at the size it will be shown, the rows are spread apart to use the
       // height (never more than twice as tall as drawn).
       if (svgHost.isConnected) {   // the zoom does not come into it: zooming scales this layout, it must not change it
-        const hostW = oldWrap && svgHost.contains(oldWrap) ? oldWrap.clientWidth : svgHost.clientWidth - 16;
+        const hostW = oldWrap && svgHost.contains(oldWrap) ? oldWrap.clientWidth : svgHost.clientWidth;
         if (hostW > 0) {
           const s0 = Math.max(CV_MIN_SCALE, Math.min(1, hostW / lay.W));   // the size it is fitted to, whatever the zoom is
           const after = svgHost.nextElementSibling;   // the legend under the card
           let top = 0;   // where the card is on the page, not on the screen: scrolling the page (it scrolls when zoomed in) must not move the layout
           for (let el = svgHost; el; el = el.offsetParent) top += el.offsetTop;
-          const room = window.innerHeight - top - 16 - (after ? after.offsetHeight + 24 : 0) - 16;
+          const room = window.innerHeight - top - (after ? after.offsetHeight + 24 : 0) - 16;
           const extra = Math.min(room / s0 - lay.H, lay.H, 600);
           if (extra > 20) { const taller = layout(lay.PER, extra); if (!taller.clash) lay = taller; }
         }
@@ -1461,7 +1461,7 @@
     return {
       mount(main) {
         noteEl = h("div", { class: "cv-status" });
-        svgHost = h("div", { class: "card cv-card",
+        svgHost = h("div", { class: "cv-card",
           onmouseout: (e) => { if (cv.stale && !cv.drag && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".shape"))) draw(); },
           // right-click on empty canvas (shapes and tabs handle their own menus)
           oncontextmenu: (e) => { cv.sel = null; refresh(); const g = curGroup();

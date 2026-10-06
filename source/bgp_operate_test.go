@@ -2,6 +2,8 @@ package main
 
 import (
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -197,5 +199,51 @@ func TestNodeEthernetAddrs(t *testing.T) {
 	}
 	if strings.Join(got[0].V4, ",") != "10.0.0.5/24" || strings.Join(got[0].V6, ",") != "2001:db8::5/64,3fff::9/48" {
 		t.Fatalf("addresses: %+v (link-local, ULA and 169.254 must be left out)", got[0])
+	}
+}
+
+// A made-up /sys/class/net: which interfaces count as Ethernet.
+func TestIsEthernetIfaceKinds(t *testing.T) {
+	root := t.TempDir()
+	cls, virt := filepath.Join(root, "class")+"/", filepath.Join(root, "virtual")+"/"
+	oldC, oldV := sysClassNet, sysVirtualNet
+	sysClassNet, sysVirtualNet = cls, virt
+	t.Cleanup(func() { sysClassNet, sysVirtualNet = oldC, oldV })
+	mk := func(name, typ string, virtual bool, devtype string, subdirs ...string) {
+		d := filepath.Join(cls, name)
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "type"), []byte(typ+"\n"), 0o644)
+		uev := "INTERFACE=" + name + "\n"
+		if devtype != "" {
+			uev += "DEVTYPE=" + devtype + "\n"
+		}
+		os.WriteFile(filepath.Join(d, "uevent"), []byte(uev), 0o644)
+		for _, s := range subdirs {
+			os.MkdirAll(filepath.Join(d, s), 0o755)
+		}
+		if virtual {
+			os.MkdirAll(filepath.Join(virt, name), 0o755)
+		}
+	}
+	mk("ens18", "1", false, "")           // a physical (or virtio) card
+	mk("eth0", "1", true, "veth")         // a container's network card
+	mk("vmbr0", "1", true, "bridge")      // a bridge
+	mk("bond0", "1", true, "bond")        // a bond
+	mk("eth0.5", "1", true, "vlan")       // a VLAN
+	mk("br9", "1", true, "", "bridge")    // a bridge seen only by its directory
+	mk("bondx", "1", true, "", "bonding") // a bond seen only by its directory
+	mk("mv0", "1", true, "macvlan")       // someone's macvlan
+	mk("ddgw1.1", "1", true, "macvlan")   // ddgw's own
+	mk("ddgwlike", "1", false, "")        // anything named ddgw* is ddgw's
+	mk("vxlan0", "1", true, "vxlan")      // an overlay
+	mk("tap0", "1", true, "")             // a tap
+	mk("dummy0", "1", true, "")           // a dummy
+	mk("tun0", "65534", true, "")         // not Ethernet at all
+	mk("lo", "772", true, "")             // loopback
+	want := map[string]bool{"ens18": true, "eth0": true, "vmbr0": true, "bond0": true, "eth0.5": true, "br9": true, "bondx": true}
+	for _, n := range []string{"ens18", "eth0", "vmbr0", "bond0", "eth0.5", "br9", "bondx", "mv0", "ddgw1.1", "ddgwlike", "vxlan0", "tap0", "dummy0", "tun0", "lo", "missing"} {
+		if got := isEthernetIface(n); got != want[n] {
+			t.Errorf("%s: Ethernet = %v, want %v", n, got, want[n])
+		}
 	}
 }

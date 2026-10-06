@@ -1,5 +1,50 @@
 # Changelog
 
+## [v201] - 2026-10-05 — The node picker stays put when the page scrolls
+
+### Fixed
+- **Zooming the Topology drawing in could push the node picker off the page.** The picker (the "Node" menu at the top right, shown when the cluster has two or more nodes) was part of the scrolling content, so wheel-zooming in, which scrolls the content, carried it away; the "?" button, which is fixed to the window, stayed. The picker is now sticky at the top of the content box: it stays where it was drawn (beside the "?" in a wide window, under it in a narrow one) however far the page is scrolled, on every page that shows it. The empty space of the bar lets clicks and the wheel through to what is under it, and the word "Node" has the page background behind it so it stays readable over the drawing.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards): two daemons joined into a cluster, headless Chromium (dark), the drawing zoomed in with the wheel until the content had scrolled 633 px (a 1900 px wide window) and 704 px (1300 px wide): the picker stayed at the same place (top 10 px beside the "?", and 48 px under it), was the element under its own centre (clickable), the empty part of the bar passed pointer events to the drawing, and after zooming out it was still in place.
+
+### Not verified
+- The light theme, a window narrower than 760 px (where the page itself scrolls, not the content box), the other pages' scrolling (Statistics, Log, …), and picking another node while scrolled.
+- Everything listed as not verified or not changed under v194 to v200 still applies.
+
+## [v200] - 2026-10-05 — Topology: the drawing sits on the page, without the lighter box
+
+### Changed
+- **No box around the Topology drawing.** The shapes are drawn straight on the page background; the lighter card (fill, border, rounded corners and padding) that framed them is gone. The legend is as before under the drawing. The drawing is still a scrolling box when it is wider than the window, and wheel zoom and drag-to-pan are unchanged.
+- **The lines between shapes are darker** (the muted text colour at 40% instead of the border colour). The border colour was meant to be seen on the card's fill and is nearly invisible on the page itself in the light theme. Spread (active) lines and down lines keep their colours at full strength.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium at 1380×900, **dark and light**: the drawing on the page background with no card, lines visible in both themes; the wheel-zoom test of v198 again (layout height unchanged through zooming in, polls, zooming out).
+
+### Not verified
+- `TestUpdateOverTCP` failed once in a `CGO_ENABLED=0` run ("address already in use": the test finds a free port and binds it afterwards, so another test can take it in between). It passed five times alone and in a full rerun; the test was not changed.
+- Working, degraded and down shapes and the blue spread lines were not looked at on the page without the box (the test gateway was paused); no cluster nodes column; the "No gateway yet" message and the forms were not looked at after the change.
+- Everything listed as not verified or not changed under v194 to v199 still applies.
+
+## [v199] - 2026-10-05 — Node tooltips: a container's (veth) and VLAN interfaces are listed
+
+### Fixed
+- **A node's tooltip on Topology showed no interface addresses on a node whose network card is a virtual link.** The tooltip (added in v190) lists the node's *Ethernet* interfaces with their IPv4 and IPv6 global unicast addresses, and "Ethernet" meant a physical device, a bridge or a bond. A container's own `eth0` is a **veth** (that is what a Proxmox or LXC container has), and a VLAN interface (`eth0.5`) is virtual too; both were left out, so a node with nothing else listed got no address lines at all. Now an interface counts when it is ARPHRD_ETHER and a physical device, or a virtual link whose `DEVTYPE` is `veth`, `vlan`, `bridge` or `bond` (a bridge or bond is also still recognised by its sysfs directory). Still left out: ddgw's own `ddgwN.M` macvlans, other macvlans, vxlan, tap, dummy, tunnels and the loopback. The host's side of a container's veth has no address, so it is not listed anyway. An interface is listed only if it holds an IPv4 address or an IPv6 GUA (`2000::/3`), as before.
+- This is the likeliest cause of the missing lines, inferred from the nodes being containers; it was not confirmed on those nodes. To see what a node has: `for i in /sys/class/net/*; do echo "$(basename $i) type=$(cat $i/type) $(grep DEVTYPE $i/uevent) virtual=$([ -e /sys/devices/virtual/net/$(basename $i) ] && echo yes || echo no)"; done`. An interface of another kind that holds an address is still not shown.
+
+### Added
+- Test `TestIsEthernetIfaceKinds` (`bgp_operate_test.go`) against a made-up `/sys/class/net`: physical, veth, bridge, bond, VLAN, bridge and bond by directory, macvlan, ddgw's own, anything named `ddgw*`, vxlan, tap, dummy, tunnel, loopback and a missing interface. The sysfs locations are now variables (`sysClassNet`, `sysVirtualNet`) so a test can point them elsewhere.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub).
+- Live, native amd64 build with PAM: two daemons joined into a cluster, a real PAM sign-in over HTTPS, and `/api/canvas` returned `addrs` for both nodes (`eth0`, `192.0.2.2/24`, a physical device here). The user, group and PAM file were removed afterwards.
+
+### Not verified
+- No veth, VLAN or container interface was available in the sandbox, so those kinds are checked only against the made-up sysfs tree, not on a real container; and the tooltip was not looked at in a browser.
+- Everything listed as not verified or not changed under v194 to v198 still applies.
+
 ## [v198] - 2026-10-05 — Topology: zooming no longer changes the layout
 
 ### Fixed

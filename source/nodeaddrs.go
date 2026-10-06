@@ -40,19 +40,48 @@ type nodeIfaceRaw struct {
 	Addrs    []net.Addr
 }
 
-// isEthernetIface says whether name is a real Ethernet-type interface of the host: ARPHRD_ETHER, and either a physical
-// device, a bridge or a bond.  Virtual links (veth, macvlan such as ddgw's own ddgwN.M, tunnels, containers' bridges
-// excepted) are left out.
+// sysfs locations (variables so a test can point them at a made-up tree).
+var (
+	sysClassNet   = "/sys/class/net/"
+	sysVirtualNet = "/sys/devices/virtual/net/"
+)
+
+// ethernetDevTypes are the kinds of virtual link that are an Ethernet interface of the host (or of the container
+// it runs in) and not a plumbing detail: a bridge, a bond, a VLAN, and a veth, which is how a container's own
+// "eth0" appears (the host's side of a veth has no address, so it is not listed anyway).
+var ethernetDevTypes = map[string]bool{"bridge": true, "bond": true, "vlan": true, "veth": true}
+
+// devType is the DEVTYPE line of an interface's uevent file ("" when there is none).
+func devType(name string) string {
+	b, err := os.ReadFile(sysClassNet + name + "/uevent")
+	if err != nil {
+		return ""
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(l, "DEVTYPE="); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// isEthernetIface says whether name is an Ethernet interface of this node: ARPHRD_ETHER, and either a physical
+// device or a virtual link of one of the kinds in ethernetDevTypes (a bridge, a bond, a VLAN, a veth: the network
+// card of a container is one).  Other virtual links (macvlan such as ddgw's own ddgwN.M, vxlan, tap, dummy) are
+// left out.
 func isEthernetIface(name string) bool {
-	base := "/sys/class/net/" + name + "/"
+	base := sysClassNet + name + "/"
 	if b, err := os.ReadFile(base + "type"); err != nil || strings.TrimSpace(string(b)) != "1" {
 		return false
 	}
 	if strings.HasPrefix(name, "ddgw") {
 		return false
 	}
-	if _, err := os.Stat("/sys/devices/virtual/net/" + name); err != nil {
+	if _, err := os.Stat(sysVirtualNet + name); err != nil {
 		return true // a physical device
+	}
+	if ethernetDevTypes[devType(name)] {
+		return true
 	}
 	for _, kind := range []string{"bridge", "bonding"} {
 		if _, err := os.Stat(base + kind); err == nil {

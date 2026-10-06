@@ -252,13 +252,13 @@ input[type=file] { margin-top: .5rem; }
 .cv-status { font-size: .85rem; margin-bottom: .5rem; padding-right: 3.5rem; } /* clear of the ? button */
 .cv-status.st-ok { color: var(--ok); } .cv-status.st-warn { color: var(--warn); } .cv-status.st-bad { color: var(--bad); } .cv-status.st-idle, .cv-status.st-paused { color: var(--muted); }
 .cv-status:empty { display: none; }
-.cv-card { padding: .5rem; margin-bottom: .75rem; }
+.cv-card { margin-bottom: .75rem; } /* the drawing sits on the page itself: no box around it */
 .cv-wrap { overflow: auto; text-align: center; }
 svg.cv { max-width: none; outline: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .cv-wrap.panning, .cv-wrap.panning * { cursor: grabbing !important; user-select: none; }
-svg.cv .edge { stroke: var(--border); stroke-width: 2; }
-svg.cv .edge.spread { stroke: var(--accent); stroke-width: 4; }
-svg.cv .edge.down { stroke: var(--bad); stroke-dasharray: 7 5; }
+svg.cv .edge { stroke: var(--muted); stroke-opacity: .4; stroke-width: 2; }   /* the border colour is too faint on the page itself */
+svg.cv .edge.spread { stroke: var(--accent); stroke-opacity: 1; stroke-width: 4; }
+svg.cv .edge.down { stroke: var(--bad); stroke-opacity: 1; stroke-dasharray: 7 5; }
 svg.cv .shape { cursor: pointer; outline: none; }
 svg.cv .shape.drag { cursor: grab; }
 svg.cv.dragging, svg.cv.dragging .shape { cursor: grabbing; user-select: none; }
@@ -303,7 +303,11 @@ svg.cv text.ip { font-family: var(--mono); font-weight: 600; font-size: 12px; }
 
 /* ── v22: node picker ── */
 .topbar { display: flex; justify-content: flex-end; align-items: center; gap: .6rem; max-width: 1150px; margin: 0 auto; padding: .6rem 1.25rem 0; }
-.topbar label { white-space: nowrap; }
+/* The picker stays where it is when the page scrolls (zooming the drawing in scrolls it), as the "?" does.  The bar's
+   own empty space lets clicks through to what is under it. */
+.topbar { position: sticky; top: 0; z-index: 20; pointer-events: none; }
+.topbar > * { pointer-events: auto; }
+.topbar label { white-space: nowrap; background: var(--bg); padding: .1rem .35rem; border-radius: 4px; }
 .topbar select { width: auto; flex: none; min-width: 14rem; max-width: 100%; }
 .topbar.hidden { display: none; }
 body.remote { box-shadow: inset 0 3px 0 var(--amber); }
