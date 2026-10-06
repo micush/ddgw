@@ -710,6 +710,7 @@ func (w *WebServer) handleSession(rw http.ResponseWriter, r *http.Request, s *se
 
 func (w *WebServer) handleGateways(rw http.ResponseWriter, r *http.Request, s *session) {
 	gs := buildGateways(w.status.snapshot())
+	nameMembers(gs, w.status.ipNames())
 	nameGateways(gs, w.status.sup.config())
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "data": gs})
 }

@@ -14,9 +14,43 @@ type NodeIface struct {
 	Name string   `json:"name"`
 	V4   []string `json:"v4,omitempty"`
 	V6   []string `json:"v6,omitempty"`
+	// ULA is the interface's unique local IPv6 addresses (fc00::/7).  The tooltip does not show them (it is for the
+	// global ones); the Node IP column of Monitor ▸ Cluster does, with the rest.
+	ULA []string `json:"ula,omitempty"`
 }
 
-var gua6 = netip.MustParsePrefix("2000::/3")
+var (
+	gua6 = netip.MustParsePrefix("2000::/3")
+	ula6 = netip.MustParsePrefix("fc00::/7")
+)
+
+// addrList is every address of the interfaces without the prefix lengths: IPv4, then IPv6 global, then unique local,
+// each once.  It is what identifies a node by address (the Node IP column and the lookup of a gateway member's node).
+func addrList(ifs []NodeIface) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(l []string) {
+		for _, a := range l {
+			if p, err := netip.ParsePrefix(a); err == nil {
+				a = p.Addr().String()
+			}
+			if !seen[a] {
+				seen[a] = true
+				out = append(out, a)
+			}
+		}
+	}
+	for _, i := range ifs {
+		add(i.V4)
+	}
+	for _, i := range ifs {
+		add(i.V6)
+	}
+	for _, i := range ifs {
+		add(i.ULA)
+	}
+	return out
+}
 
 // nodeIfacesFn lists the node's interfaces (replaceable in tests).
 var nodeIfacesFn = func() []nodeIfaceRaw {
@@ -130,11 +164,14 @@ func collectAddrs(raw []nodeIfaceRaw, keep func(nodeIfaceRaw) bool) []NodeIface 
 				}
 			case gua6.Contains(ip):
 				ni.V6 = append(ni.V6, pfx)
+			case ula6.Contains(ip):
+				ni.ULA = append(ni.ULA, pfx)
 			}
 		}
-		if len(ni.V4)+len(ni.V6) > 0 {
+		if len(ni.V4)+len(ni.V6)+len(ni.ULA) > 0 {
 			sort.Strings(ni.V4)
 			sort.Strings(ni.V6)
+			sort.Strings(ni.ULA)
 			out = append(out, ni)
 		}
 	}

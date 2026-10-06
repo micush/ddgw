@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -400,6 +401,18 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 
 	st := NewStatusServer(sockPath, sup)
 	st.mg = mg
+	mg.gwIPsFn = func() []string {
+		var out []string
+		seen := map[string]bool{}
+		for _, r := range st.snapshot() {
+			if r.Local && r.PeerIP != "" && !seen[r.PeerIP] {
+				seen[r.PeerIP] = true
+				out = append(out, r.PeerIP)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
 	mg.gwFn = func() []GwState {
 		cfg, snap := sup.config(), st.snapshot()
 		gs := gatewayStates(cfg, snap)
@@ -541,8 +554,16 @@ func showNeighbors(sock string) {
 
 func showGatewayTable(sock string) {
 	var rows []SnapshotRow
-	decodeData(mustStatus(sock, "snapshot"), &rows)
+	res := mustStatus(sock, "snapshot")
+	decodeData(res, &rows)
 	groups := buildGateways(rows)
+	ipNames := map[string]string{}
+	if nm, ok := res["names"].(map[string]any); ok {
+		for ip, n := range nm {
+			ipNames[ip], _ = n.(string)
+		}
+	}
+	nameMembers(groups, ipNames)
 	if len(groups) == 0 {
 		fmt.Println("No gateway groups.")
 		return
@@ -561,14 +582,14 @@ func showGatewayTable(sock string) {
 			title = fmt.Sprintf("%s (group %d)", n, g.GroupID)
 		}
 		fmt.Printf("%s  VIP %s\n", title, g.VIP)
-		fmt.Printf("%-42s %-5s %-5s %-7s %-8s %-10s %-9s %s\n", "IP", "PRI", "SLOT", "WEIGHT", "ROLE", "STATE", "AGE(ms)", "VMAC")
-		fmt.Println(strings.Repeat("-", 105))
+		fmt.Printf("%-18s %-40s %-5s %-5s %-7s %-8s %-10s %-9s %s\n", "NODE NAME", "NODE IP", "PRI", "SLOT", "WEIGHT", "ROLE", "STATE", "AGE(ms)", "VMAC")
+		fmt.Println(strings.Repeat("-", 122))
 		for _, m := range g.Members {
 			age, flag := strconv.FormatInt(m.AgeMS, 10), ""
 			if m.Local {
 				age, flag = "(local)", " *"
 			}
-			fmt.Printf("%-42s %-5d %-5d %-7d %-8s %-10s %-9s %s\n", m.IP+flag, m.Priority,
+			fmt.Printf("%-18s %-40s %-5d %-5d %-7d %-8s %-10s %-9s %s\n", orDefault(m.Name, "-")+flag, m.IP, m.Priority,
 				m.Slot, m.Weight, m.Role, strings.ToUpper(m.State), age, orDefault(m.VMAC, "-"))
 		}
 		fmt.Println()
@@ -618,7 +639,7 @@ func showDNSTable(sock string) {
 		fmt.Println("Listening: " + strings.Join(d.Listeners, ", "))
 	}
 	fmt.Printf("Queries: %d  answered: %d  SERVFAIL: %d\n", d.Queries, d.Answered, d.ServFail)
-	const f = "%-4s %-28s %-6s %-10s %-10s %-8s %-8s %-8s %s\n"
+	const f = "%-4s %-16s %-28s %-6s %-10s %-10s %-8s %-8s %-8s %s\n"
 	for _, p := range d.Pools {
 		who := "shared pool"
 		if p.Key != 0 {
@@ -675,8 +696,8 @@ func showDNSTable(sock string) {
 		if p.UsingFB {
 			fmt.Println("no configured server is in service (down or paused): answering from the fallback servers")
 		}
-		fmt.Printf(f, "RANK", "SERVER", "STATE", "EWMA(ms)", "LAST(ms)", "OK", "FAIL", "SERVED", "LAST ERROR")
-		fmt.Println(strings.Repeat("-", 110))
+		fmt.Printf(f, "RANK", "SERVER NAME", "SERVER IP", "STATE", "EWMA(ms)", "LAST(ms)", "OK", "FAIL", "SERVED", "LAST ERROR")
+		fmt.Println(strings.Repeat("-", 127))
 		for _, s := range p.Servers {
 			rank, state := "-", "down"
 			if s.Healthy {
@@ -689,7 +710,7 @@ func showDNSTable(sock string) {
 			if s.Fallback {
 				addr += " (fallback)"
 			}
-			fmt.Printf(f, rank, addr, state, fmt.Sprintf("%.2f", s.EWMAMS), fmt.Sprintf("%.2f", s.LastMS),
+			fmt.Printf(f, rank, orDefault(s.Name, "-"), addr, state, fmt.Sprintf("%.2f", s.EWMAMS), fmt.Sprintf("%.2f", s.LastMS),
 				strconv.FormatUint(s.Successes, 10), strconv.FormatUint(s.Failures, 10),
 				strconv.FormatUint(s.Served, 10), s.LastError)
 		}

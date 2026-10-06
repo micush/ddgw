@@ -70,6 +70,9 @@ type PeerStatusMsg struct {
 	// Addrs are this node's Ethernet interfaces with their IPv4 and IPv6 GUA addresses, for the node's tooltip on the
 	// Topology drawing (absent on older nodes).
 	Addrs []NodeIface `json:"addrs,omitempty"`
+	// GwIPs are the addresses this node uses in the gateway protocol (one per address family of each group): what the
+	// Gateways page shows as a member's IP, so another node can say which node that is.
+	GwIPs []string `json:"gw_ips,omitempty"`
 }
 
 type clusterStateMsg struct {
@@ -605,7 +608,7 @@ func (c *Cluster) statusMsg() PeerStatusMsg {
 		Peers: append(c.knownPeers(snap), c.node.Self()), Removed: snap.Removed,
 		Version: version(), SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(),
 		UpdateFailed: c.mg.upd.FailedFor(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
-		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(),
+		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(), GwIPs: c.mg.localGwIPs(),
 	}
 }
 
@@ -1331,6 +1334,9 @@ type PeerView struct {
 	SharedRev     uint64    `json:"shared_rev"`
 	LastSeen      time.Time `json:"last_seen,omitempty"`
 	Error         string    `json:"error,omitempty"`
+	// IPs are the node's addresses (IPv4, IPv6 global and unique local) and GwIPs the ones it uses in the gateway protocol
+	IPs   []string `json:"ips,omitempty"`
+	GwIPs []string `json:"gw_ips,omitempty"`
 }
 
 type ClusterView struct {
@@ -1354,6 +1360,7 @@ type ClusterView struct {
 
 func (c *Cluster) View() ClusterView {
 	snap := c.node.Snapshot()
+	selfIPs, selfGw := addrList(ethernetAddrs()), c.mg.localGwIPs() // before c.mu: they ask the engines
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	v := ClusterView{
@@ -1367,7 +1374,7 @@ func (c *Cluster) View() ClusterView {
 		Addr: snap.SelfAddr, NodeID: snap.NodeID, Fingerprint: c.node.Fingerprint(), Self: true, Reachable: true,
 		Role: snap.Role, Epoch: snap.Epoch, IsPrimary: snap.Role == RolePrimary, Version: version(),
 		SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(), UpdateFailed: c.mg.upd.FailedFor(),
-		SharedRev: snap.SharedRev, LastSeen: time.Now(), Hostname: selfHost(),
+		SharedRev: snap.SharedRev, LastSeen: time.Now(), Hostname: selfHost(), IPs: selfIPs, GwIPs: selfGw,
 	})
 	for _, p := range snap.Peers {
 		pv := PeerView{Addr: p.Addr, NodeID: p.NodeID, Fingerprint: p.Fp, IsPrimary: p.Addr == snap.PrimaryAddr}
@@ -1377,6 +1384,7 @@ func (c *Cluster) View() ClusterView {
 			pv.Role, pv.Epoch, pv.Version, pv.SourceVersion = m.Role, m.Epoch, m.Version, m.SourceVersion
 			pv.Updating, pv.UpdateFailed, pv.SharedRev = m.Updating, m.UpdateFailed, m.SharedRev
 			pv.Hostname = m.Hostname
+			pv.IPs, pv.GwIPs = addrList(m.Addrs), m.GwIPs
 		}
 		v.Peers = append(v.Peers, pv)
 	}

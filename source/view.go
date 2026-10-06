@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/netip"
 	"sort"
 	"strings"
 )
@@ -20,6 +21,7 @@ type GatewayMember struct {
 	Preempt   bool   `json:"preempt"`
 	VMAC      string `json:"vmac"`
 	DNSListen bool   `json:"dns_listening"`
+	Name      string `json:"name,omitempty"` // the node that has this address, when the cluster can say (see nodeNamesByIP)
 }
 
 type GatewayGroup struct {
@@ -133,5 +135,55 @@ func nameGateways(gs []GatewayGroup, dc *DaemonConfig) {
 	}
 	for i := range gs {
 		gs[i].Name = names[gs[i].GroupID]
+	}
+}
+
+// normIP is an address in one spelling (no IPv4-in-IPv6 form), so the same address from two sources compares equal.
+func normIP(a string) string {
+	if x, err := netip.ParseAddr(a); err == nil {
+		return x.Unmap().String()
+	}
+	return a
+}
+
+// nodeNamesByIP maps the addresses of the cluster's nodes to their names: the host name, or the cluster address when two
+// nodes have one host name.  The addresses a node uses in the gateway protocol come first (they are exactly what the
+// Gateways page lists); its interface addresses fill in what those do not cover (an IPv6 gateway address is link-local, a
+// node that does not send its gateway addresses yet still has its IPv4 ones here).
+func nodeNamesByIP(peers []PeerView) map[string]string {
+	same := map[string]int{}
+	for _, p := range peers {
+		same[p.Hostname]++
+	}
+	name := func(p PeerView) string {
+		if p.Hostname == "" || same[p.Hostname] > 1 {
+			return p.Addr
+		}
+		return p.Hostname
+	}
+	out := map[string]string{}
+	for _, p := range peers {
+		for _, ip := range p.GwIPs {
+			if _, ok := out[normIP(ip)]; !ok { // the first node to claim an address keeps it (the list has this node first)
+				out[normIP(ip)] = name(p)
+			}
+		}
+	}
+	for _, p := range peers {
+		for _, ip := range p.IPs {
+			if _, ok := out[normIP(ip)]; !ok {
+				out[normIP(ip)] = name(p)
+			}
+		}
+	}
+	return out
+}
+
+// nameMembers puts each member's node name on the rows (names maps addresses to node names).
+func nameMembers(gs []GatewayGroup, names map[string]string) {
+	for i := range gs {
+		for j := range gs[i].Members {
+			gs[i].Members[j].Name = names[normIP(gs[i].Members[j].IP)]
+		}
 	}
 }

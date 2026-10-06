@@ -270,6 +270,7 @@ type Server struct {
 // ServerStat is the exported snapshot of a Server.
 type ServerStat struct {
 	Addr         string  `json:"addr"`
+	Name         string  `json:"name,omitempty"` // the name given to the server on the Topology page, if any
 	Healthy      bool    `json:"healthy"`
 	Fallback     bool    `json:"fallback,omitempty"` // a fallback server: in use only while every normal server is down
 	Rank         int     `json:"rank"`               // 1 = fastest healthy; 0 = not eligible

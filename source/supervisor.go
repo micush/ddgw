@@ -127,6 +127,24 @@ func (s *Supervisor) dnsFor(gid int) DNSConfig {
 	return defaultDNS()
 }
 
+// serverNames is the names given to the DNS servers of the pool key (0 is the shared pool, otherwise a gateway's own).
+func (s *Supervisor) serverNames(key int) map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dc == nil {
+		return nil
+	}
+	if key != 0 {
+		for i := range s.dc.Groups {
+			if s.dc.Groups[i].GroupID == key {
+				_, c := s.dc.poolFor(&s.dc.Groups[i])
+				return c.ServerNames
+			}
+		}
+	}
+	return s.dc.DNS.ServerNames
+}
+
 type poolInfo struct {
 	Key    int
 	Groups []int

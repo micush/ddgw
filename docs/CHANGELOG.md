@@ -1,5 +1,43 @@
 # Changelog
 
+## [v210] - 2026-10-05 — Gateways: the node name comes first and carries the star; DNS: the server name comes first
+
+### Changed
+- **Monitor ▸ Gateways:** the columns are now **Node name**, **Node IP**, Pri, … (name first). The ★ that marks this node is after the node's name, not after the address.
+- **Monitor ▸ DNS:** the columns are now Rank, **Server name**, **Server IP**, State, … (the name before the address). The table's column widths follow.
+- The command line follows: `--show-gateways` lists `NODE NAME` (with the `*` that marks this node) before `NODE IP`, and `--show-dns` lists `SERVER NAME` before `SERVER IP`. The help text of both pages says the same.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium (dark): the Gateways table reads `Node name | Node IP | Pri | …` with `ns1 ★` and the address without a star (rows injected into the answer, as for v209), the DNS table reads `Rank | Server name | Server IP | State | …`; `--show-gateways` and `--show-dns` printed the new order.
+
+### Not verified
+- The light theme and a window narrow enough to scroll the Gateways table sideways were not looked at.
+- Everything listed as not verified or not changed under v194 to v209 still applies.
+
+## [v209] - 2026-10-05 — Node names and addresses in the Gateways, Cluster and DNS tables
+
+### Changed
+- **Monitor ▸ Gateways:** the first column is now **Node IP**, followed by a new **Node name** column with the name of the node that has the address (its host name). A node's name is found from the cluster: each node now also reports the addresses it uses in the gateway protocol (the IPv4 address and the IPv6 link-local address of each group), and its interface addresses fill in what those do not cover. A row whose node the cluster cannot name shows `–`: a node that is not in the cluster, or one still on an older version that does not report its addresses (its IPv4 address is still matched through its interface addresses, which versions from v190 send; its IPv6 link-local one is not). Two nodes with one host name are told apart by their cluster address.
+- **Monitor ▸ Cluster:** the first column is now **Node name** (the host name; the cluster address, such as `ns1:53854`, is its tooltip, and the name when a node reports none), followed by a new **Node IP** column with the node's IPv4 and IPv6 addresses, one per line: its IPv4 addresses, then IPv6 global, then IPv6 unique local (fc00::/7), without prefix lengths. Operate ▸ Cluster keeps its single **Node** column (the cluster address), since it is where nodes are removed by that address.
+- **Monitor ▸ DNS:** the first column is now **Server IP** (the server as configured), followed by a new **Server name** column with the name given to the server on the Topology page (right-click the server ▸ Edit server…, `server_names` in the configuration, per gateway or shared); `–` for a server without a name. The table's column widths follow.
+- **Command line:** `--show-gateways` has `NODE IP` and `NODE NAME`, `--show-dns` has `SERVER IP` and `SERVER NAME`, and `--cluster-status` has `NODE NAME`, `NODE IP` and `ADDRESS` (the cluster address, as the first column was).
+- Interface addresses now also list the **unique local IPv6 addresses** (`ula`), kept apart from the global ones: the Topology tooltip still shows only IPv4 and global IPv6 addresses (an interface that has only unique local ones is not listed there), while the Node IP column shows all three.
+- Help text for the three pages describes the columns.
+
+### Added
+- New cluster-status fields (all optional, so nodes on older versions are unaffected): `gw_ips` (the node's gateway-protocol addresses) in the status message and the cluster view, and `ips` (its addresses) in the cluster view; `name` on the members of `/api/gateways` and on the servers of `/api/dns`; `names` (address to node name) in the status socket's `snapshot` answer.
+- `namecolumns_test.go`: address lists with unique local addresses kept apart, the lookup of a node by address (gateway address before interface address, link-local IPv6, a node that does not report its gateway addresses, two nodes with one host name, the first node to claim an address keeps it), the names on the rows, two real cluster nodes telling each other their addresses, and the DNS page's servers carrying their names for the shared pool and a gateway's own.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards): two daemons joined into a cluster with a running gateway on eth0 and eight named DNS servers, headless Chromium (dark): the Cluster table has `Node name | Node IP | Role | …` with the address, the DNS table has `Rank | Server IP | Server name | State | …` with `ns1` to `ns4` (and its column widths hold with the down servers' long errors), the Gateways table has `Node IP | Node name | Pri | …`; `/api/cluster`, `/api/dns` and `/api/gateways` and the three CLI tables printed the new fields.
+
+### Not verified
+- The Gateways page was looked at with rows injected into the answer (the sandbox is one machine with one address, so every real row belongs to the same node); the lookup by address that fills the names is covered by the unit tests and by the API check with two real nodes sharing an address, not with several machines.
+- IPv6 link-local gateway addresses are matched through what each node reports, so on a cluster with nodes still on v208 or older a node's IPv6 row shows `–` until that node is updated. The Operate ▸ Cluster table and the Topology tooltip were not changed.
+- Everything listed as not verified or not changed under v194 to v208 still applies.
+
 ## [v208] - 2026-10-05 — Gateway controller hand-over without interruption: in-place step-down, make before break, repeated announcements
 
 ### Changed

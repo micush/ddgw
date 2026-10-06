@@ -37,6 +37,7 @@ type Mgmt struct {
 	reloadFn  func() error          // re-read the config file and apply it
 	restartFn func()                // gracefully re-exec this process
 	gwFn      func() []GwState      // which gateways this node is serving right now
+	gwIPsFn   func() []string       // the addresses this node uses in the gateway protocol, one per family of each group
 	pausedFn  func() bool           // whether this whole node is paused (Operate ▸ Node)
 	anycastFn func() []AnycastState // the anycast addresses and whether each is announced now
 	servMu    sync.Mutex
@@ -523,4 +524,12 @@ func (m *Mgmt) UpdateStatus() UpdateView {
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Addr < nodes[j].Addr })
 	v.Nodes = nodes
 	return v
+}
+
+// localGwIPs is this node's addresses in the gateway protocol (nil before the supervisor exists).
+func (m *Mgmt) localGwIPs() []string {
+	if m.gwIPsFn == nil {
+		return nil
+	}
+	return m.gwIPsFn()
 }

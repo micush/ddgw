@@ -150,7 +150,7 @@ func (s *StatusServer) handle(c net.Conn) {
 	var res map[string]any
 	switch req.Cmd {
 	case "snapshot":
-		res = map[string]any{"ok": true, "data": s.snapshot()}
+		res = map[string]any{"ok": true, "data": s.snapshot(), "names": s.ipNames()}
 	case "dns":
 		res = s.dnsStatus()
 	case "canvas":
@@ -213,6 +213,21 @@ func (s *StatusServer) assertAGC() map[string]any {
 	return map[string]any{"ok": true, "messages": msgs}
 }
 
+// ipNames maps the addresses of the cluster's nodes (as the Gateways page lists them) to the nodes' names.
+func (s *StatusServer) ipNames() map[string]string {
+	if s.mg == nil || s.mg.cl == nil {
+		host, _ := os.Hostname()
+		out := map[string]string{}
+		for _, r := range s.snapshot() {
+			if r.Local && r.PeerIP != "" {
+				out[normIP(r.PeerIP)] = host
+			}
+		}
+		return out
+	}
+	return nodeNamesByIP(s.mg.cl.View().Peers)
+}
+
 func (s *StatusServer) dnsStatus() map[string]any {
 	pools := s.sup.poolList()
 	if len(pools) == 0 {
@@ -244,7 +259,7 @@ func (s *StatusServer) dnsStatus() map[string]any {
 			name = s.sup.groupName(pi.Key)
 		}
 		list = append(list, map[string]any{
-			"key": pi.Key, "name": name, "groups": pi.Groups, "servers": pi.Pool.Snapshot(), "using_fallback": pi.Pool.UsingFallback(),
+			"key": pi.Key, "name": name, "groups": pi.Groups, "servers": s.namedServers(pi), "using_fallback": pi.Pool.UsingFallback(),
 			"down_percent": pi.Cfg.DownPercent, "probes": probes,
 			"queries": pi.Pool.Queries.Load(), "answered": pi.Pool.Answered.Load(),
 			"servfail": pi.Pool.Failed.Load(),
@@ -266,6 +281,17 @@ func (s *StatusServer) dnsStatus() map[string]any {
 		"down_percent": first["down_percent"],
 		"probes":       first["probes"],
 	}}
+}
+
+// namedServers is the pool's servers with the names given on the Topology page (Settings ▸ DNS ▸ server names).  The pool
+// itself runs without them (a rename must not restart it), so they come from the full configuration.
+func (s *StatusServer) namedServers(pi poolInfo) []ServerStat {
+	sv := pi.Pool.Snapshot()
+	names := s.sup.serverNames(pi.Key)
+	for i := range sv {
+		sv[i].Name = names[sv[i].Addr]
+	}
+	return sv
 }
 
 func denied() map[string]any {

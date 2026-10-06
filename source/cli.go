@@ -480,23 +480,24 @@ func printCluster(v ClusterView) {
 		fmt.Println("(not part of a multi-node cluster yet — mint a code with --cluster-token on another node and use --cluster-join)")
 	}
 	fmt.Println()
-	const f = "%-28s %-8s %-9s %-6s %-7s %-7s %-19s %s\n"
-	fmt.Printf(f, "NODE", "ROLE", "REACHABLE", "EPOCH", "RUNNING", "SOURCE", "LAST SEEN", "NOTE")
-	fmt.Println(strings.Repeat("-", 110))
+	const f = "%-16s %-40s %-28s %-8s %-9s %-6s %-7s %-7s %-19s %s\n"
+	fmt.Printf(f, "NODE NAME", "NODE IP", "ADDRESS", "ROLE", "REACHABLE", "EPOCH", "RUNNING", "SOURCE", "LAST SEEN", "NOTE")
+	fmt.Println(strings.Repeat("-", 170))
 	for _, p := range v.Peers {
 		role := string(p.Role)
 		if p.IsPrimary {
 			role = "primary"
 		}
-		name := p.Addr
+		name := orDefault(p.Hostname, "-")
 		if p.Self {
 			name += " *"
 		}
+		addr := p.Addr
 		note := p.Error
 		if p.Updating {
 			note = "updating"
 		}
-		fmt.Printf(f, name, role, map[bool]string{true: "yes", false: "NO"}[p.Reachable], itoa(int(p.Epoch)),
+		fmt.Printf(f, name, trunc(orDefault(strings.Join(p.IPs, " "), "-"), 40), addr, role, map[bool]string{true: "yes", false: "NO"}[p.Reachable], itoa(int(p.Epoch)),
 			orDefault(p.Version, "-"), orDefault(p.SourceVersion, "-"), lt(p.LastSeen), trunc(note, 40))
 	}
 	fmt.Println("\n* = this node")

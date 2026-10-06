@@ -95,6 +95,7 @@ const DDGW_HELP = {
       "For each gateway group and address family, the nodes taking part and what each is doing. Refreshes every 2 seconds; ★ marks this node.",
       ["h", "Reading the table"],
       ["ul", [
+        "**Node name** is the node's name (its host name, from the cluster) and **Node IP** the address the node uses in the gateway protocol; the name is – for a node the cluster does not know, or until that node runs a version that reports its addresses.",
         "**AGC** (active gateway controller) is the one node that owns the shared address and answers ARP/neighbour requests for it. **AFN** nodes forward traffic and share the load. A node that is listening or has not been heard from yet has no role.",
         "**Pri** is the election priority (higher wins). **Slot** is the node's virtual-MAC slot: slot 1 always belongs to the controller, other nodes take 2 and up. **Weight** is its share of client traffic.",
         "**State** is where the node is in the protocol: *active* for the controller, *forward* for a forwarder, *standby* for a node that has no slot yet (a node still in an election shows as standby too), *expired* for one not heard from within the hold time. The node you are on shows its own exact state (listen, speak…); **preempt** marks nodes that take the role back as soon as they outrank the current controller. **Age** is how long since its last hello.",
@@ -107,7 +108,7 @@ const DDGW_HELP = {
   nodes: {
     title: "Cluster",
     body: [
-      "Every node that shares settings with this one: its **role** (primary or replica), whether it is **reachable**, its **epoch**, the version it is **running** and the version of the **source** it holds (they differ while an update is under way), and when it was last seen. The node you are logged in to is marked ★. Adding, removing and promoting nodes is on the Cluster page; this card only watches.",
+      "Every node that shares settings with this one: its **name** and **IP** addresses (IPv4, IPv6 global and unique local; hover the name for the node's cluster address), its **role** (primary or replica), whether it is **reachable**, its **epoch**, the version it is **running** and the version of the **source** it holds (they differ while an update is under way), and when it was last seen. The node you are logged in to is marked ★. Adding, removing and promoting nodes is on the Cluster page; this card only watches.",
       ["cli", "ddgw --cluster-status"],
     ],
   },
@@ -119,7 +120,7 @@ const DDGW_HELP = {
       ["ul", [
         "Every server is probed on a schedule with the test queries. A server is **up** while fewer than the **down at** share of its test queries fail (50% by default, so one of two or two of four failing makes it down); with some failing but under that share it stays in use and shows **amber** (degraded). It goes **down** after the configured number of failed rounds in a row, and comes back with the first round that passes.",
         "A client query goes to the fastest healthy server first (smoothed latency; with **spread** on, to the servers within the band of it in turns), and falls over to the next on failure, up to the configured number of attempts. If none is healthy the client gets a SERVFAIL.",
-        "**Rank** is the order used, **EWMA** the smoothed latency, **Last** the latest, **OK/Fail** the probe counts, **Served** the queries it has answered, and **Last error** why the last probe failed.",
+        "**Server name** is the name given to the server on the Topology page (right-click the server ▸ Edit server…; – when it has none) and **Server IP** the server as configured. **Rank** is the order used, **EWMA** the smoothed latency, **Last** the latest, **OK/Fail** the probe counts, **Served** the queries it has answered, and **Last error** why the last probe failed.",
       ]],
       "**Fallback servers** (marked *fallback* in the list, Settings ▸ DNS proxy ▸ Fallback servers, or *Edit gateway…* on the Topology page) take no queries while any normal server is up; they get a rank only while every normal server is down, and the header says so.",
       ["h", "Spreading queries"],

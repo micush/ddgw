@@ -1134,7 +1134,7 @@
     const nodeTip = (n) => [
       n.name + (n.self ? " (this node)" : "") + " — " + n.detail,
       "Address: " + n.addr + (n.hostname && n.hostname !== n.name ? " (host " + n.hostname + ")" : ""),
-      ...(n.addrs || []).map((i) => i.name + ": " + [...(i.v4 || []), ...(i.v6 || [])].join(", ")),   // Ethernet interfaces: IPv4 and IPv6 GUA
+      ...(n.addrs || []).filter((i) => (i.v4 || []).length + (i.v6 || []).length).map((i) => i.name + ": " + [...(i.v4 || []), ...(i.v6 || [])].join(", ")),   // Ethernet interfaces: IPv4 and IPv6 GUA
       "Role: " + (n.role === "primary" ? "primary" : "replica"),
       n.self ? "Last seen: just now" : n.reachable ? "Last seen: " + (n.last_seen ? spanText(Date.now() / 1000 - n.last_seen) + " ago" : "just now") : "",
       n.version ? "Version: " + n.version + (n.version_differs ? " (not the same as this node's)" : "") : "",
@@ -1520,7 +1520,8 @@
         }
         for (const g of r.data) {
           const rows = g.members.map((m) => h("tr", { class: m.local ? "local" : "" },
-            h("td", { class: "mono" }, m.ip, m.local ? " ★" : ""),
+            h("td", {}, m.name || "–", m.local ? " ★" : ""),
+            h("td", { class: "mono" }, m.ip),
             h("td", { class: "num" }, m.priority),
             h("td", { class: "num" }, m.slot || "–"),
             h("td", { class: "num" }, m.weight),
@@ -1535,7 +1536,7 @@
               h("span", { class: "mono muted" }, "VIP " + g.vip),
               g.agc ? h("span", { class: "muted" }, "AGC ", h("span", { class: "mono" }, g.agc)) : null),
             h("div", { class: "scroll" }, h("table", {},
-              h("thead", {}, h("tr", {}, ["Node", "Pri", "Slot", "Weight", "Role", "State", "Age (ms)", "vMAC", "DNS"].map((t, i) => h("th", { class: [1, 2, 3, 6].includes(i) ? "num" : "" }, t)))),
+              h("thead", {}, h("tr", {}, ["Node name", "Node IP", "Pri", "Slot", "Weight", "Role", "State", "Age (ms)", "vMAC", "DNS"].map((t, i) => h("th", { class: [2, 3, 4, 7].includes(i) ? "num" : "" }, t)))),
               h("tbody", {}, rows)))));
         }
       },
@@ -1555,7 +1556,7 @@
           body.append(h("div", { class: "card" },
             h("header", {}, h("h2", {}, "Cluster members"), h("span", { class: "muted" }, "Nodes sharing these settings."),
               v.conflict ? pill("conflict", "bad") : null),
-            membersTable(v, null)));
+            membersTable(v, null, true)));
         }
       },
     };
@@ -1604,9 +1605,10 @@
                 return on.length ? h("span", { class: "mono small" }, "answering on " + on.join(" · ")) : h("span", { class: "muted small" }, "not answering on this node");
               })()),
             h("div", { class: "scroll" }, h("table", { class: "dns" },
-              h("thead", {}, h("tr", {}, ["Rank", "Server", "State", "EWMA (ms)", "Last (ms)", "OK", "Fail", "Served", "Last error"].map((t, i) => h("th", { class: i >= 3 && i <= 7 ? "num" : "" }, t)))),
+              h("thead", {}, h("tr", {}, ["Rank", "Server name", "Server IP", "State", "EWMA (ms)", "Last (ms)", "OK", "Fail", "Served", "Last error"].map((t, i) => h("th", { class: i >= 4 && i <= 8 ? "num" : "" }, t)))),
               h("tbody", {}, p.servers.map((s) => h("tr", {},
                 h("td", {}, s.healthy && s.rank ? s.rank : "–"),
+                h("td", {}, s.name || "–"),
                 h("td", { class: "mono" }, s.addr, s.fallback ? [h("span", { class: "muted small fb-tag", title: "Used only while every other server is down" }, "fallback")] : null),
                 h("td", {}, pill(s.healthy ? "up" : "down", s.healthy ? "ok" : "bad")),
                 h("td", { class: "num" }, s.healthy ? h("span", { class: "bar-wrap" }, h("span", { class: "bar-fill" })) : null, s.healthy ? fmtMs(s.ewma_ms) : "–"),
@@ -1913,10 +1915,12 @@
   };
   const when = (t) => (t && !String(t).startsWith("0001") ? new Date(t).toLocaleString() : "–");
   // The cluster's member table: the Cluster page passes a remove handler (a Remove button per other node), the Monitor page none.
-  const membersTable = (v, onRemove) => {
+  // The Monitor page (named) has the node's name and its addresses in two columns; the cluster address is the name's tooltip.
+  const membersTable = (v, onRemove, named) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
     const rows = v.peers.map((p) => h("tr", { class: p.self ? "local" : "" },
-      h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
+      named ? h("td", { title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "") : h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
+      named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
       h("td", {}, p.reachable ? pill("yes", "ok") : pill("NO", "bad"), p.updating ? [" ", pill("updating", "warn")] : null),
       h("td", { class: "num" }, p.reachable ? p.epoch : "–"),
@@ -1925,7 +1929,7 @@
       h("td", { class: "wrap muted" }, p.error || ""),
       onRemove ? h("td", { class: "actions" }, p.self ? null : h("button", { class: "btn small danger", type: "button", onclick: () => onRemove(p) }, "Remove")) : null));
     return h("div", { class: "scroll" }, h("table", {},
-      h("thead", {}, h("tr", {}, ["Node", "Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""].concat(onRemove ? [""] : []).map((t, i) => h("th", { class: i >= 3 && i <= 5 ? "num" : "" }, t)))),
+      h("thead", {}, h("tr", {}, (named ? ["Node name", "Node IP"] : ["Node"]).concat(["Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""], onRemove ? [""] : []).map((t, i) => h("th", { class: i >= (named ? 4 : 3) && i <= (named ? 6 : 5) ? "num" : "" }, t)))),
       h("tbody", {}, rows)));
   };
   const say = (el, kind, ...msg) => kind === "ok" ? clear(el) : clear(el).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
