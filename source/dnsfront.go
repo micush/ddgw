@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -657,25 +658,31 @@ func (f *DNSFrontend) serveDoH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var q []byte
+	var qbp *[]byte // the pooled buffer q lives in, when it does
+	defer func() {
+		if qbp != nil {
+			queryBufs.Put(qbp) // nothing keeps the query once resolve has returned
+		}
+	}()
 	switch r.Method {
 	case http.MethodPost:
 		if ct := strings.ToLower(r.Header.Get("Content-Type")); !strings.HasPrefix(ct, "application/dns-message") {
 			http.Error(w, "Content-Type must be application/dns-message", http.StatusUnsupportedMediaType)
 			return
 		}
-		b, err := io.ReadAll(io.LimitReader(r.Body, dohMaxAnswer+1))
-		if err != nil || len(b) > dohMaxAnswer {
+		b, bp, ok := readDoHBody(r.Body, r.ContentLength)
+		if !ok {
 			http.Error(w, "bad body", http.StatusBadRequest)
 			return
 		}
-		q = b
+		q, qbp = b, bp
 	case http.MethodGet:
-		b, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(r.URL.Query().Get("dns"), "="))
-		if err != nil || len(b) == 0 || len(b) > dohMaxAnswer {
+		b, bp, ok := decodeDoHParam(dohQueryParam(r.URL.RawQuery))
+		if !ok {
 			http.Error(w, "missing or bad dns parameter", http.StatusBadRequest)
 			return
 		}
-		q = b
+		q, qbp = b, bp
 	default:
 		w.Header().Set("Allow", "GET, POST")
 		http.Error(w, "GET or POST only", http.StatusMethodNotAllowed)
@@ -697,6 +704,94 @@ func (f *DNSFrontend) serveDoH(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/dns-message")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(resp)
+}
+
+// readDoHBody reads a DoH POST body of at most dohMaxAnswer bytes.  An ordinary query fits a pooled buffer (bp is
+// then to be given back to queryBufs); io.ReadAll started from 512 bytes and grew by copying, for every request.
+func readDoHBody(body io.Reader, contentLen int64) (msg []byte, bp *[]byte, ok bool) {
+	if contentLen > dohMaxAnswer {
+		return nil, nil, false
+	}
+	bp = queryBufs.Get().(*[]byte)
+	buf := (*bp)[:cap(*bp)]
+	n := 0
+	for n < len(buf) {
+		m, err := body.Read(buf[n:])
+		n += m
+		if err == io.EOF {
+			return buf[:n], bp, true
+		}
+		if err != nil {
+			queryBufs.Put(bp)
+			return nil, nil, false
+		}
+	}
+	// the pooled buffer is full, and there may be more
+	rest, err := io.ReadAll(io.LimitReader(body, dohMaxAnswer+1-int64(n)))
+	if err != nil || n+len(rest) > dohMaxAnswer {
+		queryBufs.Put(bp)
+		return nil, nil, false
+	}
+	msg = make([]byte, n, n+len(rest))
+	copy(msg, buf[:n])
+	msg = append(msg, rest...)
+	queryBufs.Put(bp)
+	return msg, nil, true
+}
+
+// dohQueryParam is the value of the first "dns" parameter of a raw query string (what r.URL.Query().Get("dns")
+// returns, without building the map of every parameter).
+func dohQueryParam(raw string) string {
+	for raw != "" {
+		var kv string
+		kv, raw, _ = strings.Cut(raw, "&")
+		k, v, _ := strings.Cut(kv, "=")
+		if strings.ContainsAny(k, "%+") {
+			k, _ = url.QueryUnescape(k)
+		}
+		if k != "dns" {
+			continue
+		}
+		if strings.ContainsAny(v, "%+") {
+			u, err := url.QueryUnescape(v)
+			if err != nil {
+				return ""
+			}
+			return u
+		}
+		return v
+	}
+	return ""
+}
+
+// decodeDoHParam decodes the base64url "dns" parameter of a DoH GET.  A query that fits a pooled buffer is decoded
+// into one (bp is then to be given back to queryBufs).
+func decodeDoHParam(s string) (msg []byte, bp *[]byte, ok bool) {
+	s = strings.TrimRight(s, "=")
+	if s == "" {
+		return nil, nil, false
+	}
+	n := base64.RawURLEncoding.DecodedLen(len(s))
+	if n > dohMaxAnswer {
+		return nil, nil, false
+	}
+	var src [2736]byte // the base64 text of a full pooled buffer (2048 bytes) is 2731 characters
+	if n <= queryBufSize && len(s) <= len(src) {
+		copy(src[:], s)
+		bp = queryBufs.Get().(*[]byte)
+		buf := (*bp)[:n]
+		m, err := base64.RawURLEncoding.Decode(buf, src[:len(s)])
+		if err != nil || m == 0 {
+			queryBufs.Put(bp)
+			return nil, nil, false
+		}
+		return buf[:m], bp, true
+	}
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil || len(b) == 0 || len(b) > dohMaxAnswer {
+		return nil, nil, false
+	}
+	return b, nil, true
 }
 
 // httpClientAddr is the address a request came from (the zero Addr when it cannot be read).

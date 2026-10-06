@@ -34,12 +34,14 @@ import (
 // and a nonce.  Nothing here uses the PAM/GUI login.
 
 const (
-	joinCodePrefix = "ddgw-join-v1:"
-	clockSkew      = 90 * time.Second
-	nonceTTL       = 5 * time.Minute
-	maxPeerBody    = 8 << 20
-	peerTimeout    = 6 * time.Second
-	sourceTimeout  = 60 * time.Second
+	joinCodePrefix  = "ddgw-join-v1:"
+	clockSkew       = 90 * time.Second
+	nonceTTL        = 5 * time.Minute
+	nonceSweepEvery = time.Second
+	maxNonces       = 50000 // sweep at once above this many remembered nonces
+	maxPeerBody     = 8 << 20
+	peerTimeout     = 6 * time.Second
+	sourceTimeout   = 60 * time.Second
 )
 
 // PeerStatusMsg is what a node tells others about itself.
@@ -128,20 +130,21 @@ type Cluster struct {
 
 	strain strainLog // host-load over/under log lines (strainlog.go)
 
-	mu        sync.Mutex
-	cfg       ClusterConfig
-	listen    string
-	srv       *http.Server
-	cancelSrv context.CancelFunc
-	info      map[string]*peerInfo
-	nonces    map[string]time.Time
-	joinFails map[string]*failRec
-	goodAddr  map[string]string // peer's main address -> the address that last worked
-	lastSync  time.Time
-	lastErr   string
-	conflict  string
-	kick      chan struct{}
-	syncMu    sync.Mutex
+	mu         sync.Mutex
+	cfg        ClusterConfig
+	listen     string
+	srv        *http.Server
+	cancelSrv  context.CancelFunc
+	info       map[string]*peerInfo
+	nonces     map[string]time.Time
+	nonceSweep time.Time // when the nonces were last swept for expired ones
+	joinFails  map[string]*failRec
+	goodAddr   map[string]string // peer's main address -> the address that last worked
+	lastSync   time.Time
+	lastErr    string
+	conflict   string
+	kick       chan struct{}
+	syncMu     sync.Mutex
 }
 
 func clusterSelfAddr(cfg ClusterConfig) string {
@@ -356,12 +359,18 @@ func (c *Cluster) peerAuth(h func(http.ResponseWriter, *http.Request, ClusterPee
 		}
 		c.mu.Lock()
 		now := time.Now()
-		for k, exp := range c.nonces {
-			if now.After(exp) {
-				delete(c.nonces, k)
+		// Expired nonces are swept at most once a second (or at once when the table is large), not on every
+		// request: the sweep visits every entry, and every peer call used to pay for it.  An entry that has
+		// expired but not yet been swept is no replay: the timestamp check already refuses anything that old.
+		if now.After(c.nonceSweep) || len(c.nonces) > maxNonces {
+			for k, exp := range c.nonces {
+				if now.After(exp) {
+					delete(c.nonces, k)
+				}
 			}
+			c.nonceSweep = now.Add(nonceSweepEvery)
 		}
-		if _, dup := c.nonces[sig]; dup {
+		if exp, dup := c.nonces[sig]; dup && now.Before(exp) {
 			c.mu.Unlock()
 			jsonError(rw, http.StatusUnauthorized, "replayed request")
 			return

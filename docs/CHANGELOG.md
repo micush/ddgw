@@ -1,5 +1,23 @@
 # Changelog
 
+## [v195] - 2026-10-05 — Fewer allocations: statistics, DoH requests, cluster nonces
+
+### Changed
+- **`qstats.apply` no longer allocates per query.** The text of a client address (`netip.Addr.String()` allocated every time) is now made once and reused from a table of at most 4096 addresses, emptied when full so a flood of distinct addresses cannot grow it. The two-element slice literal the function also built per event was already on the stack (the benchmark showed one allocation, the string); it is unchanged. `BenchmarkQStatsApply`: 211 ns and 1 allocation became about 195 ns and 0.
+- **DoH requests are read without `io.ReadAll`.** A POST body that fits a pooled buffer (2 KB, the one UDP queries use) is read into it, and a longer one, or one of unknown length, is read on after it, still held to 65535 bytes (over that is 400, as before). A GET's `dns` parameter is found in the raw query string (no map of every parameter is built) and decoded into a pooled buffer. `BenchmarkDoHBody`: POST 118 ns and 584 B (3 allocations) became 44 ns, GET 305 ns and 3 allocations became 141 ns and none (the one allocation shown for POST is the benchmark's own reader).
+- **The cluster nonce table is swept for expired entries at most once a second**, or at once above 50,000 entries, not on every peer request (the sweep visits every entry). An entry that has expired but is not yet swept does not count as a replay; the timestamp check already refuses a request that old, and a replay inside the window is still refused.
+
+### Added
+- Tests in `perf195_test.go`: address strings reused and bounded, counts unchanged, DoH POST bodies of every size (announced, unknown length, past the pooled buffer, oversized), GET parameter forms (padding, escaped padding, other parameters first, the first `dns` wins, missing, empty, not base64), `dohQueryParam` against `url.ParseQuery`, 400 DoH requests answered each with its own question under concurrency, the nonce sweep (not per request, on time, above the limit) and that a replay is still refused; benchmarks `BenchmarkQStatsApply`, `BenchmarkDoHBody`.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub). Only the native amd64 build was built with PAM headers.
+
+### Not verified
+- No live run: no real DoH client (browser, curl, a stub resolver) was pointed at the listener, only the handler was driven in-process; no daemons, no real PAM, no browser.
+- The figures above are micro-benchmarks of the changed functions on one machine, not throughput measurements of a running daemon.
+- Everything listed as not verified or not changed under v194 still applies (open-resolver defaults, all-interface listening, shared cluster secret, unsigned update sources).
+
 ## [v194] - 2026-10-05 — Stream connection limits, cluster body checked after the signature, minimum password length, `__Host-` cookie, sessions end with the account
 
 ### Security

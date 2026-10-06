@@ -121,6 +121,7 @@ type qsTop struct {
 // QStats is the collector.  The zero value is not usable: call NewQStats.
 type QStats struct {
 	mu         sync.Mutex
+	who        map[netip.Addr]string // client address strings in use (whoString)
 	start      time.Time
 	now        func() time.Time
 	pend       [qsShards]qsPending // events not yet counted (see Record)
@@ -263,14 +264,33 @@ func (s *QStats) Record(client netip.Addr, name string, qtype uint16, tcp bool, 
 	s.enqueue(qEvent{t: s.now().Unix(), kind: qeQuery, client: client, name: name, qtype: qtype, tcp: tcp, rcode: int32(rcode)})
 }
 
+// qsWhoMax is how many client address strings are kept for reuse (see whoString).
+const qsWhoMax = 4096
+
+// whoString is the text of a client address: made once and reused, since String() allocates every time and the
+// same few clients account for most queries.  The table is emptied when it is full, so a flood of distinct
+// addresses cannot grow it past qsWhoMax.  s.mu is held.
+func (s *QStats) whoString(client netip.Addr) string {
+	if !client.IsValid() {
+		return "unknown"
+	}
+	client = client.Unmap()
+	if w, ok := s.who[client]; ok {
+		return w
+	}
+	if s.who == nil || len(s.who) >= qsWhoMax {
+		s.who = make(map[netip.Addr]string, 256)
+	}
+	w := client.String()
+	s.who[client] = w
+	return w
+}
+
 // apply counts one query; s.mu is held.
 func (s *QStats) apply(e qEvent) {
 	client, name, qtype, tcp, rcode := e.client, e.name, e.qtype, e.tcp, int(e.rcode)
 	m := e.t / 60
-	who := "unknown"
-	if client.IsValid() {
-		who = client.Unmap().String()
-	}
+	who := s.whoString(client)
 	ms := &s.mins[m%qsMinSlots]
 	if ms.stamp != m {
 		*ms = qsMin{stamp: m}
