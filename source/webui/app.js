@@ -454,8 +454,17 @@
     };
     const upText = (u) => !u ? "" : (u.up ? "Online for " : "Down for ") + spanText(Date.now() / 1000 - u.since) + " - " + (u.failures || 0) + ((u.failures || 0) === 1 ? " failure" : " failures");
     const upLine = (u) => (u ? "\n" + upText(u) : "");
-    const membersText = (ms) => !ms.length ? "Serving nodes: none yet"
-      : "Serving nodes (" + ms.length + "):\n" + ms.map((m) => "  " + m.ip + (m.local ? " (this node)" : "") + (m.agc ? " — gateway controller" : "") + " · slot " + m.afn_id).join("\n");
+    const membersText = (ms) => "Serving nodes: " + (ms.length || "none yet");   // how many, not which: each node's own tooltip says what it is
+    // The gateway circle's tooltip: its name, how long it has been up, each address family's state, and how many
+    // nodes serve it.  The overall status line is added only when it says more than the family lines do (a
+    // pause, a gateway with one family, a start still waiting); it is the same words as the two together otherwise.
+    const gwTip = (g, st, dual) => {
+      const fam = (af) => (st.fams[af] ? st.fams[af].detail : "not running");
+      const together = dual ? "IPv4: " + fam("v4") + "; IPv6: " + fam("v6") : null;
+      return ["Gateway " + gwLabel(g), st.why && st.why !== together ? st.why : "", upText(st.uptime),
+        ...(dual ? [["IPv4", "v4"], ["IPv6", "v6"]].map(([n, af]) => n + " — " + fam(af)) : []),
+        membersText(st.members)].filter(Boolean).join("\n");
+    };
     const gwAddr = (g) => bareIP(g.vip4) || bareIP(g.vip6) || "gateway " + g.group_id;
     const gwLabel = (g) => g.name || gwAddr(g);
     const effQueries = (g, addr) => {
@@ -669,7 +678,7 @@
       const reorder = (list, from, to) => { const [it] = list.splice(from, 1); list.splice(to, 0, it); };
       shapes.push(sv("g", { class: "shape st-" + st.circle + (sel("gw") ? " sel" : ""), tabindex: "0", role: "button", "aria-label": "Gateway " + gwLabel(g), onclick: pick("gw"), oncontextmenu: rightClick("gw"),
         onkeydown: (e) => { if (e.key === "Enter") pick("gw")(e); } },
-        sv("title", {}, "Gateway " + gwLabel(g) + " — " + st.why + upLine(st.uptime) + (dual ? ["v4", "v6"].map((af) => "\n" + (af === "v4" ? "IPv4" : "IPv6") + " — " + (st.fams[af] ? st.fams[af].detail : "not running")).join("") : "") + "\n" + membersText(st.members)),
+        sv("title", {}, gwTip(g, st, dual)),
         sv("circle", { cx, cy: CY, r: R }),
         ...(dual
           ? [label(cx, CY - 14, ip4, "ip"), label(cx, CY + 4, ip6, "ip"), label(cx, CY + 24, g.name ? g.name.slice(0, 22) : g.interface + " · group " + g.group_id, "t2")]

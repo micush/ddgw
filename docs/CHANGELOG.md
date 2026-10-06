@@ -1,5 +1,21 @@
 # Changelog
 
+## [v203] - 2026-10-05 — The gateway tooltip: a short summary, and how many nodes serve it
+
+### Changed
+- **The gateway circle's tooltip on Topology is shorter.** It is now: the gateway's name; how long it has been up (or down) with its failures; the state of IPv4 and of IPv6; and **`Serving nodes: N`** (the count, or `none yet`). The list of the nodes' addresses and slots under it is gone (each node's own tooltip says what that node is), and the first line is no longer the whole status repeated (`Gateway X — IPv4: …; IPv6: …`). The overall status line is still shown, on its own line under the name, when it says more than the two family lines do: a pause (`Paused on all nodes — …`, `This node is paused …`), a gateway with a single address family, a start still waiting for the DNS servers. Nothing in the tooltip changed for the nodes' parallelograms, servers, domains or anycast pills.
+
+### Correction
+- The v199 entry said a veth shows up with `DEVTYPE=veth`. It does not: the kernel's veth driver sets no device type (checked in `drivers/net/veth.c`), which is why a container's `eth0` (type 1, virtual, no device type: the output from ns1) was not listed by v199 to v201. What lists it is the v202 fallback to the node's other interfaces; `veth` stays in the list of recognised device types, harmlessly.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium: the circle's tooltip text read from the page for a dual-stack gateway whose canvas answer (and config) was rewritten to look healthy, with an uptime and eight serving nodes: `Gateway 127.0.0.9` / `Online for 4m 25s - 0 failures` / `IPv4 — running and answering` / `IPv6 — running and answering` / `Serving nodes: 8`. Also a degraded family (no repeated line), a single-family gateway (`running and answering` under the name, no family lines) and a paused one (the pause line, then the two family lines, `Serving nodes: none yet`).
+
+### Not verified
+- Not on a real healthy gateway: the canvas answer was rewritten in the browser to produce the healthy case (the test gateway was paused), so the real daemon's text for the other states was not seen; the tooltip was not looked at as a rendered tooltip, only its text read from the page.
+- Everything listed as not verified or not changed under v194 to v202 still applies.
+
 ## [v202] - 2026-10-05 — Node tooltips list addresses even for interface kinds not known
 
 ### Changed
