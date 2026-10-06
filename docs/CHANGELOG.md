@@ -1,5 +1,34 @@
 # Changelog
 
+## [v198] - 2026-10-05 — Topology: zooming no longer changes the layout
+
+### Fixed
+- **Zooming the Topology drawing with the wheel made it jump to another layout.** v197 spread the rows apart to use a tall window, but switched that off while the drawing was zoomed, so the next redraw (every poll) put the compact layout back: scrolling in or out left the drawing with its rows close together and the lines at other angles. The stretch no longer depends on the zoom. It was also measured from where the card was on the *screen*, and zooming in scrolls the page (the `.content` box), which changed the amount again; it is now measured from where the card is on the page. Zooming now only scales the drawing.
+- Reproduced before the fix in headless Chromium against a real daemon (1380×900, wheel zoom in, a few polls): the drawing's height in its own units went from 812 to 406 and stayed there after zooming out. After the fix it stays 812 through zooming in, five seconds of polls, zooming out and five more seconds.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live with real PAM, as for v197 (scratch user, group and PAM file, removed afterwards): the wheel-zoom test above, v197 against v198.
+
+### Not verified
+- Light theme; a gateway with a node column or several rows of domains per server; a window resize while zoomed in; dragging in the new spacing by hand. The gateway was paused.
+- Everything listed as not verified or not changed under v194 to v197 still applies.
+
+## [v197] - 2026-10-05 — Topology: a taller drawing when the window has the room
+
+### Changed
+- **The Topology drawing uses the height of the window.** It was only ever scaled to fit the window's *width* (never larger than drawn), so in a tall window the card ended well above the bottom of the page. When the window is taller than the drawing at the size it will be shown, the rows are now spread apart to fill it: more space between the circle and the DNS servers (two fifths of the extra, four fifths when each server has one domain or none), a little between a server and its first domain, and the rest between the domains. The extra height is at most the drawing's own height (twice as tall), so a very tall window leaves some room, and nothing is stretched sideways; shapes keep their size. In a window that is not taller than the drawing the layout is exactly what it was. It does not apply while the drawing is zoomed with the mouse wheel, and a layout that would run a server's line through a node or an anycast pill is not used. The window is measured on every redraw, and the drawing is redrawn 200 ms after a window resize settles.
+- Dragging a domain to another place in its column uses the new spacing.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
+- Live, native amd64 build with PAM: a real daemon with a scratch PAM user and group (`/etc/pam.d/ddgw` from `contrib/`), a gateway paused on `lo` with eight DNS servers, two domains each and three anycast addresses, driven in headless Chromium (dark) at 1380×900, 1920×1080 and 1000×560 (the sign-in over HTTPS worked with the new cookie name). In 1380×900 the drawing went from 285 to 571 px high; resizing the window to 600 and then 1100 px high redrew it to 505 and 571 px; in the 560 px window it fills the height and does not run past it. The user, group and PAM file were removed afterwards.
+
+### Not verified
+- Light theme, and a drawing with a node column or several rows of domains per server (the live gateway had three anycast pills, no cluster, two domains a server); dragging a domain or a server in the new spacing was not tried by hand; the gateway was paused, so no server was shown working, degraded or down.
+- Not run: several daemons, a cluster, an update between versions.
+- Everything listed as not verified or not changed under v194 to v196 still applies.
+
 ## [v196] - 2026-10-05 — Gateways and Neighbors show each peer's state
 
 ### Changed

@@ -559,7 +559,7 @@
       const CG = 25, SIDE_GAP = 70;   // SIDE_GAP: room between the circle and the nodes on its left, the anycast pills on its right
       const SH = servers.some((a) => srvName(g, a)) ? 62 : 46;   // a named server has a third line, so every square in the row is taller
       const CY = R + 12;
-      const layout = (PER) => {
+      const layout = (PER, extra = 0) => {
         const sideH = (n) => Math.min(PER, n) * (AH + AG) - (n ? AG : 0);
         const aCols = Math.ceil(anys.length / PER), nCols = Math.ceil(nodes.length / PER);
         const anyH = sideH(anys.length), nodeH = sideH(nodes.length);
@@ -568,8 +568,12 @@
         const nodeAt = (k) => ({ x: -(R + SIDE_GAP + NW + Math.floor(k / PER) * (NW + CG)), y: nodeTop + (k % PER) * (AH + AG) });
         const rightX = anys.length ? R + SIDE_GAP + aCols * AW + (aCols - 1) * CG : 0, leftX = nodes.length ? R + SIDE_GAP + nCols * NW + (nCols - 1) * CG : 0;
         const sideBottom = Math.max(anys.length ? anyTop + anyH : 0, nodes.length ? nodeTop + nodeH : 0);
-        const SY = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0), DY0 = SY + SH + 34;   // servers' top, first domain's top
-        const W = Math.max(Math.max(servers.length, 1) * COLW + 20, 2 * R + 140, 2 * Math.max(rightX, leftX) + 20), H = DY0 + Math.max(maxDoms, 1) * DG + 6;
+        // extra is spare height to use: two fifths (or four fifths, with one row of domains) go between the circle and the
+        // servers, a tenth (a fifth) between the servers and their first domain, the rest between the domains
+        const dm = Math.max(maxDoms - 1, 0), eDom = dm ? extra * 0.5 / dm : 0, eTop = extra * (dm ? 0.4 : 0.8), eMid = extra - eTop - eDom * dm;
+        const DGE = DG + eDom;   // distance from one domain to the next
+        const SY = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0) + eTop, DY0 = SY + SH + 34 + eMid;   // servers' top, first domain's top
+        const W = Math.max(Math.max(servers.length, 1) * COLW + 20, 2 * R + 140, 2 * Math.max(rightX, leftX) + 20), H = DY0 + (Math.max(maxDoms, 1) - 1) * DGE + DG + 6;
         const cx = W / 2, rowX = (W - Math.max(servers.length, 1) * COLW) / 2;   // the row of servers is centred under the circle
         // does a line from the circle to a server pass through a node or a pill?
         const boxes = [...anys.map((_, k) => ({ ...anyAt(k), w: AW })), ...nodes.map((_, k) => ({ ...nodeAt(k), w: NW }))];
@@ -581,11 +585,25 @@
             if (boxes.some((b) => px > b.x - 3 && px < b.x + b.w + 3 && py > b.y - 3 && py < b.y + AH + 3)) clash = true;
           }
         });
-        return { PER, anyAt, nodeAt, SY, DY0, W, H, cx, rowX, clash };
+        return { PER, anyAt, nodeAt, SY, DY0, DGE, W, H, cx, rowX, clash };
       };
       let lay = layout(4);
       if (lay.clash) lay = layout(3);
-      const { anyAt, nodeAt, SY, DY0, W, H, cx, rowX } = lay;
+      // When the window is taller than the drawing at the size it will be shown, the rows are spread apart to use the
+      // height (never more than twice as tall as drawn).
+      if (svgHost.isConnected) {   // the zoom does not come into it: zooming scales this layout, it must not change it
+        const hostW = oldWrap && svgHost.contains(oldWrap) ? oldWrap.clientWidth : svgHost.clientWidth - 16;
+        if (hostW > 0) {
+          const s0 = Math.max(CV_MIN_SCALE, Math.min(1, hostW / lay.W));   // the size it is fitted to, whatever the zoom is
+          const after = svgHost.nextElementSibling;   // the legend under the card
+          let top = 0;   // where the card is on the page, not on the screen: scrolling the page (it scrolls when zoomed in) must not move the layout
+          for (let el = svgHost; el; el = el.offsetParent) top += el.offsetTop;
+          const room = window.innerHeight - top - 16 - (after ? after.offsetHeight + 24 : 0) - 16;
+          const extra = Math.min(room / s0 - lay.H, lay.H, 600);
+          if (extra > 20) { const taller = layout(lay.PER, extra); if (!taller.clash) lay = taller; }
+        }
+      }
+      const { anyAt, nodeAt, SY, DY0, DGE, W, H, cx, rowX } = lay;
       const svg = sv("svg", { class: "cv", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group", "aria-label": "Gateway diagram", tabindex: "0",
         onkeydown: (e) => { if ((e.key === "Delete" || e.key === "Backspace") && cv.sel && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); delSel(); } },
         onclick: (e) => { if (e.target === svg) { cv.sel = null; refresh(); } } });
@@ -705,16 +723,16 @@
           label(mx, SY + (srvName(g, addr) ? 51 : 35), info && (ss.c === "ok" || ss.c === "warn") ? info.ms + " ms" + (info.rank ? " · #" + info.rank : "") : ss.c === "bad" ? "down" : ss.c === "paused" ? "paused" : "", "t2")));
         const qs = effQueries(g, addr);
         qs.forEach((q, di) => {
-          const y = DY0 + di * DG;
+          const y = DY0 + di * DGE;
           const t = info && (info.tests || []).find((z) => z.name === q.name && z.type === q.type);
           const qsc = qPausedScope(g, addr, q);
           const sp = ss.c === "paused" || !!qsc;
           const c = sp ? "paused" : t && t.status !== "paused" ? t.status : "idle";
           const why = ss.c === "paused" ? "Server paused" : qsc ? "Paused on " + scopeWord(qsc) + " — not asked until resumed" : t && t.status !== "paused" ? t.detail : "Not tested yet";
-          lines.push(sv("line", { x1: mx, y1: di ? y - DG + DH : SY + SH, x2: mx, y2: y, class: "edge", "data-col": addr }));
+          lines.push(sv("line", { x1: mx, y1: di ? y - DGE + DH : SY + SH, x2: mx, y2: y, class: "edge", "data-col": addr }));
           shapes.push(sv("g", { class: "shape drag st-" + c + (sel("dom", addr, di) ? " sel" : ""), "data-col": addr, tabindex: "0", role: "button", "aria-label": "Domain " + q.name, onclick: pick("dom", addr, di), oncontextmenu: rightClick("dom", addr, di),
-          onpointerdown: dragStart({ axis: "y", n: qs.length, index: di, pos: y, origin: DY0, step: DG,
-            ghost: (k) => { const gy = DY0 + k * DG; return sv("polygon", { class: "dropslot", points: `${mx - DW / 2 + 14},${gy} ${mx + DW / 2 - 14},${gy} ${mx + DW / 2},${gy + DH} ${mx - DW / 2},${gy + DH}` }); },
+          onpointerdown: dragStart({ axis: "y", n: qs.length, index: di, pos: y, origin: DY0, step: DGE,
+            ghost: (k) => { const gy = DY0 + k * DGE; return sv("polygon", { class: "dropslot", points: `${mx - DW / 2 + 14},${gy} ${mx + DW / 2 - 14},${gy} ${mx + DW / 2},${gy + DH} ${mx - DW / 2},${gy + DH}` }); },
             drop: (k) => { ensureDNS(g); reorder(ownQueries(g, addr), di, k); cv.sel = { kind: "dom", addr, di: k }; commit(); } }),
             onkeydown: (e) => { if (e.key === "Enter") pick("dom", addr, di)(e); } },
             sv("title", {}, q.name + " (" + q.type + ") — " + why + (t && !sp && c !== "idle" ? upLine(t.uptime) : "")),
@@ -781,6 +799,11 @@
         svg.style.width = Math.round(W * s) + "px"; svg.style.height = Math.round(H * s) + "px";   // CSSOM, allowed by the CSP
         wrap.style.minHeight = Math.round(H * fitScale()) + "px";   // zooming out must not shrink the box out from under the pointer
       };
+      if (!cv.resizeBound) {   // a taller or shorter window changes how far the rows are spread: draw again once it has settled
+        cv.resizeBound = true;
+        let t = null;
+        window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (svgHost && svgHost.isConnected && cv.loaded && !cv.drag) draw(); }, 200); });
+      }
       fit();                       // sized before it goes in, so the box never sees it at another size (that would clamp the scroll)
       wrap.replaceChildren(svg);   // one step: no frame without a drawing
       cv.fit = fit;
