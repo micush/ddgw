@@ -1640,6 +1640,7 @@
     { k: "max_failed_logins", l: "Failed logins before lockout", t: "int", min: 1 },
     { k: "failed_login_window_minutes", l: "…within this many minutes", t: "int", min: 1 },
     { k: "lockout_minutes", l: "Lockout lasts (minutes)", t: "int", min: 1 },
+    { k: "min_password_length", l: "Minimum password length", t: "int", min: 0, max: 128, hint: "0 = 8" },
   ];
   const CLUSTER_FIELDS = [
     { k: "listen", l: "Binding address", t: "text" },

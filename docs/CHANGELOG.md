@@ -1,5 +1,56 @@
 # Changelog
 
+## [v194] - 2026-10-05 — Stream connection limits, cluster body checked after the signature, minimum password length, `__Host-` cookie, sessions end with the account
+
+### Security
+- **TCP and DNS over TLS: a connection could cost 64 KB for doing nothing, and there was no limit on connections.** A client announced a message length (up to 65535) and the whole buffer was allocated before a byte of the message arrived. The message is now read into a pooled buffer when it is small (up to 2 KB) and in pieces of 4 KB otherwise, so memory follows what has been received. A message shorter than a DNS header (12 bytes) closes the connection. TCP and DoT together are limited to 8192 connections and 256 per client (an IPv4 address or an IPv6 /64; the node itself is not limited per client); a connection over a limit is closed at once. Fixed constants, no new settings.
+- **The cluster port read up to 8 MB before it checked the signature.** A request now carries the SHA-256 of its body in `X-Ddgw-Body`, which the signature (unchanged in format) already covered. The signature is checked first and the body is read only after, then held to that hash (a body other than the signed one is refused). A request without the header (a peer older than v194, which cannot be checked before its body is read) may carry at most 64 KB unless its TLS client certificate is a known member's, in which case up to 8 MB as before. So until every node runs v194, a node on v192 (no certificate) cannot relay an upload larger than 64 KB through a v194 node; v193 and v194 nodes are not affected.
+- **The session cookie is now `__Host-ddgw_session`**, so a browser accepts it only if it is Secure, has Path=/ and no Domain. Everyone is asked to sign in again once after the update (the old cookie is not read).
+- **A password change did not end the user's open sessions.** Changing a user's password, deleting the user, or setting an expiry date that has already passed now signs that user out of every session on the node, including one on the node where the change is made and, in a cluster, on every node that applies it. A future expiry date does not end a session. The person who changes their own password is signed out as well.
+
+### Added
+- **Setting `web.min_password_length`** (Settings ▸ Web GUI, "Minimum password length"): the fewest characters of a password set on the Users page or with `--user-add` / `--user-password`. 1–128; empty or 0 is the default, **8** (before there was no minimum). It is not written to the file when unset, so a config that never set it stays readable by older versions. Existing passwords are not checked. Help text and `--help` updated.
+- Tests: `hardening2_test.go` (password length and its config, sessions ending for each kind of account change and for changes arriving from another node, the cookie rules, the stream limits and the incremental read, a short message, the body hash and the legacy size limit on the cluster port).
+
+### Changed
+- The Failed logins help text and README now say what v193 changed: that address, and that address together with that user name, are locked out, never a user name alone.
+- Two existing user tests used passwords shorter than the new default and now use longer ones.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub). `node --check` on `app.js` and `help.js`. Only the native amd64 build was built with PAM headers.
+
+### Not verified
+- No live run: not several real daemons (in particular a v193 to v194 update, and a cluster with a v192 node), no real PAM login, no browser (the new Settings field and the sign-in with the new cookie name were not looked at in Chromium; the field is one line in `WEB_FIELDS`).
+- The limit of 8192 connections and 256 per client is untested at that scale beyond the unit tests of the counters; a resolver farm behind one address that needs more than 256 connections will be refused (raise `maxStreamPerClient` in `dnsfront.go`).
+- Still not changed: the open-resolver defaults (`allowed_clients` empty, no `client_rate`), the GUI and cluster ports listening on all interfaces by default, the shared cluster secret (no rotation), and uploaded update sources being built and run as root without a signature.
+
+## [v193] - 2026-10-05 — Hardening: cluster identity, login lockout, upstream query IDs; faster cache path
+
+### Security
+- **A removed or rogue cluster node could get back in with the cluster secret alone.** The secret is shared by every member, and the identity a request claimed was only protected by it. The cluster listener now asks for a client certificate and `peerAuth` requires its fingerprint to be the identity the signed request claims. A removed member is also remembered by fingerprint (`removed_fp`), so it stays refused under another address. Once every member has been seen presenting its certificate (`mtls_fps`), the cluster becomes *strict* (`strict`, kept for good): only members already on the list are served, so holding the secret no longer makes a caller a member. Until then (a rolling update from v192 or older) members without a certificate still work; a member seen with a certificate may not drop it. A node that joins is announced to the other members at once (new `POST /cluster/peers/add`; older nodes answer 404, which is ignored), because a strict cluster refuses callers it has not been told about. The secret is still the same for all members and is not rotated when one is removed, and members still trust each other's gossip.
+- **The login lockout could be beaten with parallel requests.** The lockout was checked before PAM and the failure recorded after, so any number of simultaneous guesses all passed. Attempts are now reserved before PAM is asked: failures so far plus attempts under way may not reach `max_failed_logins`.
+- **Anyone could lock an administrator out.** The lockout was also keyed on the user name alone. It is now per address and per address+user name. Distributed guessing against one name is no longer slowed by a global per-user lock; PAM (faillock, or a delay) is the place for that.
+- **Login capacity and memory.** At most 32 logins wait for PAM at once; more get 503 with `Retry-After` and PAM is not asked. The failure table holds at most 50,000 records; past that no new per-user record is made (the per-address one always is).
+- **Client query IDs went upstream unchanged.** A client chooses its ID, and upstream sockets were reused for as long as they were busy, so a client that is also the attacker knew the ID and had only the source port left to guess. Each upstream exchange now carries a random ID and the client gets its own back; DNS UPDATE messages (which may be signed over the ID) are sent as they are. A busy upstream UDP socket is retired after 20 s or 1024 exchanges, so its source port changes.
+
+### Changed
+- **Clients waiting for the same question share the leader's result**, not only when it was cached. An answer that is not cached (SERVFAIL, truncated, a negative one without an SOA) or a failure is handed to every waiting client, as the cached answer already was, instead of each of them asking the upstream again.
+- **The question of a query is read once** (`parseQuestion`), and the cache key is built in a stack buffer and looked up as bytes, so a cache hit allocates the answer only (5 allocations and 288 ns became 1 and 145 ns in `BenchmarkCacheHit`). The key format is unchanged; a test compares it with the previous function on about 3,000 mutated queries. Each entry keeps its question end instead of working it out on every hit.
+- **The answer cache is also bounded in bytes**: `cache_entries` times 4096 bytes in all (an entry counts for its message, its key and 256 bytes of bookkeeping), oldest first, and one answer larger than a whole shard's share is not kept. No new setting. `/api/dns` cache statistics gain `bytes`.
+- **Fewer allocations per packet.** Received UDP queries are copied into pooled buffers, and the length prefix and answer of a stream (TCP, DoT) are assembled in a pooled buffer and written at once (one TLS record for DoT).
+- Forwarded queries are no longer byte-for-byte what the client sent (the ID differs). Four existing tests that asserted that now compare all but the ID.
+
+### Added
+- Tests: `cluster_identity_test.go` (certificate must match the claimed identity, no downgrade, legacy members, strict refusal of a non-member, removed node under a new address, re-join), `web_login_race_test.go` (parallel guesses bounded, no per-name lockout across addresses, table cap, full queue), `perf_test.go` (key equivalence, allocation-free hit, byte budget, shared uncacheable answer and failure, pooled buffers under load, TCP framing, `BenchmarkCacheHit`), and in `upstreamudp_test.go` random upstream IDs and socket retirement.
+
+### Verified
+- gofmt (clean), `go vet ./...`, `go build`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cross-compiles run with cgo off, so they build the PAM stub: they prove the code compiles, not that a PAM build works). Only the native amd64 build was built and tested with PAM headers present.
+
+### Not verified
+- No live run: not two or three real daemons (join, shared edit, promote, remove, update push, and above all a rolling update from v192, where strict mode must switch on by itself once every node has the new version), no real PAM login, no browser. Cluster, login and DNS changes were exercised by the in-process tests only.
+- The v192 to v193 update path itself (an `--update-push` between mixed versions) was not run.
+- Not changed: the 64 KB buffer a TCP/DoT connection allocates after its length prefix and the lack of a connection limit, the open-resolver defaults (`allowed_clients` empty, no `client_rate`), the shared cluster secret (no rotation), and the GUI and cluster ports listening on all interfaces by default.
+
 ## [v192] - 2026-10-05 — Updates and the installer find a snap-installed Go
 
 ### Fixed

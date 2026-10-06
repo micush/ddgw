@@ -143,7 +143,28 @@ func exchange(ctx context.Context, addr string, query []byte, tcp bool, timeout 
 }
 
 // exchangeOpt is exchange with the choice of not checking a TLS server's certificate (insecure).
+//
+// The query goes upstream under a fresh random ID, and the answer gets the client's ID back.  A client's own ID
+// must not be what an upstream sees: the client chooses it, so a client that is also the attacker would know it,
+// leaving only the source port (and over a reused socket, not even a new one each time) to guess before it could
+// get a forged answer accepted and cached for everyone.
 func exchangeOpt(ctx context.Context, addr string, query []byte, tcp bool, timeout time.Duration, insecure bool) ([]byte, time.Duration, error) {
+	if len(query) < 12 || (query[2]>>3)&0x0F != 0 {
+		// not a plain query (a dynamic update, say, which may be signed over its ID and whose answer is never cached)
+		return exchangeOptID(ctx, addr, query, tcp, timeout, insecure)
+	}
+	orig := binary.BigEndian.Uint16(query)
+	q := append([]byte(nil), query...)
+	binary.BigEndian.PutUint16(q, uint16(rand.Uint32()))
+	resp, rtt, err := exchangeOptID(ctx, addr, q, tcp, timeout, insecure)
+	if err == nil && len(resp) >= 2 {
+		binary.BigEndian.PutUint16(resp, orig)
+	}
+	return resp, rtt, err
+}
+
+// exchangeOptID is exchangeOpt with the query sent exactly as given.
+func exchangeOptID(ctx context.Context, addr string, query []byte, tcp bool, timeout time.Duration, insecure bool) ([]byte, time.Duration, error) {
 	if !tcp && !strings.HasPrefix(addr, dohScheme) && !strings.HasPrefix(addr, dotScheme) {
 		// plain UDP needs only a deadline: a child context per query registers with the parent (a lock shared by
 		// every query in flight) and was about a tenth of the lock waiting on a busy node

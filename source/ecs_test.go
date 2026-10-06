@@ -263,11 +263,11 @@ func TestForwardAttachesClientSubnet(t *testing.T) {
 	if _, err := off.ForwardFrom(context.Background(), q, false, client); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(srv.last(), q) {
+	if !sameExceptID(srv.last(), q) {
 		t.Fatal("with ECS off the query must be forwarded byte for byte")
 	}
 	// no known client (Forward without an address): nothing is attached either
-	if _, err := p.Forward(context.Background(), q, false); err != nil || !bytes.Equal(srv.last(), q) {
+	if _, err := p.Forward(context.Background(), q, false); err != nil || !sameExceptID(srv.last(), q) {
 		t.Fatal("without a client address there is nothing to attach")
 	}
 }
@@ -283,7 +283,7 @@ func TestForwardRetriesWithoutECSOnFormErr(t *testing.T) {
 	if h, _ := parseHeader(resp); h.rcode != 0 || h.ancount != 1 {
 		t.Fatalf("the client must get the real answer, got rcode=%d answers=%d", h.rcode, h.ancount)
 	}
-	if !bytes.Equal(srv.last(), q) {
+	if !sameExceptID(srv.last(), q) {
 		t.Fatal("the retry must be the original query")
 	}
 }
@@ -322,7 +322,7 @@ func TestForwardRetriesWithoutECSOnRefused(t *testing.T) {
 	if h, _ := parseHeader(resp); h.rcode != 0 || h.ancount != 1 {
 		t.Fatalf("the client must get the real answer, got rcode=%d answers=%d", h.rcode, h.ancount)
 	}
-	if !bytes.Equal(srv.last(), q1) {
+	if !sameExceptID(srv.last(), q1) {
 		t.Fatal("the retry must be the original query")
 	}
 	srv.mu.Lock()
@@ -355,4 +355,9 @@ func TestECSOnByDefaultInFiles(t *testing.T) {
 	if !defaultDNS().ECS {
 		t.Fatal("defaultDNS must have ECS on")
 	}
+}
+
+// sameExceptID: equal messages whatever their transaction IDs (the forwarder sends its own random ID upstream).
+func sameExceptID(a, b []byte) bool {
+	return len(a) == len(b) && len(a) >= 2 && bytes.Equal(a[2:], b[2:])
 }

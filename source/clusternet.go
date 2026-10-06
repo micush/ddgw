@@ -85,6 +85,7 @@ type joinRequest struct {
 	Token        string      `json:"token"`
 	Peer         ClusterPeer `json:"peer"`
 	ExplicitSelf bool        `json:"explicit_self"`
+	MTLS         bool        `json:"mtls,omitempty"` // the joiner presents its identity certificate on calls
 }
 
 type joinResponse struct {
@@ -226,6 +227,7 @@ func (c *Cluster) applyListener() {
 	mux.HandleFunc("GET /cluster/status", c.peerAuth(c.handleStatus))
 	mux.HandleFunc("GET /cluster/state", c.peerAuth(c.handleState))
 	mux.HandleFunc("POST /cluster/announce", c.peerAuth(c.handleAnnounce))
+	mux.HandleFunc("POST /cluster/peers/add", c.peerAuth(c.handlePeerAdd))
 	mux.HandleFunc("POST /cluster/peers/remove", c.peerAuth(c.handlePeerRemove))
 	mux.HandleFunc("POST /cluster/peers/unremove", c.peerAuth(c.handlePeerUnremove))
 	mux.HandleFunc("POST /cluster/admin", c.peerAuth(c.handleAdmin))
@@ -236,7 +238,9 @@ func (c *Cluster) applyListener() {
 	srv := &http.Server{
 		ErrorLog: log.New(io.Discard, "", 0), Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 2 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10,
-		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		// the client certificate is asked for but not chain-checked (there is no CA): peerAuth compares its
+		// fingerprint with the identity the signed request claims
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, ClientAuth: tls.RequestClientCert},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.srv, c.cancelSrv, c.listen = srv, cancel, c.cfg.Listen
@@ -268,18 +272,32 @@ func (c *Cluster) Stop() {
 
 func signMessage(secret []byte, peerHdr, ts, nonce, method, path string, body []byte) string {
 	bh := sha256.Sum256(body)
+	return signMessageHash(secret, peerHdr, ts, nonce, method, path, hex.EncodeToString(bh[:]))
+}
+
+// signMessageHash is signMessage with the hex SHA-256 of the body already known.  A request carries that hash in
+// X-Ddgw-Body, so the signature can be checked before the body is read; the body is then held to the hash.
+func signMessageHash(secret []byte, peerHdr, ts, nonce, method, path, bodyHash string) string {
 	mac := hmac.New(sha256.New, secret)
-	fmt.Fprintf(mac, "ddgw-cluster-v1\n%s\n%s\n%s\n%s\n%s\n%s", ts, nonce, method, path, peerHdr, hex.EncodeToString(bh[:]))
+	fmt.Fprintf(mac, "ddgw-cluster-v1\n%s\n%s\n%s\n%s\n%s\n%s", ts, nonce, method, path, peerHdr, bodyHash)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// legacyPreAuthBody is how much of a request body is read from a caller that cannot be told apart from a stranger
+// before its signature is checked: a peer older than v194 does not send X-Ddgw-Body, so its signature covers a
+// body that has to be read first.  A member known by its certificate may send up to maxPeerBody.
+const legacyPreAuthBody = 64 << 10
+
+func isHexHash(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }
 
 func (c *Cluster) peerAuth(h func(http.ResponseWriter, *http.Request, ClusterPeer, []byte)) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(rw, r.Body, maxPeerBody))
-		if err != nil {
-			jsonError(rw, http.StatusRequestEntityTooLarge, "request too large")
-			return
-		}
 		ts, nonce, sig, peerHdr := r.Header.Get("X-Ddgw-Ts"), r.Header.Get("X-Ddgw-Nonce"), r.Header.Get("X-Ddgw-Sig"), r.Header.Get("X-Ddgw-Peer")
 		t, err := strconv.ParseInt(ts, 10, 64)
 		if err != nil || nonce == "" || len(nonce) > 64 || sig == "" {
@@ -290,10 +308,51 @@ func (c *Cluster) peerAuth(h func(http.ResponseWriter, *http.Request, ClusterPee
 			jsonError(rw, http.StatusUnauthorized, "clock skew too large (check NTP on both nodes)")
 			return
 		}
-		want := signMessage(c.node.Secret(), peerHdr, ts, nonce, r.Method, r.URL.Path, body)
-		if subtle.ConstantTimeCompare([]byte(want), []byte(sig)) != 1 {
-			jsonError(rw, http.StatusUnauthorized, "unauthenticated")
-			return
+		// Nothing is read from a stranger before the signature is checked.  A request carries the hash of its
+		// body, which the signature covers: the signature is checked first, then the body is read and held to
+		// the hash.  A request from a peer that predates that header can only be checked after its body is
+		// read, so that is limited to a small size unless the TLS client certificate is a known member's.
+		var body []byte
+		if bodyHash := r.Header.Get("X-Ddgw-Body"); isHexHash(bodyHash) {
+			want := signMessageHash(c.node.Secret(), peerHdr, ts, nonce, r.Method, r.URL.Path, bodyHash)
+			if subtle.ConstantTimeCompare([]byte(want), []byte(sig)) != 1 {
+				jsonError(rw, http.StatusUnauthorized, "unauthenticated")
+				return
+			}
+			if r.ContentLength > maxPeerBody {
+				jsonError(rw, http.StatusRequestEntityTooLarge, "request too large")
+				return
+			}
+			body, err = io.ReadAll(http.MaxBytesReader(rw, r.Body, maxPeerBody))
+			if err != nil {
+				jsonError(rw, http.StatusRequestEntityTooLarge, "request too large")
+				return
+			}
+			if sum := sha256.Sum256(body); subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(bodyHash)) != 1 {
+				jsonError(rw, http.StatusUnauthorized, "the body is not the one that was signed")
+				return
+			}
+		} else {
+			limit := int64(legacyPreAuthBody)
+			if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+				if _, known := c.node.PeerByFp(certFingerprint(r.TLS.PeerCertificates[0])); known {
+					limit = maxPeerBody
+				}
+			}
+			if r.ContentLength > limit {
+				jsonError(rw, http.StatusRequestEntityTooLarge, "request too large")
+				return
+			}
+			body, err = io.ReadAll(http.MaxBytesReader(rw, r.Body, limit))
+			if err != nil {
+				jsonError(rw, http.StatusRequestEntityTooLarge, "request too large")
+				return
+			}
+			want := signMessage(c.node.Secret(), peerHdr, ts, nonce, r.Method, r.URL.Path, body)
+			if subtle.ConstantTimeCompare([]byte(want), []byte(sig)) != 1 {
+				jsonError(rw, http.StatusUnauthorized, "unauthenticated")
+				return
+			}
 		}
 		c.mu.Lock()
 		now := time.Now()
@@ -314,6 +373,34 @@ func (c *Cluster) peerAuth(h func(http.ResponseWriter, *http.Request, ClusterPee
 		if raw, err := base64.StdEncoding.DecodeString(peerHdr); err == nil {
 			json.Unmarshal(raw, &caller)
 		}
+		// The signature proves the caller holds the cluster secret, which every member (and every member that was
+		// ever removed) has.  The identity certificate it presented on the TLS connection proves which member it
+		// is: it must be the one the request claims, and that member must be on the list and not removed.
+		certFp := ""
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			certFp = certFingerprint(r.TLS.PeerCertificates[0])
+			if caller.Fp != certFp {
+				jsonError(rw, http.StatusUnauthorized, "the client certificate is not the identity this request claims")
+				return
+			}
+		}
+		if c.node.IsRemovedFp(caller.Fp) || certFp != "" && c.node.IsRemovedFp(certFp) {
+			writeJSON(rw, http.StatusForbidden, map[string]any{"ok": false, "error": "removed from the cluster", "removed": true})
+			return
+		}
+		strict := c.node.Strict()
+		switch {
+		case certFp == "" && (strict || c.node.IsMTLS(caller.Fp)):
+			jsonError(rw, http.StatusUnauthorized, "a client certificate is required")
+			return
+		case certFp != "":
+			if known, ok := c.node.PeerByFp(certFp); ok && known.NodeID == caller.NodeID {
+				c.node.NoteMTLS(certFp)
+			} else if strict {
+				jsonError(rw, http.StatusForbidden, "not a member of this cluster")
+				return
+			}
+		}
 		if caller.Addr != "" {
 			if containsStr(c.node.Snapshot().Removed, caller.Addr) {
 				writeJSON(rw, http.StatusForbidden, map[string]any{"ok": false, "error": "removed from the cluster", "removed": true})
@@ -321,6 +408,9 @@ func (c *Cluster) peerAuth(h func(http.ResponseWriter, *http.Request, ClusterPee
 			}
 			if validPeer(caller) && c.node.AddPeer(caller) {
 				infof("cluster: learned peer %s (node %s)", caller.Addr, caller.NodeID)
+				if certFp != "" {
+					c.node.NoteMTLS(certFp)
+				}
 			}
 		}
 		h(rw, r, caller, body)
@@ -463,11 +553,15 @@ func (c *Cluster) callAddr(ctx context.Context, addr string, peer ClusterPeer, m
 	req.Header.Set("X-Ddgw-Peer", peerHdr)
 	req.Header.Set("X-Ddgw-Ts", ts)
 	req.Header.Set("X-Ddgw-Nonce", nonce)
-	req.Header.Set("X-Ddgw-Sig", signMessage(c.node.Secret(), peerHdr, ts, nonce, method, path, body))
+	bsum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(bsum[:])
+	req.Header.Set("X-Ddgw-Body", bodyHash)
+	req.Header.Set("X-Ddgw-Sig", signMessageHash(c.node.Secret(), peerHdr, ts, nonce, method, path, bodyHash))
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := pinnedClient(addr, peer.Fp, timeout).Do(req)
+	me, _ := c.node.Identity()
+	resp, err := pinnedClientAs(addr, peer.Fp, timeout, &me).Do(req)
 	if err != nil {
 		return err
 	}
@@ -566,6 +660,26 @@ func (c *Cluster) setConflict(s string) {
 	warnf("cluster: %s", s)
 }
 
+// handlePeerAdd tells this node about a member that just joined through another node, so it does not have to wait
+// for the next sync to serve it (a strict cluster refuses callers it has not been told about).
+func (c *Cluster) handlePeerAdd(rw http.ResponseWriter, r *http.Request, caller ClusterPeer, body []byte) {
+	var m struct {
+		Peer ClusterPeer `json:"peer"`
+		MTLS bool        `json:"mtls,omitempty"`
+	}
+	if json.Unmarshal(body, &m) != nil || !validPeer(m.Peer) {
+		jsonError(rw, http.StatusBadRequest, "bad request")
+		return
+	}
+	if c.node.AddPeer(m.Peer) {
+		infof("cluster: %s (node %s) joined through %s", m.Peer.Addr, m.Peer.NodeID, caller.Addr)
+	}
+	if m.MTLS {
+		c.node.NoteMTLS(m.Peer.Fp)
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (c *Cluster) handlePeerRemove(rw http.ResponseWriter, r *http.Request, caller ClusterPeer, body []byte) {
 	var m struct {
 		Addr string `json:"addr"`
@@ -654,8 +768,14 @@ func (c *Cluster) handleJoin(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.node.UnremovePeer(peer.Addr)
+	c.node.UnremoveFp(peer.Fp) // a token is an administrator's decision to let this identity in
 	c.node.AddPeer(peer)
+	if req.MTLS {
+		c.node.NoteMTLS(peer.Fp)
+	}
 	snap := c.node.Snapshot()
+	// tell the other members now: the joiner calls them (the primary above all) as soon as it has our answer
+	c.broadcast(snap.Peers, "/cluster/peers/add", map[string]any{"peer": peer, "mtls": req.MTLS})
 	infof("cluster: %s (node %s) joined", peer.Addr, peer.NodeID)
 	writeJSON(rw, http.StatusOK, joinResponse{
 		Secret: base64.RawStdEncoding.EncodeToString(c.node.Secret()), Epoch: snap.Epoch, PrimaryAddr: snap.PrimaryAddr,
@@ -787,7 +907,7 @@ func (c *Cluster) Join(ctx context.Context, code, by string) error {
 	c.mu.Lock()
 	explicit := c.cfg.Self != ""
 	c.mu.Unlock()
-	req := joinRequest{Token: jc.Token, Peer: c.node.Self(), ExplicitSelf: explicit}
+	req := joinRequest{Token: jc.Token, Peer: c.node.Self(), ExplicitSelf: explicit, MTLS: true}
 	var errs []string
 	for _, addr := range jc.Addrs {
 		if !validHostPort(addr) {

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -25,6 +26,13 @@ const (
 	udpReaders   = 4    // goroutines reading the UDP socket
 	udpWorkers   = 64   // goroutines that stay alive to answer UDP queries (see readUDP)
 	tcpIdle      = 10 * time.Second
+
+	// Stream connections (TCP and DoT) are limited in number: each costs a goroutine and whatever it is in the
+	// middle of reading, and unlike UDP the client's address cannot be forged.  Over the limit the connection is
+	// closed at once.  A client is one IPv4 address or one IPv6 /64; the node itself is not limited per client.
+	maxStreamConns     = 8192
+	maxStreamPerClient = 256
+	readChunk          = 4096 // a message longer than a pooled buffer is read in pieces of this size
 )
 
 // DNSFrontend serves DNS on one VIP (UDP + TCP) and relays every query
@@ -48,7 +56,12 @@ type DNSFrontend struct {
 	sem     chan struct{}
 
 	fmu    sync.Mutex
-	flight map[string]chan struct{} // cache keys being fetched from an upstream right now
+	flight map[string]*flightCall // cache keys being fetched from an upstream right now
+
+	smu       sync.Mutex
+	streams   int                // open TCP and DoT connections
+	streamsBy map[netip.Addr]int // ... by client
+	refused   atomic.Uint64      // connections turned away at the limit
 
 	upd updateState
 }
@@ -157,12 +170,15 @@ func (f *DNSFrontend) resolve(query []byte, tcp bool, client netip.Addr) []byte 
 	if timed {
 		t0 = time.Now()
 	}
-	resp := f.resolveRaw(query, tcp, client)
+	var qi qinfo // the question, read once for the cache key and for the statistics
+	parseQuestion(query, &qi)
+	resp := f.resolveRaw(query, tcp, client, &qi)
 	if timed && f.ctx.Err() == nil {
 		f.gw.lat(time.Since(t0))
 	}
 	if f.ctx.Err() == nil {
-		if name, qt, ok := questionOf(query); ok {
+		if qi.ok {
+			name, qt := qi.name(), qi.qtype
 			rc := rcodeServFail
 			if h, hok := parseHeader(resp); hok {
 				rc = h.rcode
@@ -178,16 +194,19 @@ func (f *DNSFrontend) resolve(query []byte, tcp bool, client netip.Addr) []byte 
 	return resp
 }
 
-func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr) []byte {
+func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr, qi *qinfo) []byte {
 	p := f.pool()
 	if p == nil {
 		return errorResponse(query, rcodeServFail)
 	}
 	var ckey string
-	cacheable := false
+	var call *flightCall
+	cacheable, leader := false, false
 	if c := p.cache; c != nil {
-		if ckey, cacheable = c.keyFor(query, tcp, client, p.cfg.ECS, p.cfg.ECSPrefix4, p.cfg.ECSPrefix6); cacheable {
-			if r := c.get(ckey, query); r != nil {
+		var kbuf [384]byte
+		var kb []byte
+		if kb, cacheable = c.keyBytes(kbuf[:0], query, qi, tcp, client, p.cfg.ECS, p.cfg.ECSPrefix4, p.cfg.ECSPrefix6); cacheable {
+			if r := c.getBytes(kb, query, qi.nameEnd+4); r != nil {
 				c.Hits.Add(1)
 				qstats.RecordCache(true)
 				f.gw.addHit()
@@ -195,14 +214,15 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr) []by
 				p.Answered.Add(1)
 				return r
 			}
+			ckey = string(kb) // a miss: the key is kept (flight table, cache)
 			// the same question already on its way to an upstream: wait for that answer instead of sending another
-			done, leader := f.joinFlight(ckey)
+			call, leader = f.joinFlight(ckey)
 			if !leader {
 				select {
-				case <-done:
+				case <-call.done:
 				case <-f.ctx.Done():
 				}
-				if r := c.get(ckey, query); r != nil { // served from the leader's answer: a hit
+				if r := c.getBytes(kb, query, qi.nameEnd+4); r != nil { // served from the leader's answer: a hit
 					c.Hits.Add(1)
 					qstats.RecordCache(true)
 					f.gw.addHit()
@@ -210,8 +230,27 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr) []by
 					p.Answered.Add(1)
 					return r
 				}
+				// An answer that does not go into the cache (SERVFAIL, a truncated one, a negative one without a
+				// SOA) is shared all the same, and so is a failure: asking again for each waiting client
+				// would multiply the load on an upstream that is already struggling.
+				if f.ctx.Err() == nil {
+					switch {
+					case call.err != nil:
+						c.Misses.Add(1)
+						qstats.RecordCache(false)
+						p.Queries.Add(1)
+						p.Failed.Add(1)
+						return errorResponse(query, rcodeServFail)
+					case call.resp != nil:
+						c.Misses.Add(1)
+						qstats.RecordCache(false)
+						p.Queries.Add(1)
+						p.Answered.Add(1)
+						return adaptResponse(call.resp, query, qi.nameEnd+4)
+					}
+				}
 			} else {
-				defer f.endFlight(ckey, done)
+				defer func() { f.endFlight(ckey, call) }()
 			}
 			c.Misses.Add(1)
 			qstats.RecordCache(false)
@@ -220,6 +259,12 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr) []by
 		}
 	}
 	resp, err := p.ForwardFrom(f.ctx, query, tcp, client)
+	if leader {
+		call.resp, call.err = resp, err
+		if err != nil {
+			call.resp = nil
+		}
+	}
 	if err == nil && cacheable {
 		p.cache.put(ckey, resp)
 	}
@@ -231,6 +276,20 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr) []by
 		return errorResponse(query, rcodeServFail)
 	}
 	return resp
+}
+
+// adaptResponse makes the answer a flight leader got fit another client's query of the same question: that
+// query's ID and its own spelling of the name (0x20 randomisation), as a cached answer gets them.  resp is not
+// changed: it is shared by every waiter.
+func adaptResponse(resp, q []byte, qEnd int) []byte {
+	out := append([]byte(nil), resp...)
+	if len(out) >= 2 && len(q) >= 2 {
+		copy(out[0:2], q[0:2])
+	}
+	if e, ok := questionEnd(out); ok && e == qEnd && qEnd <= len(q) {
+		copy(out[12:qEnd], q[12:qEnd])
+	}
+	return out
 }
 
 // bigRcvBuf asks for a large receive buffer on the listening socket: a burst of queries that arrives while every
@@ -254,27 +313,35 @@ func bigRcvBuf(pc net.PacketConn) {
 	uc.SetReadBuffer(want)
 }
 
-// joinFlight registers a fetch of key.  The first caller is the leader (done is its channel, to be passed to
-// endFlight); the others get the leader's channel to wait on.
-func (f *DNSFrontend) joinFlight(key string) (done chan struct{}, leader bool) {
-	f.fmu.Lock()
-	defer f.fmu.Unlock()
-	if ch, ok := f.flight[key]; ok {
-		return ch, false
-	}
-	if f.flight == nil {
-		f.flight = map[string]chan struct{}{}
-	}
-	ch := make(chan struct{})
-	f.flight[key] = ch
-	return ch, true
+// flightCall is one fetch from an upstream that other clients asking the same question wait for.  resp and err
+// are set by the leader before done is closed, and read by the waiters only after.
+type flightCall struct {
+	done chan struct{}
+	resp []byte // what the upstream answered, when it did
+	err  error  // why it could not, when it could not
 }
 
-func (f *DNSFrontend) endFlight(key string, done chan struct{}) {
+// joinFlight registers a fetch of key.  The first caller is the leader (it passes the call to endFlight when it
+// has its answer); the others get the same call to wait on.
+func (f *DNSFrontend) joinFlight(key string) (call *flightCall, leader bool) {
+	f.fmu.Lock()
+	defer f.fmu.Unlock()
+	if c, ok := f.flight[key]; ok {
+		return c, false
+	}
+	if f.flight == nil {
+		f.flight = map[string]*flightCall{}
+	}
+	c := &flightCall{done: make(chan struct{})}
+	f.flight[key] = c
+	return c, true
+}
+
+func (f *DNSFrontend) endFlight(key string, call *flightCall) {
 	f.fmu.Lock()
 	delete(f.flight, key)
 	f.fmu.Unlock()
-	close(done)
+	close(call.done)
 }
 
 func (f *DNSFrontend) serveUDP(pc net.PacketConn) {
@@ -305,12 +372,25 @@ func (f *DNSFrontend) serveUDP(pc net.PacketConn) {
 type udpJob struct {
 	rep    *udpReplier
 	q      []byte
+	bp     *[]byte // the pooled buffer q lives in, to be given back when the query is answered; nil if q is not pooled
 	client net.Addr
 }
+
+// queryBufSize is the largest query kept in a pooled buffer (EDNS clients rarely send more than a kilobyte or
+// two); a larger one gets a buffer of its own.
+const queryBufSize = 2048
+
+// queryBufs holds the buffers received queries are copied into: a query used to cost an allocation of its own
+// for every packet.  Nothing keeps a reference to the query once resolve has returned (the statistics copy the
+// name, the cache stores a copy of the answer, a flight shares the answer, not the query).
+var queryBufs = sync.Pool{New: func() any { b := make([]byte, 0, queryBufSize); return &b }}
 
 func (f *DNSFrontend) answerUDP(j udpJob) {
 	if resp := f.resolve(j.q, false, addrOf(j.client)); resp != nil {
 		j.rep.WriteTo(resp, j.client)
+	}
+	if j.bp != nil {
+		queryBufs.Put(j.bp)
 	}
 }
 
@@ -339,7 +419,14 @@ func (f *DNSFrontend) readUDP(pc net.PacketConn, rep *udpReplier, jobs chan<- ud
 		if n < 12 {
 			continue
 		}
-		j := udpJob{rep: rep, q: append([]byte(nil), buf[:n]...), client: client}
+		j := udpJob{rep: rep, client: client}
+		if n <= queryBufSize {
+			j.bp = queryBufs.Get().(*[]byte)
+			*j.bp = append((*j.bp)[:0], buf[:n]...)
+			j.q = *j.bp
+		} else {
+			j.q = append([]byte(nil), buf[:n]...)
+		}
 		select {
 		case jobs <- j:
 			continue
@@ -348,6 +435,9 @@ func (f *DNSFrontend) readUDP(pc net.PacketConn, rep *udpReplier, jobs chan<- ud
 		select {
 		case f.sem <- struct{}{}:
 		default:
+			if j.bp != nil {
+				queryBufs.Put(j.bp)
+			}
 			continue // overloaded: drop, client will retry
 		}
 		f.wg.Add(1)
@@ -356,6 +446,37 @@ func (f *DNSFrontend) readUDP(pc net.PacketConn, rep *udpReplier, jobs chan<- ud
 			defer func() { <-f.sem }()
 			f.answerUDP(j)
 		}()
+	}
+}
+
+// streamAcquire counts a new TCP or DoT connection from client, or says it is over the limit.
+func (f *DNSFrontend) streamAcquire(client netip.Addr) (key netip.Addr, ok bool) {
+	key = client.Unmap()
+	if key.IsValid() {
+		key = clientKey(key)
+	}
+	f.smu.Lock()
+	defer f.smu.Unlock()
+	local := key.IsLoopback()
+	if f.streams >= maxStreamConns || !local && f.streamsBy[key] >= maxStreamPerClient {
+		return key, false
+	}
+	if f.streamsBy == nil {
+		f.streamsBy = map[netip.Addr]int{}
+	}
+	f.streams++
+	f.streamsBy[key]++
+	return key, true
+}
+
+func (f *DNSFrontend) streamRelease(key netip.Addr) {
+	f.smu.Lock()
+	defer f.smu.Unlock()
+	f.streams--
+	if n := f.streamsBy[key] - 1; n > 0 {
+		f.streamsBy[key] = n
+	} else {
+		delete(f.streamsBy, key)
 	}
 }
 
@@ -370,13 +491,57 @@ func (f *DNSFrontend) serveTCP(l net.Listener) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
+		key, ok := f.streamAcquire(addrOf(c.RemoteAddr()))
+		if !ok {
+			f.refused.Add(1)
+			c.Close()
+			continue
+		}
 		f.wg.Add(1)
 		go func() {
 			defer f.wg.Done()
+			defer f.streamRelease(key)
 			f.handleTCP(c)
 		}()
 	}
 }
+
+// readStreamMessage reads the n bytes of a message that a stream client announced.  A message that fits a pooled
+// buffer is read into one (bp is then to be given back to queryBufs); a longer one is read in pieces, so memory is
+// used only for what the client has really sent, not for what it said it would: a client that announces 64 KB
+// and sends nothing used to cost 64 KB for as long as it held the connection.
+func readStreamMessage(c net.Conn, n int) (msg []byte, bp *[]byte, err error) {
+	if n <= queryBufSize {
+		bp = queryBufs.Get().(*[]byte)
+		msg = (*bp)[:n]
+		if _, err = io.ReadFull(c, msg); err != nil {
+			queryBufs.Put(bp)
+			return nil, nil, err
+		}
+		return msg, bp, nil
+	}
+	msg = make([]byte, 0, readChunk)
+	for len(msg) < n {
+		step := n - len(msg)
+		if step > readChunk {
+			step = readChunk
+		}
+		if cap(msg)-len(msg) < step {
+			grown := make([]byte, len(msg), 2*cap(msg))
+			copy(grown, msg)
+			msg = grown
+		}
+		m, err := io.ReadFull(c, msg[len(msg):len(msg)+step])
+		msg = msg[:len(msg)+m]
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return msg, nil, nil
+}
+
+// respBufs holds the buffers a stream answer (length prefix and message) is assembled in.
+var respBufs = sync.Pool{New: func() any { b := make([]byte, 0, 1024); return &b }}
 
 func (f *DNSFrontend) handleTCP(c net.Conn) {
 	defer c.Close()
@@ -388,19 +553,33 @@ func (f *DNSFrontend) handleTCP(c net.Conn) {
 		if _, err := io.ReadFull(c, lb[:]); err != nil {
 			return
 		}
-		q := make([]byte, binary.BigEndian.Uint16(lb[:]))
-		if _, err := io.ReadFull(c, q); err != nil {
+		n := int(binary.BigEndian.Uint16(lb[:]))
+		if n < 12 {
+			return // not a DNS message
+		}
+		q, qbp, err := readStreamMessage(c, n)
+		if err != nil {
 			return
 		}
 		resp := f.resolve(q, true, addrOf(c.RemoteAddr()))
+		if qbp != nil {
+			queryBufs.Put(qbp) // nothing keeps the query once resolve has returned
+		}
 		if resp == nil {
 			return
 		}
-		out := make([]byte, 2+len(resp))
+		// the length prefix and the answer go out in one write (one TLS record for DoT), from a pooled buffer
+		bp := respBufs.Get().(*[]byte)
+		out := append((*bp)[:0], 0, 0)
 		binary.BigEndian.PutUint16(out, uint16(len(resp)))
-		copy(out[2:], resp)
+		out = append(out, resp...)
 		c.SetWriteDeadline(time.Now().Add(tcpIdle))
-		if _, err := c.Write(out); err != nil {
+		_, err = c.Write(out)
+		if cap(out) <= 16<<10 { // do not keep a buffer that one huge answer grew
+			*bp = out[:0]
+			respBufs.Put(bp)
+		}
+		if err != nil {
 			return
 		}
 	}

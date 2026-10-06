@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Users: the local accounts that may sign in to the web GUI, which are the
@@ -166,7 +167,7 @@ func userDate(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format("2006-01-02")
 }
 
-func checkPassword(p string) error {
+func checkPassword(p string, min int) error {
 	switch {
 	case p == "":
 		return errors.New("a password is required")
@@ -174,9 +175,31 @@ func checkPassword(p string) error {
 		return errors.New("the password is too long")
 	case strings.ContainsAny(p, "\r\n"):
 		return errors.New("the password may not contain a line break")
+	case utf8.RuneCountInString(p) < min:
+		return fmt.Errorf("the password must have at least %d characters", min)
 	}
 	return nil
 }
+
+// checkPassword applies the rules of the Users page, with the minimum length of the web settings.
+func (m *Mgmt) checkPassword(p string) error {
+	min := defaultMinPassword
+	if pol := m.webPolicy.Load(); pol != nil {
+		min = pol.minPassword()
+	}
+	return checkPassword(p, min)
+}
+
+// endUserSessions signs name out of every browser session on this node.  It is called when the account's
+// password changes, when it is deleted and when it has expired: a session that was open must not outlive that.
+func (m *Mgmt) endUserSessions(name string) {
+	if fn := m.endSessions.Load(); fn != nil {
+		(*fn)(name)
+	}
+}
+
+// expiredNow: an expiry date (Unix seconds, 0 = none) that has already passed.
+func expiredNow(expires int64) bool { return expires > 0 && expires <= usersNow().Unix() }
 
 func (m *Mgmt) setUserPassword(name, password string) error {
 	// chpasswd reads "name:password" lines; a line break would add a second
@@ -321,6 +344,7 @@ func (m *Mgmt) usersPeer(msg usersMsg, by string) error {
 				return err
 			}
 		}
+		m.endUserSessions(name) // a changed password ends the sessions that were signed in with the old one
 		infof("users: %s set up account %q here", by, name)
 	case "expiry":
 		if err := m.requireMember(name); err != nil {
@@ -328,6 +352,9 @@ func (m *Mgmt) usersPeer(msg usersMsg, by string) error {
 		}
 		if err := m.setExpiry(name, msg.Expires); err != nil {
 			return err
+		}
+		if expiredNow(msg.Expires) {
+			m.endUserSessions(name)
 		}
 		infof("users: %s changed the expiry of %q here", by, name)
 	case "delete":
@@ -343,6 +370,7 @@ func (m *Mgmt) usersPeer(msg usersMsg, by string) error {
 		if out, err := usersRun("", "userdel", name); err != nil {
 			return fmt.Errorf("userdel failed: %s", firstNonEmpty(out, err.Error()))
 		}
+		m.endUserSessions(name)
 		infof("users: %s deleted account %q here", by, name)
 	default:
 		return errors.New("unknown request")
@@ -387,7 +415,7 @@ func (m *Mgmt) UserAdd(name, password string, expires int64, actor string) (stri
 	if !validUserName(name) || name == "root" {
 		return "", false, errors.New("a user name is 1-32 characters: lower-case letters, digits, _ or -, starting with a letter or _")
 	}
-	if err := checkPassword(password); err != nil {
+	if err := m.checkPassword(password); err != nil {
 		return "", false, err
 	}
 	if userExists(name) {
@@ -410,12 +438,13 @@ func (m *Mgmt) UserPassword(name, password, actor string) (string, bool, error) 
 	if err := m.requireMember(name); err != nil {
 		return "", false, err
 	}
-	if err := checkPassword(password); err != nil {
+	if err := m.checkPassword(password); err != nil {
 		return "", false, err
 	}
 	if err := m.setUserPassword(name, password); err != nil {
 		return "", false, err
 	}
+	m.endUserSessions(name)
 	infof("users: %s changed the password of %q", actor, name)
 	msg, partial := m.usersFan(usersMsg{Op: "apply", Name: name, Hash: shadowHash(name), Expires: localExpiry(name), By: actor}, "Password changed for "+name+".")
 	return msg, partial, nil
@@ -432,6 +461,9 @@ func (m *Mgmt) UserExpiry(name string, expires int64, actor string) (string, boo
 	what := name + " no longer expires."
 	if expires > 0 {
 		what = name + " expires " + userDate(expires) + "."
+	}
+	if expiredNow(expires) {
+		m.endUserSessions(name)
 	}
 	infof("users: %s set the expiry of %q to %s", actor, name, firstNonEmpty(userDate(expires), "never"))
 	msg, partial := m.usersFan(usersMsg{Op: "expiry", Name: name, Expires: expires, By: actor}, what)
@@ -458,6 +490,7 @@ func (m *Mgmt) UserDelete(name, actor string) (string, bool, error) {
 	if out, err := usersRun("", "userdel", name); err != nil {
 		return "", false, fmt.Errorf("userdel failed: %s", firstNonEmpty(out, err.Error()))
 	}
+	m.endUserSessions(name)
 	infof("users: %s deleted account %q", actor, name)
 	msg, partial := m.usersFan(usersMsg{Op: "delete", Name: name, By: actor}, "User "+name+" deleted.")
 	return msg, partial, nil

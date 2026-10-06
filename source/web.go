@@ -32,7 +32,7 @@ var webFS embed.FS
 var failDelay = 400 * time.Millisecond
 
 const (
-	sessionCookie  = "ddgw_session"
+	sessionCookie  = "__Host-ddgw_session" // the prefix makes a browser take it only if Secure, Path=/ and without Domain
 	sessionMaxAge  = 12 * time.Hour
 	groupRecheck   = time.Minute
 	failWindow     = 10 * time.Minute // join-token failures (cluster)
@@ -40,6 +40,8 @@ const (
 	maxBody        = 1 << 20
 	maxLoginBody   = 4 << 10
 	maxUsernameLen = 128
+	maxFailKeys    = 50000 // lockout records kept; a flood of made-up user names cannot grow memory past this
+	maxLoginQueue  = 32    // login attempts being checked or waiting for PAM at once; more are turned away at once
 )
 
 // Authenticator checks passwords and group membership.  The production
@@ -85,9 +87,10 @@ type session struct {
 }
 
 type failRec struct {
-	count  int
-	first  time.Time
-	locked time.Time
+	count    int
+	inflight int // login attempts that passed the lockout check and have not finished yet
+	first    time.Time
+	locked   time.Time
 }
 
 // WebServer is the HTTPS management GUI.  It runs inside the daemon and calls
@@ -104,6 +107,7 @@ type WebServer struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	fails    map[string]*failRec
+	loginQ   chan struct{} // bounds the logins waiting for PAM
 
 	applyMu sync.Mutex
 	running *WebConfig
@@ -115,10 +119,29 @@ func NewWebServer(mg *Mgmt, status *StatusServer, auth Authenticator) *WebServer
 	w := &WebServer{
 		mg: mg, confPath: mg.confPath, certs: mg.certs, status: status, auth: auth,
 		sessions: map[string]*session{}, fails: map[string]*failRec{},
+		loginQ: make(chan struct{}, maxLoginQueue),
 	}
 	d := defaultWeb()
 	w.policy.Store(&d)
+	fn := w.endSessionsFor
+	mg.endSessions.Store(&fn)
 	return w
+}
+
+// endSessionsFor ends every session of user on this node.
+func (w *WebServer) endSessionsFor(user string) {
+	n := 0
+	w.mu.Lock()
+	for k, s := range w.sessions {
+		if s.user == user {
+			delete(w.sessions, k)
+			n++
+		}
+	}
+	w.mu.Unlock()
+	if n > 0 {
+		infof("web: %d session(s) of %q ended (the account changed)", n, user)
+	}
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
@@ -230,7 +253,7 @@ func (w *WebServer) janitor(ctx context.Context) {
 			}
 			pol := w.policy.Load()
 			for k, f := range w.fails {
-				if now.After(f.locked) && now.Sub(f.first) > pol.failWindow() {
+				if f.inflight == 0 && now.After(f.locked) && now.Sub(f.first) > pol.failWindow() {
 					delete(w.fails, k)
 				}
 			}
@@ -434,7 +457,44 @@ func validUsername(u string) bool {
 	return true
 }
 
-// throttled reports whether ip or user is currently locked out.
+// loginKeys are what a login attempt is counted against: the address, and the address together with the user
+// name.  There is deliberately no key for the user name alone: that would let anyone who can reach the page lock
+// a known administrator out by failing a few logins for that name.
+func loginKeys(ip, user string) []string {
+	return []string{"ip:" + ip, "ipuser:" + ip + "|" + strings.ToLower(user)}
+}
+
+// failRecLocked returns the record of key, started afresh when its window has run out; nil when it does not
+// exist and none may be created (w.mu held).  Records of a user name seen from an address are not created once
+// maxFailKeys are held, after the expired ones are swept; the per-address record always is (an address cannot be
+// invented the way a user name can).
+func (w *WebServer) failRecLocked(k string, now time.Time, pol *WebConfig, create bool) *failRec {
+	f := w.fails[k]
+	if f != nil {
+		if f.inflight == 0 && now.After(f.locked) && now.Sub(f.first) > pol.failWindow() {
+			f.count, f.first = 0, now
+		}
+		return f
+	}
+	if !create {
+		return nil
+	}
+	if len(w.fails) >= maxFailKeys {
+		for kk, ff := range w.fails {
+			if ff.inflight == 0 && now.After(ff.locked) && now.Sub(ff.first) > pol.failWindow() {
+				delete(w.fails, kk)
+			}
+		}
+		if len(w.fails) >= maxFailKeys && strings.HasPrefix(k, "ipuser:") {
+			return nil
+		}
+	}
+	f = &failRec{first: now}
+	w.fails[k] = f
+	return f
+}
+
+// throttled reports whether any of keys is currently locked out.
 func (w *WebServer) throttled(keys ...string) (time.Duration, bool) {
 	now := time.Now()
 	w.mu.Lock()
@@ -447,19 +507,60 @@ func (w *WebServer) throttled(keys ...string) (time.Duration, bool) {
 	return 0, false
 }
 
-// noteFailure records a failed login for every key and reports, if one of them
-// is now locked out, for how long.  The number of attempts still allowed is
-// deliberately not reported to anyone: it would tell a guesser how many tries it has.
-func (w *WebServer) noteFailure(keys ...string) (lockedFor time.Duration) {
+// reserve claims one login attempt on every key before PAM is asked.  The lockout used to be checked first and
+// the failure recorded only after PAM answered, so any number of parallel requests all passed the check and got
+// a guess each.  Now the failures counted so far plus the attempts under way may not reach the limit: a request
+// that would exceed it is refused (ok false, with how long to wait) without PAM being consulted.  A granted
+// reservation is given back with release, which is also where a failure is counted.
+func (w *WebServer) reserve(keys ...string) (wait time.Duration, ok bool) {
+	pol := w.policy.Load()
+	now := time.Now()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var got []*failRec
+	for _, k := range keys {
+		f := w.failRecLocked(k, now, pol, true)
+		if f == nil {
+			continue
+		}
+		if now.Before(f.locked) {
+			wait = f.locked.Sub(now)
+		} else if f.count+f.inflight >= pol.MaxFailedLogins {
+			wait = time.Second // attempts already under way may use up the allowance: try again shortly
+		}
+		if wait > 0 {
+			for _, g := range got {
+				g.inflight--
+			}
+			return wait, false
+		}
+		f.inflight++
+		got = append(got, f)
+	}
+	return 0, true
+}
+
+// release ends a reservation made by reserve; failed counts the attempt as a failed login on every key and
+// reports, if one of them is now locked out, for how long.  The number of attempts still allowed is deliberately
+// not reported to anyone: it would tell a guesser how many tries it has.
+func (w *WebServer) release(failed bool, keys ...string) (lockedFor time.Duration) {
 	pol := w.policy.Load()
 	now := time.Now()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for _, k := range keys {
 		f := w.fails[k]
-		if f == nil || now.Sub(f.first) > pol.failWindow() {
-			f = &failRec{first: now}
-			w.fails[k] = f
+		if f == nil {
+			continue
+		}
+		if f.inflight > 0 {
+			f.inflight--
+		}
+		if !failed {
+			continue
+		}
+		if now.Sub(f.first) > pol.failWindow() && !now.Before(f.locked) {
+			f.count, f.first = 0, now
 		}
 		f.count++
 		if f.count >= pol.MaxFailedLogins {
@@ -498,7 +599,11 @@ func lockoutError(rw http.ResponseWriter, wait time.Duration) {
 func (w *WebServer) clearFailures(keys ...string) {
 	w.mu.Lock()
 	for _, k := range keys {
-		delete(w.fails, k)
+		if f := w.fails[k]; f != nil && f.inflight == 0 {
+			delete(w.fails, k)
+		} else if f != nil {
+			f.count = 0
+		}
 	}
 	w.mu.Unlock()
 }
@@ -516,8 +621,16 @@ func (w *WebServer) handleLogin(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	keys := []string{"ip:" + ip, "user:" + strings.ToLower(req.Username)}
-	if wait, locked := w.throttled(keys...); locked {
+	keys := loginKeys(ip, req.Username)
+	select {
+	case w.loginQ <- struct{}{}:
+		defer func() { <-w.loginQ }()
+	default:
+		rw.Header().Set("Retry-After", "2")
+		jsonError(rw, http.StatusServiceUnavailable, "Too many logins at once; try again in a moment.")
+		return
+	}
+	if wait, ok := w.reserve(keys...); !ok {
 		lockoutError(rw, wait)
 		return
 	}
@@ -537,11 +650,11 @@ func (w *WebServer) handleLogin(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if reason != "" {
-		lockedFor := w.noteFailure(keys...)
+		lockedFor := w.release(true, keys...)
 		warnf("web: login failed for %q from %s: %s", req.Username, ip, reason)
 		time.Sleep(failDelay)
 		if lockedFor > 0 {
-			warnf("web: locking out %q / %s for %s after repeated failed logins", req.Username, ip, lockedFor.Round(time.Second))
+			warnf("web: locking out %q from %s for %s after repeated failed logins", req.Username, ip, lockedFor.Round(time.Second))
 			lockoutError(rw, lockedFor)
 			return
 		}
@@ -551,6 +664,7 @@ func (w *WebServer) handleLogin(rw http.ResponseWriter, r *http.Request) {
 			"error": "Login failed: wrong username or password, or not authorized."})
 		return
 	}
+	w.release(false, keys...)
 	w.clearFailures(keys...)
 
 	now := time.Now()

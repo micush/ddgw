@@ -192,7 +192,8 @@ Web GUI ("web" block): everything above is also available in a browser.
   session_idle_minutes default 30
   max_failed_logins    default 3   wrong passwords ...
   failed_login_window_minutes default 1    ... within this window lock the
-  lockout_minutes      default 15  address and user name out for this long
+  lockout_minutes      default 15  address (and address with user name) out for this long
+  min_password_length  default 8   fewest characters of a password set on the Users page
   The certificate is managed with --tls-* / Settings ▸ Web GUI (the old
   cert_file/key_file settings still work and take precedence).
   Pages: Topology (--canvas, --canvas-add/-del: draw gateways, DNS servers and

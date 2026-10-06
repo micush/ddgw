@@ -20,13 +20,17 @@ import (
 const (
 	udpIdleMax   = 256              // idle sockets kept per upstream
 	udpIdleLife  = 30 * time.Second // an idle socket older than this is closed instead of reused
+	udpMaxLife   = 20 * time.Second // a socket is retired this long after it was opened, however busy: a busy one
+	udpMaxUses   = 1024             // (or after this many exchanges) would otherwise keep one source port for ever
 	udpReadBuf   = 65535
 	udpSockBufSz = 1 << 20
 )
 
 type idleUDP struct {
-	c *net.UDPConn
-	t time.Time
+	c    *net.UDPConn
+	t    time.Time // when it was put back
+	born time.Time // when it was opened
+	uses int       // exchanges it has carried
 }
 
 // The idle sockets are kept in several shards, each with its own lock: with one lock, every query that
@@ -57,9 +61,17 @@ var upstreamSockets = newUDPUpstreams()
 
 var readBufs = sync.Pool{New: func() any { b := make([]byte, udpReadBuf); return &b }}
 
-// take returns a reused socket for addr, or nil.  It starts at a shard of its own and moves on past any shard
-// that is busy or has nothing for addr, so a socket is only dialled when none is idle anywhere.
+// take returns a reused socket for addr, or nil.
 func (u *udpUpstreams) take(addr string) *net.UDPConn {
+	if e, ok := u.takeEntry(addr); ok {
+		return e.c
+	}
+	return nil
+}
+
+// takeEntry is take with the socket's age and use count.  It starts at a shard of its own and moves on past any
+// shard that is busy or has nothing for addr, so a socket is only dialled when none is idle anywhere.
+func (u *udpUpstreams) takeEntry(addr string) (idleUDP, bool) {
 	now := time.Now()
 	start := u.n.Add(1)
 	for i := uint32(0); i < udpShards; i++ {
@@ -67,53 +79,66 @@ func (u *udpUpstreams) take(addr string) *net.UDPConn {
 		if !sh.mu.TryLock() {
 			continue
 		}
-		c := sh.takeLocked(addr, now)
+		e, ok := sh.takeLocked(addr, now)
 		sh.mu.Unlock()
-		if c != nil {
-			return c
+		if ok {
+			return e, true
 		}
 	}
 	// every shard was busy or empty: wait for the one that is ours
 	sh := &u.shards[start%udpShards]
 	sh.mu.Lock()
-	c := sh.takeLocked(addr, now)
+	e, ok := sh.takeLocked(addr, now)
 	sh.mu.Unlock()
-	return c
+	return e, ok
 }
 
-func (sh *udpShard) takeLocked(addr string, now time.Time) *net.UDPConn {
+func (sh *udpShard) takeLocked(addr string, now time.Time) (idleUDP, bool) {
 	l := sh.idle[addr]
 	for len(l) > 0 {
 		e := l[len(l)-1]
 		l = l[:len(l)-1]
-		if now.Sub(e.t) < udpIdleLife {
+		if now.Sub(e.t) < udpIdleLife && now.Sub(e.born) < udpMaxLife {
 			sh.idle[addr] = l
-			return e.c
+			return e, true
 		}
 		e.c.Close()
 	}
 	delete(sh.idle, addr)
-	return nil
+	return idleUDP{}, false
 }
 
 // give puts a socket that just carried a good exchange back, or closes it when the upstream already has enough.
 func (u *udpUpstreams) give(addr string, c *net.UDPConn) {
+	u.giveEntry(addr, idleUDP{c: c, born: time.Now()})
+}
+
+// giveEntry is give for a socket whose age and use count are known.  A socket that is too old or has carried too
+// many exchanges is closed instead: its source port is then no longer something an off-path guesser can keep
+// trying against, and the next exchange gets a new random one.
+func (u *udpUpstreams) giveEntry(addr string, e idleUDP) {
+	e.uses++
+	if e.uses >= udpMaxUses || time.Since(e.born) >= udpMaxLife {
+		e.c.Close()
+		return
+	}
 	start := u.n.Add(1)
 	for i := uint32(0); i < udpShards; i++ {
 		sh := &u.shards[(start+i)%udpShards]
 		if sh.mu.TryLock() {
-			sh.giveLocked(addr, c)
+			sh.giveLocked(addr, e)
 			sh.mu.Unlock()
 			return
 		}
 	}
 	sh := &u.shards[start%udpShards]
 	sh.mu.Lock()
-	sh.giveLocked(addr, c)
+	sh.giveLocked(addr, e)
 	sh.mu.Unlock()
 }
 
-func (sh *udpShard) giveLocked(addr string, c *net.UDPConn) {
+func (sh *udpShard) giveLocked(addr string, ne idleUDP) {
+	c := ne.c
 	l := sh.idle[addr]
 	if len(l) >= udpIdleMax/udpShards {
 		c.Close()
@@ -131,7 +156,8 @@ func (sh *udpShard) giveLocked(addr string, c *net.UDPConn) {
 		}
 		l = keep
 	}
-	sh.idle[addr] = append(l, idleUDP{c, time.Now()})
+	ne.t = time.Now()
+	sh.idle[addr] = append(l, ne)
 }
 
 func (u *udpUpstreams) closeAll() {
@@ -181,17 +207,18 @@ func sameQuestion(q, r []byte) bool {
 // exchangeUDP sends query to addr over UDP and waits for its answer until deadline.
 func exchangeUDP(ctx context.Context, addr string, query []byte, deadline time.Time) ([]byte, time.Duration, error) {
 	for attempt := 0; ; attempt++ {
-		c := upstreamSockets.take(addr)
-		reused := c != nil
-		if c == nil {
-			var err error
-			if c, err = dialUDP(ctx, addr); err != nil {
+		ent, reused := upstreamSockets.takeEntry(addr)
+		if !reused {
+			c, err := dialUDP(ctx, addr)
+			if err != nil {
 				return nil, 0, err
 			}
+			ent = idleUDP{c: c, born: time.Now()}
 		}
+		c := ent.c
 		resp, rtt, err := udpRoundTrip(c, query, deadline)
 		if err == nil {
-			upstreamSockets.give(addr, c)
+			upstreamSockets.giveEntry(addr, ent)
 			return resp, rtt, nil
 		}
 		c.Close()

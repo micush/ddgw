@@ -165,17 +165,43 @@ func qtypeName(t uint16) string {
 // questionOf reads the first question of a DNS message: its name (lower-case, no
 // trailing dot, "." for the root) and type.  ok is false for a message without one.
 func questionOf(q []byte) (name string, qtype uint16, ok bool) {
-	if len(q) < 12 || binary.BigEndian.Uint16(q[4:]) < 1 {
+	var qi qinfo
+	parseQuestion(q, &qi)
+	if !qi.ok {
 		return "", 0, false
 	}
-	// built in a stack buffer, lower-cased as it is copied, and turned into a string once: this runs for every
-	// query (the cache key, the statistics) and used to allocate several times per call
-	var buf [256]byte
+	return qi.name(), qi.qtype, true
+}
+
+// qinfo is the first question of a query, read once for everything that needs it (the cache key, the statistics).
+// The name is lower-cased in a buffer inside the struct, so reading it allocates nothing; name() makes the string
+// when one is wanted.
+type qinfo struct {
+	buf     [256]byte
+	n       int    // length of the name in buf; 0 is the root
+	qtype   uint16 //
+	nameEnd int    // offset just after the name in the message
+	ok      bool
+}
+
+func (qi *qinfo) name() string {
+	if qi.n == 0 {
+		return "."
+	}
+	return string(qi.buf[:qi.n])
+}
+
+// parseQuestion fills qi from the first question of q; qi.ok is false for a message without one.
+func parseQuestion(q []byte, qi *qinfo) {
+	qi.ok = false
+	if len(q) < 12 || binary.BigEndian.Uint16(q[4:]) < 1 {
+		return
+	}
 	n := 0
 	i := 12
 	for {
 		if i >= len(q) {
-			return "", 0, false
+			return
 		}
 		l := int(q[i])
 		if l == 0 {
@@ -183,34 +209,31 @@ func questionOf(q []byte) (name string, qtype uint16, ok bool) {
 			break
 		}
 		if l&0xC0 != 0 || i+1+l > len(q) {
-			return "", 0, false
+			return
 		}
 		if n > 0 {
-			if n >= len(buf) {
-				return "", 0, false
+			if n >= len(qi.buf) {
+				return
 			}
-			buf[n] = '.'
+			qi.buf[n] = '.'
 			n++
 		}
 		if n+l > 255 {
-			return "", 0, false
+			return
 		}
 		for _, c := range q[i+1 : i+1+l] {
 			if 'A' <= c && c <= 'Z' {
 				c += 'a' - 'A'
 			}
-			buf[n] = c
+			qi.buf[n] = c
 			n++
 		}
 		i += l + 1
 	}
 	if i+2 > len(q) {
-		return "", 0, false
+		return
 	}
-	if n == 0 {
-		return ".", binary.BigEndian.Uint16(q[i:]), true
-	}
-	return string(buf[:n]), binary.BigEndian.Uint16(q[i:]), true
+	qi.n, qi.qtype, qi.nameEnd, qi.ok = n, binary.BigEndian.Uint16(q[i:]), i, true
 }
 
 // RecordCache counts one lookup of the answer cache (a query that can be cached): hit = answered from it.

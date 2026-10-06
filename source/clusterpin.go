@@ -72,6 +72,12 @@ func learnPinnedCert(ctx context.Context, addr, fp string) (*x509.Certificate, e
 // dialPinned opens a TLS connection to addr that is verified against the
 // certificate pinned by fp.
 func dialPinned(ctx context.Context, addr, fp string) (net.Conn, error) {
+	return dialPinnedAs(ctx, addr, fp, nil)
+}
+
+// dialPinnedAs is dialPinned presenting our own identity certificate (when not nil) to the peer, which checks
+// it against the identity we claim in the request (Cluster.peerAuth).
+func dialPinnedAs(ctx context.Context, addr, fp string, me *tls.Certificate) (net.Conn, error) {
 	if !validHostPort(addr) {
 		return nil, errors.New("invalid peer address")
 	}
@@ -86,7 +92,11 @@ func dialPinned(ctx context.Context, addr, fp string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := tls.Client(conn, &tls.Config{ServerName: peerServerName, RootCAs: pool, MinVersion: tls.VersionTLS12})
+	cfg := &tls.Config{ServerName: peerServerName, RootCAs: pool, MinVersion: tls.VersionTLS12}
+	if me != nil {
+		cfg.Certificates = []tls.Certificate{*me}
+	}
+	tc := tls.Client(conn, cfg)
 	if err := tc.HandshakeContext(ctx); err != nil {
 		conn.Close()
 		pinnedCerts.Delete(fp)
@@ -102,12 +112,17 @@ func dialPinned(ctx context.Context, addr, fp string) (net.Conn, error) {
 // pinnedClient is an HTTP client for the peer at addr with fingerprint fp.
 // Requests are made to https://ddgw-node/...; the connection goes to addr.
 func pinnedClient(addr, fp string, timeout time.Duration) *http.Client {
+	return pinnedClientAs(addr, fp, timeout, nil)
+}
+
+// pinnedClientAs is pinnedClient presenting our own identity certificate to the peer.
+func pinnedClientAs(addr, fp string, timeout time.Duration, me *tls.Certificate) *http.Client {
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
 			DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return dialPinned(ctx, addr, fp)
+				return dialPinnedAs(ctx, addr, fp, me)
 			},
 		},
 	}

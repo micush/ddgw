@@ -31,6 +31,9 @@ type Mgmt struct {
 	cfgMu     sync.Mutex // serialises writes of the config file
 	webPolicy atomic.Pointer[WebConfig]
 
+	// endSessions signs a user out of the web GUI sessions of this node (set by the web server)
+	endSessions atomic.Pointer[func(user string)]
+
 	reloadFn  func() error          // re-read the config file and apply it
 	restartFn func()                // gracefully re-exec this process
 	gwFn      func() []GwState      // which gateways this node is serving right now

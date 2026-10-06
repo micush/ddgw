@@ -132,7 +132,7 @@ func TestUserAddRollsBackWithoutPassword(t *testing.T) {
 		}
 		return "", nil
 	}
-	if _, _, err := m.UserAdd("dave", "x", 0, "alice"); err == nil || !strings.Contains(err.Error(), "bad password") {
+	if _, _, err := m.UserAdd("dave", "long-enough-1", 0, "alice"); err == nil || !strings.Contains(err.Error(), "bad password") {
 		t.Fatalf("err = %v", err)
 	}
 	last := (*calls)[len(*calls)-1]
@@ -157,10 +157,10 @@ func TestUserPasswordExpiryDeleteOnlyForMembers(t *testing.T) {
 	if len(*calls) != 0 {
 		t.Fatalf("nothing may run: %+v", *calls)
 	}
-	if _, _, err := m.UserPassword("bob", "newpw", "alice"); err != nil {
+	if _, _, err := m.UserPassword("bob", "newpw-12345", "alice"); err != nil {
 		t.Fatal(err)
 	}
-	if (*calls)[0].name != "chpasswd" || (*calls)[0].stdin != "bob:newpw\n" {
+	if (*calls)[0].name != "chpasswd" || (*calls)[0].stdin != "bob:newpw-12345\n" {
 		t.Errorf("%+v", (*calls)[0])
 	}
 }

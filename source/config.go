@@ -1019,9 +1019,25 @@ type WebConfig struct {
 	MaxFailedLogins          int `json:"max_failed_logins"`
 	FailedLoginWindowMinutes int `json:"failed_login_window_minutes"`
 	LockoutMinutes           int `json:"lockout_minutes"`
+	// MinPasswordLength is the fewest characters a password set on the Users page (or with --user-add and
+	// --user-password) may have.  0, which is also what an absent key means and what is not written to the file
+	// (so a config that never set it stays readable by older versions), is the default, 8.
+	MinPasswordLength int `json:"min_password_length,omitempty"`
 }
 
-const defaultWebPort = 53853
+const (
+	defaultWebPort       = 53853
+	defaultMinPassword   = 8
+	maxMinPasswordLength = 128
+)
+
+// minPassword is the effective minimum password length.
+func (w WebConfig) minPassword() int {
+	if w.MinPasswordLength <= 0 {
+		return defaultMinPassword
+	}
+	return w.MinPasswordLength
+}
 
 func defaultWeb() WebConfig {
 	return WebConfig{
@@ -1071,6 +1087,9 @@ func (w *WebConfig) Validate() error {
 	}
 	if w.LockoutMinutes < 1 || w.LockoutMinutes > 10080 {
 		return errors.New("web: lockout_minutes must be 1-10080")
+	}
+	if w.MinPasswordLength < 0 || w.MinPasswordLength > maxMinPasswordLength {
+		return fmt.Errorf("web: min_password_length must be 1-%d (empty or 0 means the default, %d)", maxMinPasswordLength, defaultMinPassword)
 	}
 	return nil
 }

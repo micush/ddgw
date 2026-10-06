@@ -48,21 +48,32 @@ type cacheEntry struct {
 	life time.Duration
 	elem *list.Element
 	sh   *cacheShard
+	qEnd int // offset just after the question in msg, worked out once when the entry is stored
+	size int // what the entry counts for against the shard's byte budget
 }
 
 // cacheShard is one slice of the cache with its own lock and its own LRU order.  At 100k queries a second one
 // lock around the whole cache was the largest lock wait on a production node.
 type cacheShard struct {
-	mu  sync.Mutex
-	max int
-	m   map[string]*cacheEntry
-	lru *list.List // front = most recently used
+	mu       sync.Mutex
+	max      int
+	maxBytes int // budget for the sizes of the entries (see cacheBytesPerEntry)
+	bytes    int
+	m        map[string]*cacheEntry
+	lru      *list.List // front = most recently used
 }
 
 // cacheShardMin: a cache smaller than this stays in one shard, so its LRU order is exact.
 const (
 	cacheShards   = 16
 	cacheShardMin = 4096
+
+	// The cache is bounded by bytes as well as by entries: cache_entries times cacheBytesPerEntry is its memory
+	// budget.  A count alone lets a client that asks for names with very large answers (its own zone, big TXT
+	// records) make a "10000 entry" cache hold hundreds of megabytes.  An ordinary answer is a few hundred
+	// bytes, so the budget is only reached by unusually large ones; the oldest entries leave first, as for the count.
+	cacheBytesPerEntry = 4096
+	cacheEntryOverhead = 256 // bookkeeping counted on top of the message and the key
 )
 
 type respCache struct {
@@ -91,7 +102,8 @@ func newRespCache(max, maxTTL int) *respCache {
 	}
 	c := &respCache{max: max, maxTTL: uint32(maxTTL), seed: maphash.MakeSeed(), now: time.Now}
 	for i := 0; i < n; i++ {
-		c.shards = append(c.shards, &cacheShard{max: (max + n - 1) / n, m: map[string]*cacheEntry{}, lru: list.New()})
+		c.shards = append(c.shards, &cacheShard{max: (max + n - 1) / n, maxBytes: ((max + n - 1) / n) * cacheBytesPerEntry,
+			m: map[string]*cacheEntry{}, lru: list.New()})
 	}
 	return c
 }
@@ -101,6 +113,24 @@ func (c *respCache) shardFor(key string) *cacheShard {
 		return c.shards[0]
 	}
 	return c.shards[maphash.String(c.seed, key)%uint64(len(c.shards))]
+}
+
+func (c *respCache) shardForBytes(key []byte) *cacheShard {
+	if len(c.shards) == 1 {
+		return c.shards[0]
+	}
+	return c.shards[maphash.Bytes(c.seed, key)%uint64(len(c.shards))]
+}
+
+// Bytes is what the entries count for against the byte budget.
+func (c *respCache) Bytes() int {
+	n := 0
+	for _, sh := range c.shards {
+		sh.mu.Lock()
+		n += sh.bytes
+		sh.mu.Unlock()
+	}
+	return n
 }
 
 func (c *respCache) Len() int {
@@ -116,17 +146,30 @@ func (c *respCache) Len() int {
 // keyFor returns the cache key of a client query, or ok=false when the query is not one to cache.
 // ecs is the pool's ECS setting: with it the client's network is part of the key.
 func (c *respCache) keyFor(q []byte, tcp bool, client netip.Addr, ecs bool, p4, p6 int) (string, bool) {
-	if len(q) < 12 || q[2]&0x80 != 0 || (q[2]>>3)&0x0F != 0 || binary.BigEndian.Uint16(q[4:]) != 1 ||
-		binary.BigEndian.Uint16(q[6:]) != 0 || binary.BigEndian.Uint16(q[8:]) != 0 {
-		return "", false
-	}
-	name, qt, ok := questionOf(q)
-	if !ok || qt == 251 || qt == 252 { // IXFR, AXFR (ANY is cached like any other type: a benchmark that asks it, and Technitium, serve it from memory)
-		return "", false
-	}
-	qEnd, ok := questionEnd(q)
+	var qi qinfo
+	parseQuestion(q, &qi)
+	var kb [384]byte
+	b, ok := c.keyBytes(kb[:0], q, &qi, tcp, client, ecs, p4, p6)
 	if !ok {
 		return "", false
+	}
+	return string(b), true
+}
+
+// keyBytes appends the cache key of the client query q (whose question is already read into qi) to dst, or
+// returns ok=false when the query is not one to cache.  Nothing is allocated when dst has room: a lookup is made
+// with the bytes (a map index of string(b) does not copy) and a string is made only for a miss.
+func (c *respCache) keyBytes(dst, q []byte, qi *qinfo, tcp bool, client netip.Addr, ecs bool, p4, p6 int) ([]byte, bool) {
+	if len(q) < 12 || q[2]&0x80 != 0 || (q[2]>>3)&0x0F != 0 || binary.BigEndian.Uint16(q[4:]) != 1 ||
+		binary.BigEndian.Uint16(q[6:]) != 0 || binary.BigEndian.Uint16(q[8:]) != 0 {
+		return nil, false
+	}
+	if !qi.ok || qi.qtype == 251 || qi.qtype == 252 { // IXFR, AXFR (ANY is cached like any other type: a benchmark that asks it, and Technitium, serve it from memory)
+		return nil, false
+	}
+	qEnd := qi.nameEnd + 4
+	if qEnd > len(q) {
+		return nil, false
 	}
 	qclass := binary.BigEndian.Uint16(q[qEnd-2:])
 	flags := int(q[2] & 0x01)    // RD
@@ -135,32 +178,50 @@ func (c *respCache) keyFor(q []byte, tcp bool, client netip.Addr, ecs bool, p4, 
 	if !tcp {
 		size = 512
 	}
-	rrs, _, ok := recordsAfterQuestion(q)
-	if !ok || len(rrs) > 1 {
-		return "", false
-	}
-	if len(rrs) == 1 {
-		rr := rrs[0]
-		if rr.typ != typeOPT {
-			return "", false
+	// what follows the question: nothing, or exactly one record, which must be an OPT with no options but a cookie
+	switch binary.BigEndian.Uint16(q[10:]) {
+	case 0:
+		if qEnd != len(q) {
+			return nil, false
 		}
-		if !optionsOnly(q[rr.rdataOff:rr.end], optCookie) {
-			return "", false
+	case 1:
+		o, ok := skipName(q, qEnd)
+		if !ok || o+10 > len(q) {
+			return nil, false
+		}
+		end := o + 10 + int(binary.BigEndian.Uint16(q[o+8:]))
+		if end != len(q) || binary.BigEndian.Uint16(q[o:]) != typeOPT || !optionsOnly(q[o+10:end], optCookie) {
+			return nil, false
 		}
 		flags |= 1 << 4
-		if ttl := binary.BigEndian.Uint32(q[rr.rdataOff-6:]); ttl&0x8000 != 0 { // DO
+		if ttl := binary.BigEndian.Uint32(q[o+4:]); ttl&0x8000 != 0 { // DO
 			flags |= 1 << 3
 		}
 		if !tcp {
-			if size = int(rr.class); size < 512 {
+			if size = int(binary.BigEndian.Uint16(q[o+2:])); size < 512 {
 				size = 512
 			}
 		}
+	default:
+		return nil, false
 	}
 	if tcp {
 		flags |= 1 << 5
 	}
-	nw := ""
+	if qi.n == 0 {
+		dst = append(dst, '.')
+	} else {
+		dst = append(dst, qi.buf[:qi.n]...)
+	}
+	dst = append(dst, '|')
+	dst = strconv.AppendInt(dst, int64(qi.qtype), 10)
+	dst = append(dst, '|')
+	dst = strconv.AppendInt(dst, int64(qclass), 10)
+	dst = append(dst, '|')
+	dst = strconv.AppendInt(dst, int64(flags), 10)
+	dst = append(dst, '|')
+	dst = strconv.AppendInt(dst, int64(size), 10)
+	dst = append(dst, '|')
 	if ecs && ecsUsable(client) {
 		a := client.Unmap()
 		bits := p6
@@ -168,10 +229,10 @@ func (c *respCache) keyFor(q []byte, tcp bool, client netip.Addr, ecs bool, p4, 
 			bits = p4
 		}
 		if pf, err := a.Prefix(bits); err == nil {
-			nw = pf.String()
+			dst = pf.AppendTo(dst)
 		}
 	}
-	return name + "|" + strconv.Itoa(int(qt)) + "|" + strconv.Itoa(int(qclass)) + "|" + strconv.Itoa(flags) + "|" + strconv.Itoa(size) + "|" + nw, true
+	return dst, true
 }
 
 // questionEnd is the offset just after the (single) question of a message.
@@ -212,6 +273,20 @@ func (c *respCache) get(key string, q []byte) []byte {
 	sh := c.shardFor(key)
 	sh.mu.Lock()
 	e := sh.m[key]
+	return c.serve(sh, e, q, -1)
+}
+
+// getBytes is get for a key held as bytes, so that a hit allocates no key.  qEnd is the offset just after the
+// question in q, when the caller has it already (-1 to work it out).
+func (c *respCache) getBytes(key, q []byte, qEnd int) []byte {
+	sh := c.shardForBytes(key)
+	sh.mu.Lock()
+	e := sh.m[string(key)] // does not allocate
+	return c.serve(sh, e, q, qEnd)
+}
+
+// serve finishes a lookup: sh.mu is held on entry and released here.
+func (c *respCache) serve(sh *cacheShard, e *cacheEntry, q []byte, qEnd int) []byte {
 	if e == nil {
 		sh.mu.Unlock()
 		return nil
@@ -228,8 +303,13 @@ func (c *respCache) get(key string, q []byte) []byte {
 	out := append([]byte(nil), e.msg...)
 	ttls := e.ttls
 
-	qEnd, ok := questionEnd(q)
-	if !ok || qEnd != e.qEnd() {
+	if qEnd < 0 {
+		var ok bool
+		if qEnd, ok = questionEnd(q); !ok {
+			return nil
+		}
+	}
+	if qEnd != e.qEnd {
 		return nil
 	}
 	copy(out[0:2], q[0:2])
@@ -247,14 +327,10 @@ func (c *respCache) get(key string, q []byte) []byte {
 	return out
 }
 
-func (e *cacheEntry) qEnd() int {
-	o, _ := questionEnd(e.msg)
-	return o
-}
-
 func (sh *cacheShard) drop(e *cacheEntry) {
 	sh.lru.Remove(e.elem)
 	delete(sh.m, e.key)
+	sh.bytes -= e.size
 }
 
 // put stores a response to a query whose key is key, when it is one worth keeping.
@@ -264,7 +340,12 @@ func (c *respCache) put(key string, resp []byte) {
 		return
 	}
 	sh := c.shardFor(key)
-	e := &cacheEntry{key: key, msg: msg, ttls: ttls, at: c.now(), life: life, sh: sh}
+	qEnd, _ := questionEnd(msg)
+	e := &cacheEntry{key: key, msg: msg, ttls: ttls, at: c.now(), life: life, sh: sh, qEnd: qEnd,
+		size: len(msg) + len(key) + cacheEntryOverhead}
+	if e.size > sh.maxBytes { // one answer that is more than the whole budget of its shard is not kept
+		return
+	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	if old := sh.m[key]; old != nil {
@@ -272,7 +353,8 @@ func (c *respCache) put(key string, resp []byte) {
 	}
 	e.elem = sh.lru.PushFront(e)
 	sh.m[key] = e
-	for len(sh.m) > sh.max {
+	sh.bytes += e.size
+	for (len(sh.m) > sh.max || sh.bytes > sh.maxBytes) && sh.lru.Len() > 1 {
 		sh.drop(sh.lru.Back().Value.(*cacheEntry))
 		c.Evicted.Add(1)
 	}
@@ -357,6 +439,7 @@ type cacheStats struct {
 	Entries  int    `json:"entries"`
 	Max      int    `json:"max"`
 	MaxTTL   int    `json:"max_ttl"`
+	Bytes    int    `json:"bytes"`
 	Hits     uint64 `json:"hits"`
 	Misses   uint64 `json:"misses"`
 	Bypassed uint64 `json:"bypassed"`
@@ -367,5 +450,5 @@ func (c *respCache) stats() cacheStats {
 	if c == nil {
 		return cacheStats{}
 	}
-	return cacheStats{On: true, Entries: c.Len(), Max: c.max, MaxTTL: int(c.maxTTL), Hits: c.Hits.Load(), Misses: c.Misses.Load(), Bypassed: c.Bypassed.Load(), Evicted: c.Evicted.Load()}
+	return cacheStats{On: true, Entries: c.Len(), Max: c.max, MaxTTL: int(c.maxTTL), Bytes: c.Bytes(), Hits: c.Hits.Load(), Misses: c.Misses.Load(), Bypassed: c.Bypassed.Load(), Evicted: c.Evicted.Load()}
 }

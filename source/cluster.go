@@ -90,9 +90,15 @@ type clusterState struct {
 	Secret      string        `json:"secret"`
 	Peers       []ClusterPeer `json:"peers"`
 	Removed     []string      `json:"removed,omitempty"`
-	SharedRev   uint64        `json:"shared_rev"`
-	SharedHash  string        `json:"shared_hash"`
-	Tokens      []tokenRec    `json:"tokens,omitempty"`
+	// RemovedFp is the identity fingerprint each removed address had, so a removed node stays refused under
+	// whatever address it claims next.  MTLSFps are the members seen to present their identity certificate
+	// on calls (see Cluster.peerAuth).
+	RemovedFp  map[string]string `json:"removed_fp,omitempty"`
+	MTLSFps    []string          `json:"mtls_fps,omitempty"`
+	StrictOn   bool              `json:"strict,omitempty"` // every member presented its certificate once: never go back
+	SharedRev  uint64            `json:"shared_rev"`
+	SharedHash string            `json:"shared_hash"`
+	Tokens     []tokenRec        `json:"tokens,omitempty"`
 }
 
 // ClusterSnapshot is a copy of the state, safe to hold.
@@ -344,7 +350,7 @@ func containsStr(l []string, s string) bool {
 func (n *ClusterNode) AddPeer(p ClusterPeer) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if p.Addr == "" || p.Fp == "" || p.Addr == n.st.SelfAddr || p.NodeID == n.st.NodeID || containsStr(n.st.Removed, p.Addr) {
+	if p.Addr == "" || p.Fp == "" || p.Addr == n.st.SelfAddr || p.NodeID == n.st.NodeID || containsStr(n.st.Removed, p.Addr) || n.removedFpLocked(p.Fp) {
 		return false
 	}
 	for i, q := range n.st.Peers {
@@ -369,9 +375,11 @@ func (n *ClusterNode) RemovePeer(addr string) bool {
 	defer n.mu.Unlock()
 	changed := false
 	kept := n.st.Peers[:0]
+	fp := n.st.RemovedFp[addr]
 	for _, p := range n.st.Peers {
 		if p.Addr == addr {
 			changed = true
+			fp = p.Fp
 			continue
 		}
 		kept = append(kept, p)
@@ -381,10 +389,102 @@ func (n *ClusterNode) RemovePeer(addr string) bool {
 		n.st.Removed = append(n.st.Removed, addr)
 		changed = true
 	}
+	if fp != "" && n.st.RemovedFp[addr] != fp {
+		if n.st.RemovedFp == nil {
+			n.st.RemovedFp = map[string]string{}
+		}
+		n.st.RemovedFp[addr] = fp
+		changed = true
+	}
 	if changed {
 		n.saveLocked()
 	}
 	return changed
+}
+
+// removedFpLocked: fp is the identity of a removed member (n.mu held).
+func (n *ClusterNode) removedFpLocked(fp string) bool {
+	if fp == "" {
+		return false
+	}
+	for _, f := range n.st.RemovedFp {
+		if f == fp {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRemovedFp reports whether fp is the identity of a removed member.
+func (n *ClusterNode) IsRemovedFp(fp string) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.removedFpLocked(fp)
+}
+
+// UnremoveFp lifts the block on an identity (a node that is let back in, possibly under a new address).
+func (n *ClusterNode) UnremoveFp(fp string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for a, f := range n.st.RemovedFp {
+		if f == fp {
+			delete(n.st.RemovedFp, a)
+			n.saveLocked()
+		}
+	}
+}
+
+// PeerByFp returns the member whose identity certificate has fingerprint fp.
+func (n *ClusterNode) PeerByFp(fp string) (ClusterPeer, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, p := range n.st.Peers {
+		if fp != "" && p.Fp == fp {
+			return p, true
+		}
+	}
+	return ClusterPeer{}, false
+}
+
+// NoteMTLS records that the member with identity fp presented its certificate on a call.  From then on a call
+// claiming that identity without one is refused (no downgrade).
+func (n *ClusterNode) NoteMTLS(fp string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if fp == "" || containsStr(n.st.MTLSFps, fp) {
+		return
+	}
+	n.st.MTLSFps = append(n.st.MTLSFps, fp)
+	n.saveLocked()
+}
+
+// IsMTLS: the member with identity fp has been seen presenting its certificate.
+func (n *ClusterNode) IsMTLS(fp string) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return containsStr(n.st.MTLSFps, fp)
+}
+
+// Strict is true once every member has been seen presenting its certificate, i.e. when the whole cluster runs
+// a version that does.  From then on only members already on the list are served: a caller that merely holds
+// the cluster secret (a node that was removed, say) cannot make itself a member by calling.
+func (n *ClusterNode) Strict() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.st.StrictOn {
+		return true // sticky: when members leave or are removed the cluster does not fall back to trusting the secret alone
+	}
+	if len(n.st.Peers) == 0 {
+		return false
+	}
+	for _, p := range n.st.Peers {
+		if !containsStr(n.st.MTLSFps, p.Fp) {
+			return false
+		}
+	}
+	n.st.StrictOn = true
+	n.saveLocked()
+	return true
 }
 
 // UnremovePeer lifts the block so the member can be added again.
@@ -401,6 +501,10 @@ func (n *ClusterNode) UnremovePeer(addr string) bool {
 		out = append(out, a)
 	}
 	n.st.Removed = out
+	if _, ok := n.st.RemovedFp[addr]; ok {
+		delete(n.st.RemovedFp, addr)
+		changed = true
+	}
 	if changed {
 		n.saveLocked()
 	}
@@ -422,7 +526,7 @@ func (n *ClusterNode) JoinAs(secret string, epoch uint64, primaryAddr string, pe
 	n.st.PrimaryAddr = primaryAddr
 	n.st.Role = RoleReplica
 	n.st.Peers = []ClusterPeer{}
-	n.st.Removed = nil
+	n.st.Removed, n.st.RemovedFp, n.st.MTLSFps, n.st.StrictOn = nil, nil, nil, false
 	n.st.Tokens = nil
 	for _, p := range peers {
 		if p.Addr == n.st.SelfAddr || p.NodeID == n.st.NodeID || p.Addr == "" || p.Fp == "" {
@@ -449,6 +553,7 @@ func (n *ClusterNode) Reset() ClusterSnapshot {
 	n.st.Epoch, n.st.Role, n.st.PrimaryAddr = 1, RolePrimary, n.st.SelfAddr
 	n.st.Secret = newClusterSecret()
 	n.st.Peers, n.st.Removed, n.st.Tokens = []ClusterPeer{}, nil, nil
+	n.st.RemovedFp, n.st.MTLSFps, n.st.StrictOn = nil, nil, false
 	n.saveLocked()
 	return n.snapshotLocked()
 }

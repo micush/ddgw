@@ -306,3 +306,50 @@ func TestUpstreamSocketsConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// The upstream must not see the client's own transaction ID, and the client must get its ID back.
+func TestUpstreamSeesRandomIDAndClientGetsItsOwnBack(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[uint16]bool{}
+	st := newUDPStub(t, func(q []byte, reply func([]byte)) {
+		mu.Lock()
+		seen[uint16(q[0])<<8|uint16(q[1])] = true
+		mu.Unlock()
+		reply(answerTo(q))
+	})
+	const n = 64
+	for i := 0; i < n; i++ {
+		q := cacheQuery("id.example", 1, nil)
+		q[0], q[1] = 0x12, 0x34
+		resp, _, err := exchangeOpt(context.Background(), st.addr, q, false, time.Second, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp[0] != 0x12 || resp[1] != 0x34 {
+			t.Fatalf("the client's ID did not come back: %x", resp[:2])
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) < n/2 {
+		t.Fatalf("the upstream saw only %d different IDs in %d queries", len(seen), n)
+	}
+	if seen[0x1234] && len(seen) < 2 {
+		t.Fatal("the client's ID went upstream unchanged")
+	}
+}
+
+// A busy socket is retired after udpMaxUses exchanges, so its source port does not live for ever.
+func TestUpstreamSocketIsRetiredAfterManyUses(t *testing.T) {
+	st := newUDPStub(t, func(q []byte, reply func([]byte)) { reply(answerTo(q)) })
+	for i := 0; i < udpMaxUses+10; i++ {
+		if _, _, err := exchangeOpt(context.Background(), st.addr, cacheQuery("rot.example", 1, nil), false, time.Second, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.froms) < 2 {
+		t.Fatalf("one source port carried %d exchanges", udpMaxUses+10)
+	}
+}

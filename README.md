@@ -502,11 +502,12 @@ certificate — see [GUI certificate](#gui-certificate).
 **Security notes**: the GUI can reconfigure a daemon that runs as root and
 listens on all interfaces by default — bind it to a management address
 (`"listen": "10.0.0.5:53853"`) or firewall the port. Sessions are in memory
-(lost on restart), HttpOnly/Secure/SameSite=Strict cookies, a CSRF token on every
+(lost on restart; a user's sessions also end when that user's password changes, the account is deleted or it expires), HttpOnly/Secure/SameSite=Strict cookies named with the `__Host-` prefix, a CSRF token on every
 change, a strict CSP (no inline script), and failed logins are limited: 3 wrong passwords within 1 minute lock that
-address (and that user name) out for 15 minutes — all three numbers are on the
+address, and that address together with that user name (never the user name alone), out for 15 minutes — all three numbers are on the
 Settings page (`web.max_failed_logins`, `web.failed_login_window_minutes`,
-`web.lockout_minutes`). A failed login gets one message that does not say what was wrong, which group is
+`web.lockout_minutes`). Passwords set on the Users page must have at least 8 characters
+(`web.min_password_length`, 1–128; absent or 0 means 8). A failed login gets one message that does not say what was wrong, which group is
 needed or how many tries are left (that would give a guesser a target); only once
 an address is locked out does the login page say "Too many failed attempts." and disable its form until the lockout ends. The management commands
 (everything under `--versions`, `--tls-*`, `--cluster-*`, `--update-*`, and
