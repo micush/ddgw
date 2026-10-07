@@ -1,5 +1,5 @@
 "use strict";
-// ddgw web GUI. No framework, no innerHTML: every value from the server goes
+// Anyname web GUI. No framework, no innerHTML: every value from the server goes
 // through textContent, so nothing it returns can inject markup.
 
 (() => {
@@ -187,7 +187,7 @@
       btn);
     root.append(h("div", { class: "login-wrap" }, h("div", { class: "login" },
       h("div", { class: "card" }, h("div", { class: "body" },
-        h("h1", {}, "DNS Distributed Gateway"),
+        h("h1", {}, "Anyname DNS Director"),
         h("p", { class: "sub" }, "Sign in with your system account"),
         err, form)))));
     user.focus();
@@ -252,7 +252,7 @@
       h("div", { class: "nav-items hidden" },
         items.map(([id, label]) => h("button", { type: "button", class: "nav-item", "data-tab": id, onclick: () => selectTab(id) }, label)))));
     const nav = h("nav", { class: "side", "aria-label": "Sections" },
-      h("div", { class: "mark" }, h("div", { class: "brand" }, "DNS Distributed Gateway"),
+      h("div", { class: "mark" }, h("div", { class: "brand" }, "Anyname DNS Director"),
         h("div", { class: "muted small" }, "v" + s.version + (s.hostname && s.hostname.toLowerCase() !== "ddgw" ? " · " + s.hostname : ""))),
       h("div", { class: "nav-section" }, groups),
       h("div", { class: "nav-footer" },
@@ -2254,7 +2254,7 @@
               try { await api("POST", "/api/tls/csr", { cn: cn.value.trim(), dns: lines(names), ips: lines(ips) }); say(status, "ok", "Request created."); await load(); } catch (e) { fail(status)(e); }
             } }, "Create request")), csrBox),
           fold("Go back to the automatic certificate",
-            h("p", { class: "hint" }, "ddgw can make its own certificate. Browsers do not trust it, but connections are still encrypted."),
+            h("p", { class: "hint" }, "Anyname can make its own certificate. Browsers do not trust it, but connections are still encrypted."),
             h("div", { class: "toolbar" },
               h("button", { class: "btn warn", type: "button", onclick: async () => {
                 if (!confirm("Stop using the uploaded certificate and go back to the automatic one?")) return;

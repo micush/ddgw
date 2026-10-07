@@ -1,6 +1,6 @@
-# ddgw quick start (using the web GUI)
+# Anyname DNS Director quick start (using the web GUI)
 
-ddgw gives a group of machines one shared DNS address (a **gateway**). Clients point at that address; every node answers, and each query goes to the fastest healthy upstream DNS server you list. This guide takes you from the tarball to a working gateway using only the browser. The full reference is `README.md`.
+Anyname gives a group of machines one shared DNS address (a **gateway**). Clients point at that address; every node answers, and each query goes to the fastest healthy upstream DNS server you list. This guide takes you from the tarball to a working gateway using only the browser. The full reference is `README.md`.
 
 ## What you need
 
@@ -24,7 +24,7 @@ cd ddgw
 sudo ./install.sh
 ```
 
-The user running the installer (you, behind `sudo`) can log in to the GUI; add others with `--add-user NAME` or later on the Users page. The installer installs what is missing, builds ddgw, creates the `ddgw` group and the PAM login file, and starts the `ddgw` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
+The user running the installer (you, behind `sudo`) can log in to the GUI; add others with `--add-user NAME` or later on the Users page. The installer installs what is missing, builds Anyname, creates the `ddgw` group and the PAM login file, and starts the `ddgw` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
 
 Who can log in: a user whose Linux password PAM accepts **and** who is in the `ddgw` group. `root` is not special; add it to the group only if you want it to log in (`sudo usermod -aG ddgw alice` adds a user later).
 
@@ -32,7 +32,7 @@ Who can log in: a user whose Linux password PAM accepts **and** who is in the `d
 
 Browse to **https://&lt;this machine's address&gt;:53853** and sign in with that Linux user and password.
 
-- Your browser will warn about the certificate: ddgw made a self-signed one. Continue for now; you will replace it in step 6.
+- Your browser will warn about the certificate: Anyname made a self-signed one. Continue for now; you will replace it in step 6.
 - No sign-in possible? Check `groups alice` lists `ddgw`, and that `/etc/pam.d/ddgw` exists. A failed login shows one generic message on purpose.
 - The page follows your light/dark setting. The **?** at the top right of every page opens help for that page.
 
@@ -49,7 +49,7 @@ A new install has no gateways. Topology is the first page.
 3. Save. A **circle** appears: that is the gateway. It is amber at first because it has no DNS server yet. Everything you change is saved at once; there is no Apply button.
 4. **Right-click the circle** and choose **Add DNS server…**
    - **IP address or host name**: for example `8.8.8.8` (add `:port` for a port other than 53, or `tls://host` for DNS over TLS).
-   - **Domain to ask it about** and **Record type**: for example `google.com`, `A`. ddgw checks a server by asking it a real question.
+   - **Domain to ask it about** and **Record type**: for example `google.com`, `A`. Anyname checks a server by asking it a real question.
 5. A **square** (the server) and a **trapezoid** (the test domain) appear under the circle. When the gateway is working all three turn **green**.
 
 Add a second server the same way for redundancy, and right-click a square to **Add domain…** so each server is tested with more than one name. Hover any shape for its status and uptime ("Online for 1m 1s - 0 failures").
@@ -70,7 +70,7 @@ Point your clients (or your DHCP server) at the shared address when you are happ
 
 ## 5. Add more nodes (optional, for redundancy)
 
-Install ddgw on a second machine the same way (step 1 and 2), then:
+Install Anyname on a second machine the same way (step 1 and 2), then:
 
 1. On the first node: **Operate ▸ Cluster** ▸ **Create join code** and copy it. It works once and expires in an hour.
 2. On the new node: **Operate ▸ Cluster** ▸ paste the code ▸ **Join**.
@@ -86,7 +86,7 @@ Both nodes now answer on the shared address and one of them is the controller (s
 
 - **Settings** (Configure) holds everything else, and every field saves on its own: probe timing, cache, spread of queries over servers of similar speed, `down_percent`, DNS over TLS and DNS over HTTPS ports for clients, and more. Each page's **?** help lists the command-line equivalent.
 - **History** keeps every saved change as a version. You can compare a version with the live one and restore any of them.
-- **Operate ▸ Upgrade**: upload a newer ddgw tarball, tick the nodes to update and press the button in the Nodes card (none ticked = this node). A bad update rolls back by itself.
+- **Operate ▸ Upgrade**: upload a newer Anyname tarball, tick the nodes to update and press the button in the Nodes card (none ticked = this node). A bad update rolls back by itself.
 - **Operate ▸ Anycast**: switch BGP, or a single neighbor, off and on without losing the settings (set them under **Configure ▸ Anycast**).
 - **Operate ▸ Node**: make this node the gateway controller, put it in maintenance (pause), or restart or shut down the host, now or later.
 - Bind the GUI to a management address or firewall port 53853: it can reconfigure a daemon that runs as root.

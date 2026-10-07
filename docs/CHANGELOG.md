@@ -1,5 +1,18 @@
 # Changelog
 
+## [v226] - 2026-10-07 — The product is now called Anyname DNS Director
+
+### Changed
+- **New product name, "Anyname DNS Director"** (short form "Anyname"), replacing "ddgw" and the tagline "DNS Distributed Gateway" wherever the name is prose a person reads: the browser tab title, the sign-in page, the sidebar header, the no-JavaScript notice, text on the pages and in the help ("?") panels, `README.md`, `QUICKSTART.md` and the messages and comments of `install.sh`, `uninstall.sh` and `get.sh`.
+- **Not renamed**: the command-line program and every flag (`ddgw --cluster-status`; each "Command line" block in the help), the binary, the `ddgw.service` unit, `ddgw-uninstall`, the `ddgw` group and PAM file, `/var/lib/ddgw` and the other paths, release and download file names (`ddgw_vN.tgz`, `ddgw-capture.tgz`), the repository and `get.sh` URL (`micush/ddgw`), the join-code prefix, the wire protocol, the self-signed certificate's subject, the command-line usage banner and `CLAUDE.md`. Older changelog entries keep the name they were written under.
+
+### Verified
+- Chromium, dark and light: the tab title, sign-in page and sidebar header read "Anyname DNS Director" (one line in the sidebar). `bash -n` on the three scripts; `install.sh --dry-run` and `--help` print the new name; `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `app.js` and `help.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+- Every changed line of the README, QUICKSTART, help and page text was read in the diff: only prose changed, no command, flag, path, file or service name.
+
+### Not verified
+- `shellcheck` is not installed here. `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
+
 ## [v225] - 2026-10-07 — Packet capture: no "Not capturing." line under the box
 
 ### Changed

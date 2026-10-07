@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# ddgw installer / upgrader.
+# Anyname DNS Director installer / upgrader.
 #
-# Builds ddgw from the source tree this script sits in and installs it as a
+# Builds Anyname from the source tree this script sits in and installs it as a
 # systemd service. Supports Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and
-# Manjaro (and derivatives that declare them in ID_LIKE).  If ddgw is already
+# Manjaro (and derivatives that declare them in ID_LIKE).  If Anyname is already
 # installed it is upgraded in place: config, certificate, group membership and
 # PAM service file are kept, the previous binary is saved, and the upgrade is
 # rolled back automatically if the new version fails to start.
@@ -51,7 +51,7 @@ die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 
 usage() {
   cat <<EOF
-ddgw installer
+Anyname DNS Director installer
 
 Usage: sudo ./install.sh [options]
 
@@ -141,7 +141,7 @@ if [ "$(id -u)" -ne 0 ] && [ "$DRY" = 0 ]; then
 fi
 
 [ -f "$SRC/source/go.mod" ] && [ -f "$SRC/source/VERSION" ] && [ -f "$SRC/source/main.go" ] ||
-  die "run this script from the top of the ddgw tree (source/go.mod, source/VERSION and source/main.go not found next to it)"
+  die "run this script from the top of the Anyname tree (source/go.mod, source/VERSION and source/main.go not found next to it)"
 NEW_VER=$(tr -d '[:space:]' <"$SRC/source/VERSION")
 [[ $NEW_VER =~ ^[0-9]+$ ]] || die "bad VERSION file: '$NEW_VER'"
 
@@ -176,7 +176,7 @@ else
   HAVE_SYSTEMD=0
 fi
 
-step "ddgw v$NEW_VER on $OS_NAME ($FAMILY family, package manager: $PM)"
+step "Anyname v$NEW_VER on $OS_NAME ($FAMILY family, package manager: $PM)"
 [ "$DRY" = 1 ] && info "dry run: nothing will be changed"
 
 # ── existing installation? ───────────────────────────────────────────────────
@@ -189,7 +189,7 @@ if [ -n "$OLD_VER" ]; then
   if [ "$OLD_VER" -lt "$NEW_VER" ]; then
     MODE=upgrade; info "installed: v$OLD_VER → upgrading to v$NEW_VER"
   elif [ "$OLD_VER" -eq "$NEW_VER" ] && [ "$FORCE" = 0 ]; then
-    info "ddgw v$OLD_VER is already installed and up to date (use --force to reinstall/repair)."
+    info "Anyname v$OLD_VER is already installed and up to date (use --force to reinstall/repair)."
     exit 0
   elif [ "$OLD_VER" -gt "$NEW_VER" ] && [ "$FORCE" = 0 ]; then
     die "installed v$OLD_VER is newer than this source (v$NEW_VER); use --force to downgrade"
@@ -316,7 +316,7 @@ install_frr() {
   # on Arch it is part of frr.  Without it ddgw has to restart FRR for every change.
   if [ "$FAMILY" != arch ] && { assumed_missing frr-reload || [ ! -e /usr/lib/frr/frr-reload.py ]; }; then
     info "installing frr-pythontools (lets FRR reload a changed config without dropping BGP sessions)"
-    (pkg_install frr-pythontools) || warn "frr-pythontools could not be installed; ddgw will restart FRR (briefly dropping BGP sessions) when the BGP setting changes."
+    (pkg_install frr-pythontools) || warn "frr-pythontools could not be installed; Anyname will restart FRR (briefly dropping BGP sessions) when the BGP setting changes."
   fi
   return 0
 }
@@ -422,7 +422,7 @@ else
 fi
 
 # ── build (before touching the installed system) ─────────────────────────────
-step "Building ddgw v$NEW_VER (with PAM)"
+step "Building Anyname v$NEW_VER (with PAM)"
 NEWBIN=$TMP/ddgw
 if [ "$DRY" = 1 ]; then
   info "[dry-run] CGO_ENABLED=1 $GO build -trimpath -o ddgw ."
@@ -655,7 +655,7 @@ if [ "$DRY" = 0 ]; then
 fi
 
 # ── summary ──────────────────────────────────────────────────────────────────
-step "Done: ddgw v$NEW_VER ($MODE)"
+step "Done: Anyname v$NEW_VER ($MODE)"
 HOST=$(hostname -f 2>/dev/null || hostname)
 if [ ! -f "$CONF_DIR/ddgw.conf" ]; then
   info "no config yet ($CONF_DIR/ddgw.conf): the daemon runs with no gateway groups until you create one."

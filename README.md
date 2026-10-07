@@ -1,6 +1,6 @@
-# ddgw — DNS Distributed Gateway
+# Anyname DNS Director
 
-ddgw gives a group of machines one shared DNS address. Clients point at that
+Anyname gives a group of machines one shared DNS address. Clients point at that
 address (a **gateway**); every node answers it, and the nodes agree among
 themselves, over a small multicast or unicast protocol, who owns which share of
 the traffic, so a node can fail or restart without clients noticing.
@@ -76,12 +76,12 @@ headers, iproute2, FRR for the Anycast page, and a Go >= 1.24 toolchain — take
 own package (`golang-1.2x-go`/`golang-go`, `golang`, `go`) when that is recent
 enough, otherwise downloaded from go.dev with a checksum check; a downloaded one is kept in `/usr/local/share/ddgw/go` because
 the daemon rebuilds itself with it when you apply an update — `--no-keep-go`
-removes it). FRR is installed with the distribution's `frr` package (EPEL on the RHEL family); if that fails the installer only warns, and ddgw leaves FRR untouched until a local AS is set on the Anycast page. It then installs
+removes it). FRR is installed with the distribution's `frr` package (EPEL on the RHEL family); if that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page. It then installs
 `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager
 drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw`
 systemd unit.
 
-If ddgw is already installed the script upgrades it: the config, certificate,
+If Anyname is already installed the script upgrades it: the config, certificate,
 group members and an existing PAM file are kept, the old binary is saved as
 `/usr/local/share/ddgw/ddgw.prev`, and if the new version does not start the
 old one is restored. The same version is a no-op (`--force` reinstalls; a
@@ -89,7 +89,7 @@ downgrade needs `--force`). The user who ran the installer (the one behind `sudo
 so they can log in to the GUI; `--add-user NAME` adds others. Uninstall keeps `/var/lib/ddgw` (the config, the
 certificate, config history, cluster identity) unless `--purge` is given.
 
-**Where things live**: everything ddgw keeps is in `/var/lib/ddgw` (mode 0700):
+**Where things live**: everything Anyname keeps is in `/var/lib/ddgw` (mode 0700):
 `ddgw.conf`, the GUI certificate, `versions/`, the cluster identity and update
 data. The control socket is `/run/ddgw/ddgw.sock`.
 
@@ -124,7 +124,7 @@ with no servers yet answers SERVFAIL and shows amber.
 * **Client subnet (ECS)** – on by default (`"ecs": true`; turn it off in Settings ▸ DNS proxy ▸
   Client network, or per gateway on the Topology page: edit the gateway → "Tell the DNS servers
   which network the client is on"). With it off, every upstream server sees all queries coming
-  from the ddgw node. With it on the proxy attaches the
+  from the Anyname node. With it on the proxy attaches the
   client's *network* as an EDNS Client Subnet option (RFC 7871): the first
   `ecs_prefix4` bits (default 24) of an IPv4 client or `ecs_prefix6` (56) of an
   IPv6 client — never the full address. Servers that understand it (Google
@@ -182,7 +182,7 @@ with no servers yet answers SERVFAIL and shows amber.
   but not again under No Error or Refused. Click the **Updates** tile to see only updates (chart, who sent them, which zones) and the last 200
   updates under **Recent dynamic updates** (and by `ddgw --dns-updates`): time, client, zone, what
   it changed (`add host1.example.com A 192.0.2.7`, `delete old.example.com A`), the primary and its answer. A primary that
-  filters by source address sees the ddgw node, not the client — use TSIG keys, which travel with the
+  filters by source address sees the Anyname node, not the client — use TSIG keys, which travel with the
   message. Switch it off with `"forward_updates": false` (Configure → Settings → DNS proxy): updates
   are then answered REFUSED. Note that anyone who can reach the VIP can send updates to your primary
   this way; the primary's own authorisation (TSIG, ACL) is what decides.
@@ -266,7 +266,7 @@ every domain that server has to answer.
   or not-yet-started time is not counted) and **queries per second**, with the part answered from the cache. A gap means nothing happened
   in that time (paused, or the node was down, or — for a server or domain — nothing was asked of it). A gateway's graphs sum the nodes that answer the
   cluster call (the dialog says "All 3 nodes counted together", or how many were counted and how many did not answer; a single node shows just this node). The history is kept per node for 7 days, one slot per minute, and saved with the other
-  statistics (`stats.json.gz`, every 5 minutes and when ddgw stops), so a restart keeps it (time ddgw was down is a gap). A server address
+  statistics (`stats.json.gz`, every 5 minutes and when Anyname stops), so a restart keeps it (time Anyname was down is a gap). A server address
   listed by two gateways is one series; a gateway's series covers all its addresses (IPv4, IPv6, anycast) on this node.
 * **Zoom, pan and arrange the drawing.** Dragging the empty background moves around the drawing in any direction. The mouse wheel over the drawing zooms it (20% to 300%, around the pointer; the zoom is kept across
   the refreshes and reset when you pick another gateway); a double-click on the empty drawing fits it to the window again. **Drag** a server
@@ -293,7 +293,7 @@ every domain that server has to answer.
   (the gateway runs but a server is down; a server is up but one of its tests
   fails), **red** down (no healthy server; a server that fails its tests),
   **grey** not known yet (not applied, not probed yet).
-* A domain is a **health test**, not a route: ddgw sends every client query to
+* A domain is a **health test**, not a route: Anyname sends every client query to
   the fastest healthy server; a server counts as healthy while fewer than
   `down_percent` (50 %) of *its* domains fail.
 * Each gateway has its **own pool**; two gateways may use different servers.
@@ -350,24 +350,24 @@ shared across the cluster and need DNS servers on the gateway.
 An address is held only while this node can answer on it — gateway running, not
 paused, listener up, at least one DNS server healthy. Otherwise it is taken off
 `lo`, so the route disappears from your routing daemon. It is added with a
-10-second lifetime that ddgw renews every 3 s, so if ddgw crashes or hangs the
+10-second lifetime that Anyname renews every 3 s, so if Anyname crashes or hangs the
 kernel removes the address by itself within about 10 s instead of leaving a route
 that nothing answers. The drawing and `--canvas` show whether each address is
 announced from the node you are looking at. When the node manages BGP, the pill is green when every neighbor of its family has an established session (IPv4 address → IPv4 neighbors, IPv6 → IPv6), amber when some do and some do not, and red when none does, when it has no neighbor of that family, or when BGP is disabled on the node (Operate → Anycast). A neighbor that is disabled or still connecting counts as not established.
 
 ## BGP (FRR)
 
-ddgw can drive FRR on a node so the anycast addresses are announced without any
+Anyname can drive FRR on a node so the anycast addresses are announced without any
 hand-written routing config (GUI: **Configure → Anycast**; CLI below). It is **per
 node** — the AS, router id and neighbors are never replicated, because a node
 usually peers with its own upstream router; only the anycast addresses are shared.
 
-BGP runs on a node while a local AS number is set. That makes ddgw the owner of the
+BGP runs on a node while a local AS number is set. That makes Anyname the owner of the
 node's `/etc/frr/frr.conf`: it renders the whole file (BGP only), sets `bgpd=yes`
 and `bfdd=yes` in `/etc/frr/daemons`, and reloads FRR (`systemctl reload frr`, a
 restart when a daemon is switched on or off). FRR must be installed, with its `frr-pythontools`
-package (the installer adds both) — without it a reload cannot work, so ddgw restarts FRR for every
-change and the sessions drop briefly. An `frr.conf` that ddgw did not write is saved once as
+package (the installer adds both) — without it a reload cannot work, so Anyname restarts FRR for every
+change and the sessions drop briefly. An `frr.conf` that Anyname did not write is saved once as
 `frr.conf.pre-ddgw` before it is replaced. Clearing the
 AS number removes the BGP section and leaves FRR running (the router ID can only be set while an AS is set, and clearing the AS clears it); **Operate → Anycast** does the same without forgetting any setting (*Disable BGP*), and can shut down a single neighbor (`neighbor … shutdown`, the neighbor stays configured); a node that never set an
 AS never has its FRR files touched. BFD is on for every neighbor. BGP keepalive and hold time are settings next to the router ID (default 3 s / 9 s; `--keepalive S --hold S`, `-` for the default); the session uses the lower hold time of the two ends. A neighbor can have a **multihop** limit (2-255, eBGP only) for a peer that is not on a connected subnet; FRR then runs BFD to it in multihop mode, so the peer must be set up the same way. Do not run this on a
@@ -392,9 +392,9 @@ What the node does, and no more:
   change the host's routing table.
 - **An IPv4 address goes to the IPv4 neighbors, an IPv6 address to the IPv6 ones**;
   add a neighbor of each family to announce both.
-- A prefix is in FRR's table only while ddgw holds the address on `lo`, so it is
-  withdrawn when no DNS server answers, the gateway is paused or ddgw stops, and
-  within about 10 s if ddgw is killed (the address lifetime, see above). BFD is on
+- A prefix is in FRR's table only while Anyname holds the address on `lo`, so it is
+  withdrawn when no DNS server answers, the gateway is paused or Anyname stops, and
+  within about 10 s if Anyname is killed (the address lifetime, see above). BFD is on
   for every neighbor; lower the router's timers to shorten the time your peers need
   to notice.
 - The neighbor password is an MD5 TCP session password; it is stored in the config
@@ -638,7 +638,7 @@ them all.
 
 ## Clustering
 
-Clustering is for **management only**: it keeps the settings of several ddgw
+Clustering is for **management only**: it keeps the settings of several Anyname
 nodes in step and lets you update them together. It is independent of the
 AGC/AFN election. It is always on (every node is
 the primary of a cluster of one until it joins another); the only settings are:
@@ -697,10 +697,10 @@ to hide a line), donuts for record type and transport
 (UDP/TCP), and the top clients (with the reverse-DNS name once it is known) and top
 domains. The range is Last Hour, Last Day, Last Week, Last Month or a custom start and end. The
 counters are kept for **30 days**: they live in memory (about 30 MB for a small network, 65 MB at
-most) and are saved to `stats.json.gz` in the state directory every 5 minutes and when ddgw stops,
-and read back at start-up, so a restart or an update does not empty them (time ddgw was not running
+most) and are saved to `stats.json.gz` in the state directory every 5 minutes and when Anyname stops,
+and read back at start-up, so a restart or an update does not empty them (time Anyname was not running
 is a gap; "counting since" is the very first start). The file is gzip-compressed JSON, mode 0600,
-and holds client addresses and the names they asked for; delete it, with ddgw stopped, to forget
+and holds client addresses and the names they asked for; delete it, with Anyname stopped, to forget
 them. Each node has its own file; nothing is shared in a cluster. Top lists
 are collected in 10-minute steps for the last day and in hourly steps beyond that, keeping
 the busiest 300 clients and 600 domains per step (the rest count as “(others)”), so a flood
@@ -708,7 +708,7 @@ of random names cannot use up memory. Click a tile (No Error, Server Failure, NX
 the top lists to that kind of answer, e.g. to see which domains get NXDOMAIN and who asks for
 them; Total Queries clears it. Click a client to list the domains it asked for, or a domain to
 list the clients that asked for it (it combines with the tiles).
-Client names come from a PTR lookup that asks the DNS servers ddgw forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file; a client with no name is asked again after 2 minutes, a name is kept for 10. Hovering a client shows its reverse-DNS names and, from its regional registry (found through whois.iana.org), the address block, name, organization, country and origin AS (none for private addresses). Hovering a domain shows its **whois** data
+Client names come from a PTR lookup that asks the DNS servers Anyname forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file; a client with no name is asked again after 2 minutes, a name is kept for 10. Hovering a client shows its reverse-DNS names and, from its regional registry (found through whois.iana.org), the address block, name, organization, country and origin AS (none for private addresses). Hovering a domain shows its **whois** data
 (registrar, registrant when not redacted, dates, name servers), preceded by the first IPv4 and IPv6 address of the name. Whois is fetched only on the first
 hover, by the daemon on the picked node (TCP port 43, through whois.iana.org to the registry), and cached for a day. That sends the domain name or address, and nothing else, to the
 registry; a node without outbound port 43 shows "not reachable". The registered name is the last two
@@ -729,7 +729,7 @@ Authoritative figures; cache hits have their own tile.
 
 ### Memory guard
 
-The statistics, the host history and the answer cache all live in memory. Every 30 seconds ddgw looks at how much
+The statistics, the host history and the answer cache all live in memory. Every 30 seconds Anyname looks at how much
 memory the machine is using (the figure the Host page shows: what programs hold, caches excluded; in a container with
 a memory limit, the container's use against its limit, whichever is higher). At **85 %** or more it drops the **oldest
 data** — each round removes the oldest tenth of the time span the statistics and the host history cover (top lists,
@@ -740,7 +740,7 @@ hour of statistics and host history is never dropped (it is tiny, and a machine 
 something the log says so (WARN), and the Statistics and Host pages (and `ddgw --stats`, `ddgw --host`) show a line
 with the count, the time and what was dropped. What is dropped is gone from the saved file too after the next save.
 The limit is the environment variable `DDGW_MEMORY_LIMIT_PERCENT` of the daemon (1-99, default 85); there is no
-other switch. Note that it can only drop what ddgw itself holds (at most about 100 MB): if something else fills the
+other switch. Note that it can only drop what Anyname itself holds (at most about 100 MB): if something else fills the
 machine it will keep trimming and cannot fix that.
 
 ### Host
@@ -803,7 +803,7 @@ logged with the name of the user who made it.
 Monitor ▸ Log (or `ddgw --log`) shows the daemon's log and filters it: by words (every
 word must appear), by level, by time range and by line count, with the matches marked, a
 **Live** mode that follows the newest line, and **Download** for what is on screen. The
-text is the same that goes to stderr (the system journal under systemd); ddgw also keeps
+text is the same that goes to stderr (the system journal under systemd); Anyname also keeps
 it in `ddgw.log` in the state directory (`/var/lib/ddgw`, root-only), rotated at 2 MB with
 the two previous files kept, so it survives restarts and needs no journal access. Besides
 the usual events it logs server up/down changes and each domain that starts or stops
@@ -822,7 +822,7 @@ matching log.
 `--node-resume`, `--node-status`) pauses every gateway on the node in one step: it resigns,
 stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut
 down. The flag (`node_paused` in the config file) is local to the node, never replicated, and
-survives restarts of ddgw and of the host; resuming brings the gateways back once their DNS
+survives restarts of Anyname and of the host; resuming brings the gateways back once their DNS
 servers answer. A gateway you paused on its own stays paused after the node resumes. With the
 Node menu the page pauses any member, so to send all traffic to one node (to benchmark it, say)
 pause the others instead of shutting them down.
@@ -833,7 +833,7 @@ pause the others instead of shutting them down.
 
 **Restart or shut down the host.** Operate ▸ Node ▸ *Host* (or `ddgw --power`) restarts or shuts down the whole host, now,
 in 1–10080 minutes, or at a time of day; a scheduled action is kept by the
-operating system (`shutdown(8)`, so it survives a restart of ddgw), shows on the
+operating system (`shutdown(8)`, so it survives a restart of Anyname), shows on the
 page and can be cancelled. An action started *now* is refused when this node is
 the only member serving one of its gateways (the same check updates use); the GUI
 asks whether to go ahead anyway, the CLI needs `--yes`. The check is made when
@@ -934,4 +934,4 @@ the process (the unit does: `Restart=always`).
 
 ## License
 
-ddgw is free software under the GNU General Public License, version 3 (see `LICENSE` next to this file).
+Anyname is free software under the GNU General Public License, version 3 (see `LICENSE` next to this file).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ddgw web installer: downloads the latest tagged release from GitHub and runs
+# Anyname DNS Director web installer: downloads the latest tagged release from GitHub and runs
 # its install.sh (install or in-place upgrade).
 #
 #   curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
@@ -64,7 +64,7 @@ main() {
   if [ -n "$want" ]; then
     tag=$want
   else
-    step "Looking up the latest ddgw version"
+    step "Looking up the latest Anyname version"
     tag=$(latest_tag) || die "could not find a tagged version of $repo (no network, GitHub rate limit, or no tags yet)"
   fi
   valid_tag "$tag" || die "bad tag name: $tag"
@@ -72,17 +72,17 @@ main() {
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/ddgw-get.XXXXXX") || die "cannot create a temporary directory"
   trap 'rm -rf "$tmp"' EXIT
 
-  step "Downloading ddgw $tag"
+  step "Downloading Anyname $tag"
   fetch "$host/$repo/archive/refs/tags/$tag.tar.gz" >"$tmp/src.tgz" || die "download of $tag failed"
   mkdir "$tmp/tree"
   tar -xzf "$tmp/src.tgz" -C "$tmp/tree" --strip-components=1 || die "$tag is not a valid archive"
   rm -f "$tmp/src.tgz"
 
   [ -f "$tmp/tree/install.sh" ] && [ -f "$tmp/tree/source/VERSION" ] ||
-    die "$tag does not look like a ddgw release (install.sh or source/VERSION missing)"
+    die "$tag does not look like an Anyname release (install.sh or source/VERSION missing)"
   local ver; ver=$(tr -d '[:space:]' <"$tmp/tree/source/VERSION")
   [[ $ver =~ ^[0-9]+$ ]] || die "$tag has a bad source/VERSION: '$ver'"
-  step "Installing ddgw v$ver"
+  step "Installing Anyname v$ver"
 
   # Keep the terminal for install.sh's questions and sudo; the script itself
   # may be what is on our stdin.

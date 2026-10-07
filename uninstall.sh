@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ddgw uninstaller.
+# Anyname DNS Director uninstaller.
 #
 #   sudo ddgw-uninstall [--purge] [--remove-group] [-y] [--dry-run]
 #
@@ -36,7 +36,7 @@ run()  { if [ "$DRY" = 1 ]; then printf '    [dry-run] %s\n' "$*"; return 0; fi;
 
 usage() {
   cat <<EOT
-ddgw uninstaller
+Anyname DNS Director uninstaller
 
 Usage: sudo ddgw-uninstall [options]
 
@@ -78,9 +78,9 @@ fi
 HAVE_SYSTEMD=0
 if have "$SYSTEMCTL" && { [ -d /run/systemd/system ] || [ -n "${DDGW_FORCE_SYSTEMD:-}" ]; }; then HAVE_SYSTEMD=1; fi
 
-[ -e "$BIN" ] || [ -d "$SHARE" ] || [ -e "$UNIT" ] || { echo "ddgw does not appear to be installed."; exit 0; }
+[ -e "$BIN" ] || [ -d "$SHARE" ] || [ -e "$UNIT" ] || { echo "Anyname does not appear to be installed."; exit 0; }
 
-step "This will remove ddgw"
+step "This will remove Anyname"
 info "service $UNIT_NAME, $BIN, $SHARE, $BIN_DIR/ddgw-uninstall"
 info "leftover ddgw<group>.<slot> network interfaces and the control socket"
 if [ "$PURGE" = 1 ]; then
@@ -170,7 +170,7 @@ elif getent group "$GROUP" >/dev/null 2>&1; then
   info "kept group $GROUP (use --remove-group to delete it)"
 fi
 
-step "ddgw removed"
+step "Anyname removed"
 [ -f "$CONF_DIR/ddgw.conf" ] && info "your config is still at $CONF_DIR/ddgw.conf"
 [ -f "$LEGACY_CONF_DIR/ddgw.conf" ] && info "your config is still at $LEGACY_CONF_DIR/ddgw.conf"
 exit 0
