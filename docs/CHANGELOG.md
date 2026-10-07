@@ -1,5 +1,37 @@
 # Changelog
 
+## [v230] - 2026-10-07 — One blurb for the virtual-MAC warning
+
+### Changed
+- The gateway circle's tooltip said the virtual-MAC warning twice (once as the status line, once as "Virtual MACs: …"), each with both the IPv4 and IPv6 results. It is now one blurb: "Virtual MACs: NOT delivered on this network — IPv4: …; IPv6: …. Use real MAC addresses for this gateway." The separate line shows only when the gateway is not marked by it (delivered, inconclusive).
+
+### Fixed
+- After **Use real MAC addresses** and the gateway working, the circle and node stayed amber while the sidebar dot went green: the node kept its last "not delivered" test result and kept marking the gateway with it. A result now counts only while the gateway uses virtual MACs (`markVmac` skips gateways whose real-MAC option is on). Test: `TestMarkVmacIgnoresTheResultOnceRealMACsAreOn`.
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, `node --check`, `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` (connection reset; passes on rerun alone), cgo-off vet, five cross-compiles.
+
+### Not verified
+- The tooltip in a browser (JavaScript syntax-checked only).
+
+## [v229] - 2026-10-07 — Test whether virtual MACs work on this network
+
+### Added
+- **Virtual-MAC test.** A gateway can look healthy (the router even holds its virtual MAC in the ARP table, because the announcements got out) while no client traffic reaches the node, because the network drops frames addressed to a virtual MAC (a VMware port group that is not promiscuous, a cloud with one MAC per interface). The test checks the return path: from a throwaway macvlan with a virtual MAC it asks the router (default gateway, else another neighbour) a question that changes no neighbour cache (an RFC 5227 ARP probe for IPv4; a neighbor solicitation from a throwaway link-local address for IPv6) and listens on that interface for the unicast answer. The same question from the real MAC is the control: a router that does not answer it gives **inconclusive**, never a false "not delivered". Verdicts: **delivered**, **not delivered**, **inconclusive**, and **off** (real MACs already on).
+- It runs on request (right-click the gateway circle ▸ **Test virtual MACs…**, `ddgw --test-vmac [--group N]`, `POST /api/vmactest`, relayable through the node picker) and once, in the background, a few seconds after a gateway starts. The last result is in the circle's tooltip, and a "not delivered" turns a healthy gateway amber with the reason.
+- **Apply the suggestion.** When the dialog says "not delivered" it offers **Use real MAC addresses**, which sets the shared option; the CLI is `ddgw --canvas-set gateway --group N --real-macs on|off`.
+- Nothing is enabled automatically.
+- Tests: parsers for /proc/net route, arp and ipv6_route, the ARP/NA reply matchers, the verdict logic, `markVmac`, `--real-macs`. `TestVmacLive` (skipped unless `DDGW_LIVE_VMAC=1` as root) runs the real test against a veth pair with a namespace as the router.
+
+### Verified
+- `TestVmacLive` run for real here, IPv4 path: open network gives delivered; the router's ARP replies to the virtual MAC dropped (nftables, arp family) gives not delivered; router interface down gives inconclusive; the throwaway interface is gone afterwards; real MACs already on gives off.
+- `gofmt -l .`, `go build`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles for linux/amd64, arm64, arm, 386, riscv64 (all passed; the race run took about 130 s).
+
+### Not verified
+- The IPv6 path live: the sandbox kernel has no IPv6 at all. It is built the same way and covered by the matcher tests only.
+- A real VMware or cloud network: the sandbox cannot reproduce a non-promiscuous port group; the drop was simulated at the router side only.
+- The GUI dialog and tooltip in a browser, and the relay of the test through the node picker, were not exercised (JavaScript syntax-checked only).
+
 ## [v228] - 2026-10-07 — A single node now updates itself
 
 ### Fixed

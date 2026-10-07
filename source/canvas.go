@@ -64,7 +64,9 @@ type CanvasGateway struct {
 	Status    string         `json:"status"`
 	Detail    string         `json:"detail"`
 	Families  []CanvasFamily `json:"families"`
-	ECS       bool           `json:"ecs"`
+	// Vmac is the last virtual-MAC test on this node (see vmactest.go); absent until one has run.
+	Vmac *VmacResult `json:"vmac,omitempty"`
+	ECS  bool        `json:"ecs"`
 	// LB is the load-balancing settings this gateway runs with; LBOwn says they are its own rather than Settings'.
 	LB      LBConfig       `json:"lb"`
 	LBOwn   bool           `json:"lb_own"`
@@ -359,6 +361,12 @@ func (s *StatusServer) canvasGroups() []CanvasGateway {
 	groups := buildCanvas(s.sup.config(), s.snapshot(), s.sup.poolList())
 	markWarming(groups, s.sup.warmingGroups())
 	markOffnet(groups, s.sup.offnetGroups())
+	cfg := s.sup.config()
+	real := map[int]bool{}
+	for _, g := range cfg.Groups {
+		real[g.GroupID] = g.RealMACs
+	}
+	markVmac(groups, real)
 	s.markAnycast(groups)
 	s.markNodes(groups)
 	s.up.annotate(groups, time.Now())
@@ -446,8 +454,10 @@ type canvasEdit struct {
 	VIP    string `json:"vip"`  // IPv4 (or IPv6) address/prefix
 	VIP6   string `json:"vip6"` // IPv6 address/prefix
 	ECS    string `json:"ecs"`  // on | off | "" (unchanged)
-	ECSv4  int    `json:"ecs_v4"`
-	ECSv6  int    `json:"ecs_v6"`
+	// RealMACs on | off | "" (unchanged): the gateway runs without virtual MACs on every node (a shared setting)
+	RealMACs string `json:"real_macs"`
+	ECSv4    int    `json:"ecs_v4"`
+	ECSv6    int    `json:"ecs_v6"`
 	// load balancing of the gateway's own pool: any of these makes the gateway use its own values (starting from what
 	// it uses now); LB "settings" goes back to following Settings
 	LB            string  `json:"lb"`
@@ -697,6 +707,14 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 				g.ExtraVIPs = l
 				did = append(did, "anycast addresses")
 			}
+			switch e.RealMACs {
+			case "":
+			case "on", "off":
+				g.RealMACs = e.RealMACs == "on"
+				did = append(did, "real MAC addresses "+e.RealMACs)
+			default:
+				return "", errors.New("--real-macs must be on or off")
+			}
 			if msg, err := setECS(dc, g, e); err != nil {
 				return "", err
 			} else if msg != "" {
@@ -708,7 +726,7 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 				did = append(did, msg)
 			}
 			if len(did) == 0 {
-				return "", errors.New("nothing to change: give --vip, --vip6, --interface, --label, --anycast, --ecs or a load-balancing setting")
+				return "", errors.New("nothing to change: give --vip, --vip6, --interface, --label, --anycast, --ecs, --real-macs or a load-balancing setting")
 			}
 			return fmt.Sprintf("gateway %d: changed %s", e.Group, strings.Join(did, ", ")), nil
 		case "add":

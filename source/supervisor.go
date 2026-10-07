@@ -346,6 +346,7 @@ func (s *Supervisor) startGroupWhenReadyLocked(gc GroupConfig) {
 
 // startAfterSubnetLocked is the rest of the start: wait for the DNS servers, then go.
 func (s *Supervisor) startAfterSubnetLocked(gc GroupConfig) {
+	vmacAtStart(gc) // a background check that clients' replies can reach this node; no-op in tests
 	if gc.Paused || s.dnsReady(gc.GroupID, 0, warmFloor) {
 		s.startGroupLocked(gc)
 		return

@@ -32,8 +32,8 @@ type cliFlags struct {
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile *string
 	asn, routerID, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                      *string
 	updateUpload, updatePush, updateCancel, updateAuto                                                                                                                            *string
-	canvas                                                                                                                                                                        *bool
-	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node                     *string
+	canvas, vmacTest                                                                                                                                                              *bool
+	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node, realMACs           *string
 	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                 *int
 	serverStats, gatewayStats, spread, lbMode                                                                                                                                     *string
 	latencyAlpha                                                                                                                                                                  *float64
@@ -53,7 +53,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		versionExport: s("version-export"), configImport: s("config-import"), note: s("note"),
 		certFile: s("cert-file"), keyFile: s("key-file"), cn: s("cn"), san: s("san"),
 		clusterJoin: s("cluster-join"), clusterRemove: s("cluster-remove"), clusterUnremove: s("cluster-unremove"),
-		canvas: b("canvas"), canvasAdd: s("canvas-add"), canvasDel: s("canvas-del"),
+		canvas: b("canvas"), vmacTest: b("test-vmac"), realMACs: s("real-macs"), canvasAdd: s("canvas-add"), canvasDel: s("canvas-del"),
 		canvasSet: s("canvas-set"), canvasMove: s("canvas-move"), pos: fs.Int("to", 0, ""), canvasPause: s("canvas-pause"), canvasResume: s("canvas-resume"), vip6: s("vip6"), ecs: s("ecs"), label: s("label"), anycast: s("anycast"), address: s("address"), scope: s("scope"), node: s("node"),
 		ecsV4: fs.Int("ecs-v4", 0, ""), ecsV6: fs.Int("ecs-v6", 0, ""),
 		serverStats: s("server-stats"), gatewayStats: s("gateway-stats"), spread: s("spread"), lbMode: s("lb"), spreadBand: fs.Int("spread-band", 0, ""), downPercent: fs.Int("down-percent", 0, ""),
@@ -131,8 +131,10 @@ func (f *cliFlags) run(sock string) bool {
 	// ── canvas ──
 	case *f.canvas:
 		showCanvas(sock)
+	case *f.vmacTest:
+		showVmacTest(sock, *f.group)
 	case *f.canvasAdd != "" || *f.canvasDel != "" || *f.canvasSet != "" || *f.canvasPause != "" || *f.canvasResume != "" || *f.canvasMove != "":
-		e := canvasEdit{Action: "add", Kind: *f.canvasAdd, Group: *f.group, VIP: *f.vip, VIP6: *f.vip6, Interface: *f.ifname, Label: *f.label, Anycast: *f.anycast, Address: *f.address, Scope: *f.scope, Node: *f.node,
+		e := canvasEdit{Action: "add", Kind: *f.canvasAdd, Group: *f.group, VIP: *f.vip, VIP6: *f.vip6, Interface: *f.ifname, Label: *f.label, Anycast: *f.anycast, Address: *f.address, Scope: *f.scope, Node: *f.node, RealMACs: *f.realMACs,
 			Server: *f.server, Name: *f.name, Type: *f.qtype, ECS: *f.ecs, ECSv4: *f.ecsV4, ECSv6: *f.ecsV6,
 			LB: *f.lbMode, Spread: *f.spread, SpreadBand: *f.spreadBand, DownPercent: *f.downPercent, FailThreshold: *f.failThreshold, MaxAttempts: *f.maxAttempts, LatencyAlpha: *f.latencyAlpha, Pos: *f.pos}
 		if *f.canvasMove != "" {
@@ -1226,4 +1228,19 @@ func runClusterCapture(sock string, f *cliFlags, secs int) {
 		return
 	}
 	fatalf("the cluster capture did not finish")
+}
+
+// showVmacTest runs the virtual-MAC test on this node and prints what it found.
+func showVmacTest(sock string, group int) {
+	var rs []VmacResult
+	decode(op(sock, "vmac.test", map[string]int{"group": group}), &rs)
+	for _, r := range rs {
+		fmt.Printf("Gateway %d: %s — %s\n", r.GroupID, r.Verdict, r.Detail)
+		for _, f := range r.Families {
+			fmt.Printf("    %s: %s\n", f.AF, f.Detail)
+		}
+		if r.Verdict == vmacNotDelivered {
+			fmt.Printf("    To run without virtual MACs on every node: ddgw --canvas-set gateway --group %d --real-macs on\n", r.GroupID)
+		}
+	}
 }

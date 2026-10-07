@@ -318,6 +318,8 @@ CLI equivalent — same drawing, same colours:
     ddgw --canvas-del domain --group 1 --server 8.8.4.4 --name apple.com
     ddgw --canvas-add fallback --group 1 --server 1.1.1.1   # used only while every server is down
     ddgw --canvas-set gateway --group 1 --vip6 2001:db8::53/64 --ecs on   # add IPv6, turn on ECS
+    ddgw --test-vmac --group 1                                  # do virtual MACs reach this node? (changes nothing)
+    ddgw --canvas-set gateway --group 1 --real-macs on          # no virtual MACs, on every node (off undoes it)
     ddgw --canvas-set gateway --group 1 --label "Office DNS"   # a name instead of the address (--label - clears)
     ddgw --canvas-set gateway --group 1 --spread-band 200      # this gateway's own load balancing (also --spread on|off, --down-percent,
                                                                #   --fail-threshold, --max-attempts, --latency-alpha); --lb settings goes back

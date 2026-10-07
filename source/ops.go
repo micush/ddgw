@@ -51,6 +51,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		Iface    string   `json:"iface"`
 		Filter   string   `json:"filter"`
 		Seconds  int      `json:"seconds"`
+		Group    int      `json:"group"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -58,6 +59,8 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		}
 	}
 	switch cmd {
+	case "vmac.test":
+		return m.VmacTest(a.Group)
 	case "canvas.edit":
 		var e canvasEdit
 		if err := json.Unmarshal(raw, &e); err != nil {

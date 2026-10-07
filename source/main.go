@@ -64,11 +64,15 @@ the web GUI):
                                         [--label NAME|-]   (a name shown under the address; - clears)
                                         [--anycast ADDR[,ADDR]|-]   (extra addresses of ANY subnet, held on lo
                                          by every running node while its DNS answers, for BGP; - clears)
+                                        [--real-macs on|off]   (run without virtual MACs on every node)
                                         [--ecs on|off] [--ecs-v4 BITS] [--ecs-v6 BITS]
                                         [--spread on|off] [--spread-band PCT] [--down-percent PCT]
                                         [--fail-threshold N] [--max-attempts N] [--latency-alpha A]
                                           (this gateway's own load balancing; --lb settings goes back to
                                            following Settings, which is the default)
+                   --test-vmac [--group N]   (can clients' replies reach this node through virtual MACs? sends an ARP/NS
+                                         probe from a throwaway virtual MAC and listens for the answer; changes nothing.
+                                         When it says "not delivered": --canvas-set gateway --group N --real-macs on)
                    --canvas-set server  --group N --server ADDR --label NAME|-   (name shown instead of the
                                          address on the Topology page; - clears)
                    --canvas-pause|--canvas-resume gateway --group N   (this node stops/starts serving it)

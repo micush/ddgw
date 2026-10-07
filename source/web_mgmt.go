@@ -14,6 +14,7 @@ import (
 // CLI uses — so the two front ends cannot drift apart.
 
 func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/vmactest", w.authed(w.op("vmac.test", nil)))
 	// configuration history
 	mux.HandleFunc("GET /api/versions", w.authed(w.op("versions.list", nil)))
 	mux.HandleFunc("GET /api/versions/get", w.authed(w.op("versions.get", []string{"id"})))

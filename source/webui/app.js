@@ -506,12 +506,14 @@
     // The gateway circle's tooltip: its name, how long it has been up, each address family's state, and how many
     // nodes serve it.  The overall status line is added only when it says more than the family lines do (a
     // pause, a gateway with one family, a start still waiting); it is the same words as the two together otherwise.
+    const vmacWords = { delivered: "delivered", "not-delivered": "NOT delivered", inconclusive: "inconclusive" };
+    const vmacLine = (r) => "Virtual MACs: " + (vmacWords[r.verdict] || r.verdict) + " — " + r.detail;
     const gwTip = (g, st, dual) => {
       const fam = (af) => (st.fams[af] ? st.fams[af].detail : "not running");
       const together = dual ? "IPv4: " + fam("v4") + "; IPv6: " + fam("v6") : null;
       return ["Gateway " + gwLabel(g), st.why && st.why !== together ? st.why : "", upText(st.uptime),
         ...(dual ? [["IPv4", "v4"], ["IPv6", "v6"]].map(([n, af]) => n + " — " + fam(af)) : []),
-        membersText(st.members)].filter(Boolean).join("\n");
+        membersText(st.members), st.vmac && st.vmac.verdict !== "off" && !(st.why || "").startsWith("Virtual MACs:") ? vmacLine(st.vmac) : ""].filter(Boolean).join("\n");
     };
     const gwAddr = (g) => bareIP(g.vip4) || bareIP(g.vip6) || "gateway " + g.group_id;
     const gwLabel = (g) => g.name || gwAddr(g);
@@ -545,7 +547,7 @@
       if (gwPaused || nodePaused || removed) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : removed && !g.paused && !nodePaused ? "This node was removed from the gateway — it does not serve it; the other nodes carry on" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
       else if (!via && circle === "paused") { circle = "idle"; why = "Resuming…"; }
       if (via) why = "As " + v.via + " sees it (it serves the gateway; this node does not): " + why;
-      return { via: (v && v.via) || "", circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
+      return { via: (v && v.via) || "", circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], vmac: v && !via ? v.vmac || null : null, uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
     }
     // Where a server / domain is paused: "all" (shared, every node), "node" (this node's own settings) or "".
     const srvPausedScope = (g, addr) => (((g.dns || cv.cfg.dns || {}).paused_servers || []).includes(addr) ? "all" : (cv.cfg.paused_servers_here || []).includes(addr) ? "node" : "");
@@ -575,6 +577,24 @@
           ? "Every node stops serving the gateway — it gives up its address and stops answering DNS. Resume it when you are done."
           : "This node stops serving the gateway — it gives up its address and stops answering DNS — so it can be taken offline. The other cluster nodes carry on. Resume it here when you are done.",
         "Pause gateway", () => quick(() => { g[k] = true; }), "btn primary");
+    }
+    // "Test virtual MACs…": asks this node to check that replies addressed to a virtual MAC reach it, and shows what it found.
+    // Nothing changes unless the person presses "Use real MAC addresses".
+    async function vmacTest(g) {
+      const body = h("div", {}, h("p", {}, "Testing… this takes a few seconds."));
+      const toolbar = h("div", { class: "toolbar" }, h("button", { class: "btn", type: "button", onclick: closeEditor }, "Close"));
+      openDialog("Virtual MACs: " + gwLabel(g), body, toolbar);
+      try {
+        const r = await api("POST", "/api/vmactest", { group: g.group_id });
+        const x = (r.data || [])[0];
+        if (!x) throw new Error("no result");
+        clear(body).append(h("p", {}, vmacLine(x)), ...(x.families || []).map((f) => h("p", { class: "hint" }, f.af + ": " + f.detail)));
+        if (x.verdict === "not-delivered") {
+          toolbar.prepend(h("button", { class: "btn primary", type: "button", onclick: () => { closeEditor(); quick(() => { g.real_macs = true; }); } }, "Use real MAC addresses"));
+        }
+      } catch (e) {
+        clear(body).append(h("p", {}, "The test could not run: " + e.message));
+      }
     }
     function pauseServer(g, addr, scope, pause) {
       quick(() => {
@@ -1148,7 +1168,7 @@
       else items.push(["Pause " + noun, null, "", subs(true)]);
       return items;
     };
-    const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)], ...addNodeItems(g),
+    const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ...(g.real_macs ? [] : [["Test virtual MACs…", () => vmacTest(g)]]), ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)], ...addNodeItems(g),
       ...pauseItems("gateway", (sc) => !!g[sc === "all" ? "paused_all" : "paused"], (sc, p) => pauseGateway(g, sc, p)), ["Delete gateway", delSel, "danger"]];
     const srvItems = (g, addr) => [["Statistics…", () => serverStats(g, addr)], ["Edit server…", () => serverForm(g, addr)], ["Add domain…", () => domainForm(g, addr, null)],
       ...pauseItems("server", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p)), ["Delete server", delSel, "danger"]];
