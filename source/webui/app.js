@@ -1983,12 +1983,45 @@
     if (!lost.length) return [];
     return [h("div", { class: "notice warn" }, "Not included in these numbers: " + lost.map((n) => n.name + " (" + n.error + ")").join(", "))];
   };
+  // A right-click menu for a table row: items are [label, handler, "danger"?]. Reuses the Topology menu's look.
+  let rowMenuEl = null;
+  const closeRowMenu = () => {
+    if (!rowMenuEl) return;
+    rowMenuEl.remove(); rowMenuEl = null;
+    document.removeEventListener("click", closeRowMenu, true);
+    document.removeEventListener("keydown", rowMenuKey, true);
+    window.removeEventListener("blur", closeRowMenu);
+    window.removeEventListener("resize", closeRowMenu);
+  };
+  const rowMenuKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeRowMenu(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = [...rowMenuEl.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+  };
+  const rowMenu = (items) => (e) => {
+    e.preventDefault(); e.stopPropagation();
+    closeRowMenu();
+    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label, fn, cls]) =>
+      h("button", { type: "button", role: "menuitem", class: cls || "", onclick: () => { closeRowMenu(); fn(); } }, label)));
+    document.body.append(rowMenuEl);
+    const r = rowMenuEl.getBoundingClientRect(), b = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 0, bottom: 0 };
+    const x = e.clientX || b.left, y = e.clientY || b.bottom;
+    rowMenuEl.style.left = Math.max(4, Math.min(x, window.innerWidth - r.width - 4)) + "px";
+    rowMenuEl.style.top = Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) + "px";
+    rowMenuEl.querySelector("button").focus();
+    document.addEventListener("click", closeRowMenu, true);
+    document.addEventListener("keydown", rowMenuKey, true);
+    window.addEventListener("blur", closeRowMenu);
+    window.addEventListener("resize", closeRowMenu);
+  };
   const when = (t) => (t && !String(t).startsWith("0001") ? new Date(t).toLocaleString() : "–");
-  // The cluster's member table: the Cluster page passes a remove handler (a Remove button per other node), the Monitor page none.
+  // The cluster's member table: the Cluster page passes a remove handler (right-click a node ▸ Remove), the Monitor page none.
   // The Monitor page (named) has the node's name and its addresses in two columns; the cluster address is the name's tooltip.
   const membersTable = (v, onRemove, named) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
-    const rows = v.peers.map((p) => h("tr", { class: p.self ? "local" : "" },
+    const rows = v.peers.map((p) => h("tr", Object.assign({ class: p.self ? "local" : "" }, onRemove && !p.self ? { tabindex: "0", oncontextmenu: rowMenu([["Remove", () => onRemove(p), "danger"]]) } : {}),
       named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "") : h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
       named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
@@ -1996,10 +2029,9 @@
       h("td", { class: "num" }, p.reachable ? p.epoch : "–"),
       h("td", { class: "num" }, p.version || "–"), h("td", { class: "num" }, p.source_version || "–"),
       h("td", {}, p.self ? "now" : when(p.last_seen)),
-      h("td", { class: "wrap muted" }, p.error || ""),
-      onRemove ? h("td", { class: "actions" }, p.self ? null : h("button", { class: "btn small danger", type: "button", onclick: () => onRemove(p) }, "Remove")) : null));
+      h("td", { class: "wrap muted" }, p.error || "")));
     return h("div", { class: "scroll" }, h("table", { class: named ? "tight" : null },
-      h("thead", {}, h("tr", {}, (named ? ["Node name", "Node IP"] : ["Node"]).concat(["Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""], onRemove ? [""] : []).map((t, i) => h("th", { class: i >= (named ? 4 : 3) && i <= (named ? 6 : 5) ? "num" : "" }, t)))),
+      h("thead", {}, h("tr", {}, (named ? ["Node name", "Node IP"] : ["Node"]).concat(["Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""]).map((t, i) => h("th", { class: i >= (named ? 4 : 3) && i <= (named ? 6 : 5) ? "num" : "" }, t)))),
       h("tbody", {}, rows)));
   };
   const say = (el, kind, ...msg) => kind === "ok" ? clear(el) : clear(el).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
@@ -2983,7 +3015,6 @@
     const ROWS = 1500;
     const cluster = () => state.target === CLUSTER;
     const sizeText = (n) => (n < 1024 ? n + " bytes" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB");
-    const FILTER_HELP = "Filter (optional): host 10.0.0.5 · src host … · net 10.0.0.0/24 · port 53 · dst port 53 · portrange 50-60 · tcp · udp · icmp · arp · ip6 · dns · ether host 00:1a:7c:01:02:00 · and · or · not · ( )  —  for example: host 10.129.0.205 and port 53";
 
     const ifaceSelect = () => h("select", { "aria-label": "Interface", class: "capif" });
     async function loadIfaces() {
@@ -3022,7 +3053,7 @@
       last = st;
       running = st.running;
       if (!shown && !box.firstChild) empty(st.iface ? "Waiting for packets on " + st.iface + (st.filter ? " matching: " + st.filter : "") + "…" : "Not capturing. Choose an interface and press Start.");
-      clear(info).append(!st.iface ? "Not capturing." :
+      clear(info).append(!st.iface ? "" :
         (st.running ? "Capturing on " : "Stopped on ") + st.iface + (st.filter ? " · filter: " + st.filter : "") + " · " + st.count + " packet" + (st.count === 1 ? "" : "s") + " kept" +
         (st.seen > st.matched ? " (" + st.seen + " seen, the filter turned away " + (st.seen - st.matched) + ")" : "") +
         " · " + sizeText(st.bytes) + " in the buffer, the newest 5000 or 32 MB");
@@ -3081,7 +3112,6 @@
         iface = ifaceSelect();
         filter = h("input", { type: "text", class: "grow", placeholder: "Filter, e.g. host 10.129.0.205 and port 53", "aria-label": "Capture filter", spellcheck: "false", autocomplete: "off", maxlength: "300",
           onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); (cluster() ? goAll : start)(); } } });
-        const hint = h("div", { class: "hint" }, FILTER_HELP);
         if (cluster()) {
           durSel = h("select", { "aria-label": "How long" }, [["5", "5 seconds"], ["10", "10 seconds"], ["30", "30 seconds"], ["60", "60 seconds"]].map(([v, t]) => h("option", { value: v }, t)));
           durSel.value = "10";
@@ -3090,7 +3120,7 @@
           jobBox = h("div", {});
           main.append(status, section("Capture on every node",
             h("div", { class: "hint nomargin" }, "Runs the same capture on every node of the cluster at the same time, for the time you choose, and bundles one .pcap per node in a .tgz. Each node keeps its newest packets (about 4 MB). The capture only listens."),
-            h("div", { class: "toolbar tight logbar" }, iface, filter, durSel, goBtn, dlJob), hint, jobBox));
+            h("div", { class: "toolbar tight logbar" }, iface, filter, durSel, goBtn, dlJob), jobBox));
           await loadIfaces().catch(fail(status));
           await pollJob().catch(fail(status));
           return;
@@ -3103,8 +3133,7 @@
         main.append(status, section("Packet capture",
           h("div", { class: "toolbar tight logbar" }, iface, filter, startBtn, stopBtn,
             h("button", { class: "btn", type: "button", onclick: clearAll }, "Clear"), dlBtn),
-          hint, box, info,
-          h("div", { class: "hint" }, "This captures on the node chosen in the Node menu and only listens. Choosing Cluster there captures on every node at once.")));
+          box, info));
         empty("Not capturing. Choose an interface and press Start.");
         try { await loadIfaces(); await refresh(true); } catch (e) { fail(status)(e); }
       },
@@ -3242,7 +3271,7 @@
       const body = h("tbody", {});
       cfg.neighbors.forEach((n, i) => { const tr = neighborRow(n, i); body.append(tr); rows.set(n.peer, tr); });
       draft = null;
-      if (!cfg.neighbors.length) body.append(h("tr", {}, h("td", { colspan: 5, class: "empty" }, "No neighbors yet. Press + to add one.")));
+      if (!cfg.neighbors.length) body.append(h("tr", {}, h("td", { colspan: 4, class: "empty" }, "No neighbors yet. Press + to add one.")));
       for (const [k, tr] of rows) { const pick = () => select(k); tr.addEventListener("click", pick); tr.addEventListener("focusin", pick); }
       if (sel !== null && !rows.has(sel)) sel = null;
       clear(nbrs).append(section("Neighbors",
@@ -3321,16 +3350,16 @@
         if (!c.disabled && !confirm("Disable BGP on this node?\n\nIts sessions go down and the anycast addresses are no longer announced from this node. The settings are kept.")) return;
         call({ enabled: !!c.disabled });
       } }, c.disabled ? "Enable BGP" : "Disable BGP");
-      const row = (n) => h("tr", {}, h("td", { class: "mono" }, n.peer), h("td", {}, String(n.remote_as)), h("td", {}, n.description || ""), h("td", {}, stateOf(n)),
-        h("td", {}, h("button", { class: "btn small", type: "button", disabled: !!c.disabled, "aria-label": (n.disabled ? "Enable " : "Disable ") + n.peer, onclick: () => {
+      const row = (n) => h("tr", { tabindex: "0", oncontextmenu: rowMenu([[n.disabled ? "Enable" : "Disable", () => {
+          if (c.disabled) return;
           if (!n.disabled && !confirm("Disable neighbor " + n.peer + "?\n\nThe session is shut down and nothing is announced to it. The neighbor is kept.")) return;
           call({ peer: n.peer, enabled: !!n.disabled });
-        } }, n.disabled ? "Enable" : "Disable")));
+        }]]) }, h("td", { class: "mono" }, n.peer), h("td", {}, String(n.remote_as)), h("td", {}, n.description || ""), h("td", {}, stateOf(n)));
       box.append(section("BGP",
         kv([["Local AS", String(c.asn)], ["State", c.disabled ? pill("disabled", "") : pill("enabled", "ok")]]),
         h("div", { class: "toolbar" }, toggleBGP)));
       box.append(section("Neighbors", h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, ["Neighbor", "AS", "Description", "BGP", ""].map((t) => h("th", {}, t)))),
+        h("thead", {}, h("tr", {}, ["Neighbor", "AS", "Description", "BGP"].map((t) => h("th", {}, t)))),
         h("tbody", {}, c.neighbors.length ? c.neighbors.map(row) : h("tr", {}, h("td", { colspan: 5, class: "empty" }, "No neighbors yet: add one under Configure → Anycast.")))))));
     }
 

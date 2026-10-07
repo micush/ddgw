@@ -716,6 +716,9 @@ func (w *WebServer) handleGateways(rw http.ResponseWriter, r *http.Request, s *s
 	gs := buildGateways(w.status.snapshot())
 	nameMembers(gs, w.status.ipNames())
 	nameGateways(gs, w.status.sup.config())
+	if r.URL.Query().Get("own") == "" { // ?own=1: only what this node runs, as asked by another node
+		gs = w.status.gatewaysVia(r.Context(), gs)
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "data": gs})
 }
 
@@ -730,7 +733,11 @@ func (w *WebServer) handleNeighbors(rw http.ResponseWriter, r *http.Request, s *
 }
 
 func (w *WebServer) handleDNS(rw http.ResponseWriter, r *http.Request, s *session) {
-	writeJSON(rw, http.StatusOK, w.status.dnsStatus())
+	resp := w.status.dnsStatus()
+	if r.URL.Query().Get("own") == "" { // ?own=1: only what this node runs, as asked by another node
+		resp = w.status.dnsVia(r.Context(), resp)
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }
 
 // ── actions (CLI: --assert-agc) ──────────────────────────────────────────────

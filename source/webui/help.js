@@ -94,7 +94,7 @@ const DDGW_HELP = {
   gateways: {
     title: "Gateways",
     body: [
-      "For each gateway group and address family, the nodes taking part and what each is doing. Refreshes every 2 seconds; ★ marks this node.",
+      "For each gateway group and address family, the nodes taking part and what each is doing. Refreshes every 2 seconds; ★ marks this node. Every gateway is listed, whichever node the Node menu has picked: one that node does not run is shown as a node that serves it sees it (nothing starred).",
       ["h", "Reading the table"],
       ["ul", [
         "**Node name** is the node's name (its host name, from the cluster) and **Node IP** the address the node uses in the gateway protocol; the name is – for a node the cluster does not know, or until that node runs a version that reports its addresses.",
@@ -117,7 +117,7 @@ const DDGW_HELP = {
   dns: {
     title: "DNS",
     body: [
-      "The state of each gateway's pool of upstream DNS servers on this node, fastest first. Refreshes every 2 seconds.",
+      "The state of each gateway's pool of upstream DNS servers, fastest first. Refreshes every 2 seconds. Every gateway is listed, whichever node the Node menu has picked: one that node does not run is shown as a node that serves it sees it; the query totals at the top are the picked node's own.",
       ["h", "How servers are chosen"],
       ["ul", [
         "Every server is probed on a schedule with the test queries. A server is **up** while fewer than the **down at** share of its test queries fail (50% by default, so one of two or two of four failing makes it down); with some failing but under that share it stays in use and shows **amber** (degraded). It goes **down** after the configured number of failed rounds in a row, and comes back with the first round that passes.",
@@ -275,7 +275,7 @@ const DDGW_HELP = {
       ["ul", [
         "One node is the **primary**; the others are **replicas**. Shared settings are checked on the primary and copied out within the sync interval.",
         "If the primary is gone for good, choose **Promote** on the replica you want. Nothing promotes itself, so a network split can never create two primaries.",
-        "**Remove** drops a member (it resets itself to a cluster of one when it next hears from the cluster); it can be allowed back with **Unremove**. **Leave cluster** does it from the node itself.",
+        "Right-click a member (not this node) and choose **Remove**: it drops the member (it resets itself to a cluster of one when it next hears from the cluster); it can be allowed back with **Unremove**. **Leave cluster** does it from the node itself.",
         "**Sync now** pulls the latest state immediately.",
       ]],
       ["h", "Epoch"],
@@ -327,7 +327,7 @@ const DDGW_HELP = {
       ["h", "The page"],
       ["ul", [
         "**Status**: the local AS, whether FRR is installed and `bgpd` answers, and what the last apply did.",
-        "**Neighbors**: the BGP session state read from FRR (*Established* is a working session; a neighbor you disabled shows *disabled*), the **BFD** state (*up* means the router answers fast failure detection, *down* means it does not), how long the session has been up and how many prefixes were sent to it.",
+        "**Neighbors**: the BGP session state read from FRR (*Established* is a working session; a neighbor you disabled shows *disabled*; right-click a neighbor and choose **Disable** or **Enable**), the **BFD** state (*up* means the router answers fast failure detection, *down* means it does not), how long the session has been up and how many prefixes were sent to it.",
         "**Anycast addresses**: every anycast address of every gateway and whether this node announces it. An address is *withdrawn* while no DNS server answers, the gateway is paused or not running here, or the address could not be added to `lo`; the reason is shown.",
       ]],
       ["cli", "ddgw --bgp"],
@@ -377,7 +377,7 @@ const DDGW_HELP = {
       ["h", "The page"],
       ["ul", [
         "**BGP**: *Disable BGP* stops BGP on this node as if the AS were cleared (the BGP section leaves `frr.conf`, the sessions go down, nothing is announced) but keeps the AS, router ID, timers and neighbors. *Enable BGP* puts it back. The anycast addresses stay on `lo` and the gateways keep answering; only the announcing stops.",
-        "**Neighbors**: *Disable* shuts one session down (`neighbor … shutdown` in `frr.conf`) and nothing is announced to it; the neighbor stays configured and in the list. *Enable* brings it back. The buttons are off while BGP itself is disabled.",
+        "**Neighbors**: right-click a neighbor and choose *Disable* to shut one session down (`neighbor … shutdown` in `frr.conf`) and nothing is announced to it; the neighbor stays configured and in the list. *Enable* (the same menu) brings it back. Neither works while BGP itself is disabled.",
         "Per node, like the rest of the BGP settings: another node is switched from the node picker at the top right.",
       ]],
       ["cli", "ddgw --bgp-disable\nddgw --bgp-enable\nddgw --bgp-neighbor-disable 192.0.2.1\nddgw --bgp-neighbor-enable 192.0.2.1"],

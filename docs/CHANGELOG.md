@@ -1,5 +1,32 @@
 # Changelog
 
+## [v225] - 2026-10-07 — Packet capture: no "Not capturing." line under the box
+
+### Changed
+- The "Not capturing." line under the capture box is gone (the box already says it). While a capture is running or stopped, the status line (interface, filter, packets kept) still shows. Change: `webui/app.js`.
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check webui/app.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+
+### Not verified
+- Not looked at in a browser (a one-string change). `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
+
+## [v224] - 2026-10-07 — Row buttons move to right-click; Gateways and DNS list every gateway
+
+### Changed
+- **Packet capture:** the filter-syntax line above the capture box and the "This captures on the node chosen in the Node menu…" note below it are gone (also the filter line on the all-nodes view); both are in the help. The status line under the box stays.
+- **Cluster page:** the Remove button on each member row is gone; right-click a member (not this node) ▸ **Remove**, same confirmation as before.
+- **Operate ▸ Anycast:** the Disable/Enable button on each neighbor row is gone; right-click a neighbor ▸ **Disable** / **Enable**, same confirmation. Help says so; no text was added to the pages. (`rowMenu` in `webui/app.js`: the Topology menu's look, Escape and arrow keys; rows take focus, so the keyboard menu key works.)
+- **Monitor ▸ Gateways and ▸ DNS list every gateway, whichever node is picked.** A node only runs the gateways it serves, so a node that serves only one of two showed one. For a gateway the picked node does not run, the table (Gateways) or pool and its answering addresses (DNS) is now the one a serving node has, asked over the cluster channel (`gatewaysvia.go`, `dnsvia.go`; `?own=1` is a node's own view and prevents chains). Nothing is starred for such a gateway; the DNS query totals stay the picked node's own. If no node serves it, or the one asked does not answer within 4 s, it is left out as before.
+
+### Verified
+- New tests: `TestTakeGatewayRowsAddsTheOtherGroupsWithoutStars`, `TestAddDNSPoolsTakesTheOtherGatewaysPool`.
+- Live, two clustered daemons with real PAM login, headless Chromium (dark): no Remove buttons on the Cluster page, right-click ▸ Remove asks and posts `{addr}`, no menu on this node's own row; no Disable/Enable buttons on the neighbors, right-click ▸ Disable (with its confirmation) posts `{peer, enabled:false}` and a disabled neighbor offers Enable (BGP data mocked: FRR is not in the sandbox); with node B removed from gateway 2 and running neither, B's `/api/gateways` and `/api/dns` list both gateways (via A) while `?own=1` lists none.
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check webui/app.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+
+### Not verified
+- Light theme; `TestBGPOperateAPIAndStatus` failed once in a full race run with a port-in-use error while live test daemons were still shutting down, and passed on rerun; the Gateways and DNS pages were checked through their API, not looked at in the browser. `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
+
 ## [v223] - 2026-10-06 — Install the latest tagged version with one curl
 
 ### Added

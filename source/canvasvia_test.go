@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func viaNodes(self string, others ...CanvasNode) []CanvasNode {
 	return append([]CanvasNode{{Name: "me", Addr: "10.0.0.1:1", Self: true, Gw: self, Reachable: true}}, others...)
@@ -42,5 +45,66 @@ func TestTakeFromKeepsThisNodesOwnEntry(t *testing.T) {
 	}
 	if mine.Via != "2" || mine.ViaAddr != "10.0.0.2:1" || len(mine.Nodes) != 1 || mine.Name != "x" || !mine.Paused {
 		t.Fatalf("this node's own part changed: %+v", mine)
+	}
+}
+
+// A gateway this node does not run is added from a serving node's answer, nobody starred, in group order.
+func TestTakeGatewayRowsAddsTheOtherGroupsWithoutStars(t *testing.T) {
+	mine := []GatewayGroup{{GroupID: 2, AF: "v4", Members: []GatewayMember{{IP: "10.2.0.1", Local: true}}}}
+	theirs := []GatewayGroup{
+		{GroupID: 1, AF: "v6", Members: []GatewayMember{{IP: "fd00::1", Local: true}}},
+		{GroupID: 1, AF: "v4", Members: []GatewayMember{{IP: "10.1.0.1", Local: true}, {IP: "10.1.0.2"}}},
+		{GroupID: 2, AF: "v4", Members: []GatewayMember{{IP: "10.2.0.9"}}},
+	}
+	got := takeGatewayRows(mine, theirs, 1)
+	if len(got) != 3 || got[0].GroupID != 1 || got[0].AF != "v4" || got[1].AF != "v6" || got[2].GroupID != 2 {
+		t.Fatalf("wrong rows or order: %+v", got)
+	}
+	for _, g := range got[:2] {
+		for _, m := range g.Members {
+			if m.Local {
+				t.Errorf("group %d: %s starred", g.GroupID, m.IP)
+			}
+		}
+	}
+	if !got[2].Members[0].Local || got[2].Members[0].IP != "10.2.0.1" {
+		t.Errorf("this node's own group changed: %+v", got[2])
+	}
+	if !theirs[0].Members[0].Local {
+		t.Errorf("the answer was modified in place")
+	}
+}
+
+func TestAddDNSPoolsTakesTheOtherGatewaysPool(t *testing.T) {
+	resp := map[string]any{"ok": true, "data": map[string]any{
+		"pools":     []map[string]any{{"key": 2, "groups": []int{2}}},
+		"listeners": []string{"group 2 10.2.0.1:53"},
+		"servers":   "x",
+	}}
+	var from dnsAnswer
+	if err := json.Unmarshal([]byte(`{"data":{"pools":[{"key":1,"groups":[1],"servers":[]},{"key":2,"groups":[2]}],"listeners":["group 1 10.1.0.1:53","group 2 10.2.0.9:53"]}}`), &from); err != nil {
+		t.Fatal(err)
+	}
+	if addDNSPools(resp, from, 3) {
+		t.Fatal("a group nobody has was found")
+	}
+	if !addDNSPools(resp, from, 1) {
+		t.Fatal("group 1 not found")
+	}
+	d := resp["data"].(map[string]any)
+	pools := d["pools"].([]map[string]any)
+	if len(pools) != 2 || pools[0]["key"].(float64) != 1 || pools[1]["key"].(int) != 2 {
+		t.Fatalf("wrong pools or order: %+v", pools)
+	}
+	if ls := d["listeners"].([]string); len(ls) != 2 || ls[1] != "group 1 10.1.0.1:53" {
+		t.Fatalf("listeners: %v", ls)
+	}
+	if !addDNSPools(resp, from, 2) || len(d["pools"].([]map[string]any)) != 2 {
+		t.Fatal("a pool this node has was added again")
+	}
+	// a node with no pool at all gets a whole answer
+	none := map[string]any{"ok": false, "error": "no gateway"}
+	if !addDNSPools(none, from, 1) || none["ok"] != true || none["error"] != nil || len(none["data"].(map[string]any)["pools"].([]map[string]any)) != 1 {
+		t.Fatalf("empty node: %+v", none)
 	}
 }
