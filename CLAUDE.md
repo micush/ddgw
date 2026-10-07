@@ -13,6 +13,7 @@ process below without being told to.
 **Layout.** The tarball has `README.md` and `LICENSE` at the top, `docs/` (CHANGELOG.md), `source/` (the Go
 module: `go.mod`, every `*.go`, `webui/`, `testdata/`, `ddgw.conf.example`, and `VERSION`,
 which must sit next to the Go files because `version.go` embeds it), `contrib/`, `install.sh`,
+`get.sh` (the `curl | bash` web installer: fetches the latest tag from GitHub and runs its `install.sh`; keep it working with the tag/layout rules here),
 `uninstall.sh`, `QUICKSTART.md` (a GUI-first getting-started guide; keep it true when the GUI changes) and this file. All Go commands below run in `source/`; paths in this
 file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is under
 `docs/`. The updater and installer expect `source/go.mod`, `source/main.go` and

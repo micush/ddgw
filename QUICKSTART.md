@@ -10,6 +10,14 @@ ddgw gives a group of machines one shared DNS address (a **gateway**). Clients p
 
 ## 1. Install
 
+From GitHub, the latest tagged release:
+
+```
+curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
+```
+
+Or from a tarball:
+
 ```
 tar xzf ddgw_v*.tgz
 cd ddgw

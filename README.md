@@ -51,6 +51,18 @@ cluster is for management only and is independent of the gateway election.
 
 New here? `QUICKSTART.md` at the top of the tarball walks through install, the first gateway and the web GUI.
 
+To install the latest tagged release straight from GitHub (this also upgrades an existing install):
+
+```
+curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --add-user alice
+curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --version v215
+```
+
+`get.sh` finds the newest GitHub release (or, with none, the highest `v<number>` tag), downloads that tag's source archive and runs its `install.sh`; everything after `--` goes to `install.sh`, except `--version TAG`, which installs that tag instead. It needs `curl` or `wget` and `tar`. To publish a version, push a tag named `v<VERSION>` (for example `v223`).
+
+From a tarball:
+
 ```
 tar xzf ddgw_vN.tgz && cd ddgw
 sudo ./install.sh [--add-user NAME] [--no-start] [--no-keep-go] [--force] [-y] [--dry-run]

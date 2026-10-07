@@ -1,5 +1,17 @@
 # Changelog
 
+## [v223] - 2026-10-06 — Install the latest tagged version with one curl
+
+### Added
+- **`get.sh`, a web installer.** `curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash` finds the newest GitHub release (or, if there are none, the highest `v<number>` tag), downloads that tag's source archive, checks it is a ddgw tree (`install.sh`, numeric `source/VERSION`) and runs its `install.sh`, so it installs or upgrades in place exactly as the tarball does. Arguments after `bash -s --` go to `install.sh`; `--version TAG` installs a given tag instead. The whole script runs inside one function called on its last line, so a download cut short runs nothing; tag names are checked before use; the temporary tree is removed on exit; `install.sh` keeps the terminal for its questions and `sudo`. Needs `curl` or `wget`, and `tar`. README and QUICKSTART show it. To publish a version, push a tag `v<VERSION>`.
+
+### Verified
+- `bash -n get.sh`; `gofmt`/Go code untouched this release.
+- Against a local fake GitHub (`python3 -m http.server` serving the tags list and tag archives, via `DDGW_GET_API` / `DDGW_GET_HOST`) with `install.sh --dry-run`: with no release, the highest tag wins (v222 over v9, v221, v215 and a non-version tag); a release's `tag_name` wins over the tag list; `--version v215` pins; run as `cat get.sh | bash -s -- --dry-run`; a bad tag name, a missing tag and a repo with no tags each stop with a clear error; no temporary directory is left behind.
+
+### Not verified
+- Against the real github.com (the sandbox cannot reach it): the API and archive URLs are GitHub's documented ones, the layout assumes the repository root is the `ddgw/` directory of the tarball (`install.sh` at the top). The GitHub rate limit for unauthenticated API calls (60/hour per address) is not handled beyond the error message. `shellcheck` is not installed here. No real (non-dry-run) install through `get.sh`.
+
 ## [v222] - 2026-10-06 — The gateway you picked stays picked when you change nodes
 
 ### Fixed
