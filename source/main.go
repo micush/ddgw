@@ -115,6 +115,9 @@ the web GUI):
                    [--all-nodes]   (every cluster node's numbers added together)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
+  Capture          --capture IFACE [--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]
+                   --capture-interfaces   (a packet capture on this node, printed or written as .pcap;
+                                           --all-nodes: every cluster node at once, one .pcap each in a .tgz)
   Host             --host [--host-range 1h|1d|7d|30d] [--all-nodes]   (CPU, memory, disk and network use; the cluster as one)
   Log              --log [--log-min debug|info|warn|error] [--log-grep WORDS]
                    [--log-since 15m|6h|2d] [--log-lines N]   (the whole log if no --log-lines)
@@ -131,7 +134,7 @@ the web GUI):
 Per-group settings are managed via --configure or by editing the config
 file directly. Each group entry supports:
   group_id, interface, vip4, vip6, priority, lb_method, weight,
-  hello_ms, hold_ms, preempt, max_afns, key, neighbors, dns
+  hello_ms, hold_ms, preempt, max_afns, key, neighbors, real_macs, dns
 
   vip4: IPv4 VIP with prefix, e.g. 10.0.0.1/24  (required when no vip6)
   vip6: IPv6 VIP with prefix, e.g. 2001:db8::1/64 (required when no vip4)
@@ -234,7 +237,7 @@ Live reload: the daemon watches the config file via inotify.
     hello_ms, hold_ms, preempt, max_afns, log_level, the whole "dns" block,
     web group/pam_service/session timeout, web cert/key (only listen restarts the GUI)
   Restart fields (engine restarts, brief per-group disruption):
-    interface, vip4, vip6, group_id, key, neighbors
+    interface, vip4, vip6, group_id, key, neighbors, real_macs
   Adding/removing groups: new groups start, removed groups stop cleanly.`
 
 // the cgroup CPU limit applied at start-up (see cpulimit.go)
@@ -797,6 +800,7 @@ func interactiveConfigure(path string) error {
 		}
 		g.Weight = p.askInt("Weight (weighted mode)", g.Weight)
 		g.Preempt = yes(p.ask("Preemption enabled? (yes/no)", yn(g.Preempt)))
+		g.RealMACs = yes(p.ask("Use real MAC addresses instead of virtual MACs? (yes/no; for VMware port groups that are not promiscuous or clouds that allow one MAC per interface)", yn(g.RealMACs)))
 		g.Key = p.ask("HMAC-SHA256 shared key", g.Key)
 	}
 	if len(dc.Groups) > 0 {

@@ -412,11 +412,15 @@ func announceVmac(iface string, groupID, afnID int, vip string) {
 }
 
 func sendGratuitousARP(iface string, groupID, afnID int, vip4 string) {
+	sendGratuitousARPMAC(iface, vmacBytes(groupID, afnID), vip4)
+}
+
+// sendGratuitousARPMAC broadcasts "vip4 is at mac" (a gratuitous ARP reply).
+func sendGratuitousARPMAC(iface string, mac [6]byte, vip4 string) {
 	ip, err := vipAddr(vip4)
 	if err != nil || !ip.Is4() {
 		return
 	}
-	mac := vmacBytes(groupID, afnID)
 	ip4 := ip.As4()
 	bcast := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	frame := append([]byte{}, bcast...)
@@ -427,7 +431,7 @@ func sendGratuitousARP(iface string, groupID, afnID int, vip4 string) {
 	frame = append(frame, ip4[:]...)
 	frame = append(frame, bcast...)
 	frame = append(frame, ip4[:]...)
-	if err := sendRawFrame(iface, frame); err != nil {
+	if err := rawSend(iface, frame); err != nil {
 		warnf("gratuitous ARP failed: %v", err)
 	}
 }
@@ -478,16 +482,51 @@ func buildNA(ethDst, ethSrc, vmac [6]byte, target, dst [16]byte, naFlags uint32)
 }
 
 func sendUnsolicitedNA(iface string, groupID, afnID int, vip6 string) {
+	sendUnsolicitedNAMAC(iface, vmacBytes(groupID, afnID), vip6)
+}
+
+// sendUnsolicitedNAMAC announces "vip6 is at vm" to all nodes (an unsolicited neighbor advertisement).
+func sendUnsolicitedNAMAC(iface string, vm [6]byte, vip6 string) {
 	ip, err := vipAddr(vip6)
 	if err != nil || !ip.Is6() {
 		return
 	}
 	allNodes := netip.MustParseAddr("ff02::1").As16()
 	// Override=1, Solicited=0; Ethernet dst = IPv6 all-nodes multicast MAC.
-	vm := vmacBytes(groupID, afnID)
 	frame := buildNA([6]byte{0x33, 0x33, 0, 0, 0, 0x01}, vm, vm,
 		ip.As16(), allNodes, 0x20000000)
-	if err := sendRawFrame(iface, frame); err != nil {
+	if err := rawSend(iface, frame); err != nil {
 		warnf("unsolicited NA failed: %v", err)
 	}
+}
+
+// buildARPRequest asks who has target (an ARP request from sender): used to learn a peer's real MAC address.
+func buildARPRequest(senderMAC [6]byte, senderIP, target [4]byte) []byte {
+	out := make([]byte, 0, 42)
+	out = append(out, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
+	out = append(out, senderMAC[:]...)
+	out = append(out, 0x08, 0x06, 0x00, 0x01, 0x08, 0x00, 6, 4, 0x00, 0x01)
+	out = append(out, senderMAC[:]...)
+	out = append(out, senderIP[:]...)
+	out = append(out, make([]byte, 6)...)
+	return append(out, target[:]...)
+}
+
+// buildNSFor is a neighbor solicitation for target from src (the solicited-node multicast address of the target), with
+// the sender's MAC as the source link-layer address: used to learn a peer's real MAC address.
+func buildNSFor(senderMAC [6]byte, src, target [16]byte) []byte {
+	dst := [16]byte{0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xff, target[13], target[14], target[15]}
+	body := []byte{135, 0, 0, 0, 0, 0, 0, 0}
+	body = append(body, target[:]...)
+	body = append(body, 1, 1) // option: source link-layer address
+	body = append(body, senderMAC[:]...)
+	ck := icmp6Checksum(src, dst, body)
+	body[2], body[3] = byte(ck>>8), byte(ck)
+	f := []byte{0x33, 0x33, 0xff, target[13], target[14], target[15]}
+	f = append(f, senderMAC[:]...)
+	f = append(f, 0x86, 0xdd)
+	f = append(f, 0x60, 0, 0, 0, byte(len(body)>>8), byte(len(body)), 58, 255)
+	f = append(f, src[:]...)
+	f = append(f, dst[:]...)
+	return append(f, body...)
 }

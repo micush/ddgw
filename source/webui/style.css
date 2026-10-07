@@ -142,15 +142,15 @@ td.wrap { white-space: normal; word-break: break-word; max-width: 28rem; }
 
 .bar-wrap { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--surface-2); vertical-align: middle; margin-right: .6rem; overflow: hidden; }
 /* the same column widths in every gateway's table, so the cards line up */
-table.dns { table-layout: fixed; min-width: 71rem; }
-table.dns th:nth-child(1) { width: 3.5rem; }
-table.dns th:nth-child(2) { width: 13rem; }
-table.dns th:nth-child(3) { width: 11.5rem; }
-table.dns th:nth-child(4) { width: 5rem; }
-table.dns th:nth-child(5) { width: 10rem; }
-table.dns th:nth-child(6) { width: 5.5rem; }
-table.dns th:nth-child(7), table.dns th:nth-child(8) { width: 3.5rem; }
-table.dns th:nth-child(9) { width: 5.5rem; }
+table.dns { table-layout: fixed; min-width: 62rem; }
+table.dns th:nth-child(1) { width: 3rem; }
+table.dns th:nth-child(2) { width: 10rem; }
+table.dns th:nth-child(3) { width: 11rem; }
+table.dns th:nth-child(4) { width: 4.5rem; }
+table.dns th:nth-child(5) { width: 9rem; }
+table.dns th:nth-child(6) { width: 5rem; }
+table.dns th:nth-child(7), table.dns th:nth-child(8) { width: 3rem; }
+table.dns th:nth-child(9) { width: 5rem; }
 table.dns td:nth-child(3) { overflow-wrap: anywhere; }
 table.dns td.sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
@@ -464,3 +464,16 @@ tr.picked td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .card > header.bar > .muted { line-height: 1.25; }
 
 .stats-nodes { margin-left: auto; align-self: center; }
+
+/* Monitor ▸ Capture */
+.capbox { height: calc(100vh - 21rem); min-height: 14rem; }
+.capline { display: grid; grid-template-columns: 7.2rem 1fr; gap: .6rem; padding: .1rem .6rem; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .78rem; }
+.capline .ct { color: var(--muted); white-space: nowrap; }
+.capline .cs { white-space: pre-wrap; overflow-wrap: anywhere; }
+.capline.dns .cs { color: var(--info); }
+.capline.arp .cs { color: var(--warn); }
+select.capif { width: auto; flex: 0 0 auto; max-width: 14rem; }
+
+/* a node's name in the Gateways and Cluster tables: a long one is cut short (the whole is the tooltip) instead of widening the table past its card */
+td.nname { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.tight th, table.tight td { padding-left: .55rem; padding-right: .55rem; }   /* the Gateways and Cluster tables: many columns, so closer together */

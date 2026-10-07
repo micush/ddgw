@@ -171,6 +171,7 @@ const DDGW_HELP = {
         ["Max forwarders", "1–255, default 128. The most nodes that take part as forwarders (AFN). Shared."],
         ["HMAC shared key", "The secret that signs the gateway protocol messages (default `dgw`). Every node of a gateway must use the same key, and a node with another key is ignored. Shared."],
         ["Preemption", "Ticked: a node with a higher priority takes the active role back from the current controller as soon as it is up. Unticked: it waits until the controller fails. This node only."],
+        ["Use real MAC addresses (no virtual MACs)", "Off (the default) is the normal way: each forwarder has a virtual MAC and the controller covers a dead node's MAC. On: no virtual MACs at all. Every node holds the VIP on its loopback, the controller answers ARP and IPv6 neighbor requests with the **real** MAC of the node it picks (it learns the others' MACs from their frames and asks for the ones it has not heard), and nothing is taken over when a node dies: the controller announces the VIP at its own MAC with an unsolicited ARP/neighbor advertisement, which only the neighbors that honor one will follow; the rest keep sending to the dead node until their ARP entry ages out. Use it where virtual MACs cannot work: a VMware port group with promiscuous mode off, a cloud that allows one MAC per interface. Shared by the cluster; changing it restarts the gateway on each node. The vMAC column of the Gateways page then shows real MAC addresses (the controller knows them all, a forwarder only its own)."],
         ["Neighbors (unicast mode)", "One IP address per line: list **every** node of the gateway, this one too (each node skips its own address). With none (the default) the nodes find each other by multicast; use the list when multicast cannot pass between them, such as in a cloud network. Shared: it replicates to every node."],
       ]],
       ["h", "DNS proxy"],
@@ -431,6 +432,29 @@ const DDGW_HELP = {
         ["To", "With **Custom**: the end of the range. Press **Apply** to load it."],
       ]],
       ["cli", "ddgw --host\nddgw --host --all-nodes   (the cluster as one machine)\nddgw --host --host-range 1d\nddgw --host --host-range 7d\nddgw --host --host-range 30d\n(now, average and peak of CPU, memory, disk I/O and network, plus the filesystems and interfaces)"],
+    ],
+  },
+  capture: {
+    title: "Capture",
+    body: [
+      "A packet capture, like `tcpdump`, on one node or on every node of the cluster at once. It only listens: nothing is sent, nothing is changed. It needs the daemon's own privileges and it is off until you press Start.",
+      ["h", "One node"],
+      ["ul", [
+        "The capture runs on the node chosen in the **Node** menu. Pick an **interface** (a gateway's interface is marked, and the virtual-MAC interfaces `ddgwN.M` are there too), optionally a **filter**, and press **Start**.",
+        "The newest packets are listed live, one line each: TCP flags, DNS names and answers (`DNS A? example.com`, `DNS NXDOMAIN 0 ans`), ARP and IPv6 neighbor discovery with the Ethernet addresses they were sent from and to (`ARP, 10.129.0.205 is-at 00:1a:7c:01:02:00 (eth 02:… > …)`), which shows at once whether the virtual MAC a client is told about is the one that answers.",
+        "The buffer holds the newest 5000 packets, or 32 MB. **Download .pcap** saves it for Wireshark or tcpdump (through another node, the newest part that fits about 5 MB). **Clear** empties the list, **Stop** ends the capture (what was captured stays until you start again). A node has one capture: starting another replaces it.",
+      ]],
+      ["h", "Every node"],
+      "Choose **Cluster** in the Node menu. **Capture on all nodes** runs the same capture on every node at the same moment for 5, 10, 30 or 60 seconds, then **Download .tgz** gives one `.pcap` per node (this node's is marked `-this-node`), a `summary.txt`, and an `errors.txt` naming any node that could not capture and why. Each node keeps its newest packets (about 4 MB). This does not touch what anyone has on a node's own Capture page. It is the way to see whether what one node sent is what another received.",
+      ["h", "Filter"],
+      "The filter is a small version of the tcpdump language, applied on the node before a packet is kept: `host 10.0.0.5`, `src host`, `dst host`, `net 10.0.0.0/24`, `port 53`, `src port`, `dst port`, `portrange 50-60`, `tcp`, `udp`, `icmp`, `icmp6`, `arp`, `ip`, `ip6`, `dns` (port 53), `ether host 00:1a:7c:01:02:00` (also `src`, `dst`), joined with `and`, `or`, `not` and brackets. A protocol before host, net or port narrows it (`tcp port 53`). A mistake is reported when you press Start. Names are not looked up: give addresses. An empty filter keeps everything, which on a busy DNS server fills the buffer in moments, so filter.",
+      ["h", "Fields"],
+      ["fields", [
+        ["Interface", "The interface to listen on. In Cluster mode every node must have an interface of that name (the list is this node's); a node without it is reported in the result."],
+        ["Filter", "Optional, up to 300 characters, as above. Press Enter to start."],
+        ["How long", "Cluster mode only: 5, 10 (default), 30 or 60 seconds."],
+      ]],
+      ["cli", "ddgw --capture-interfaces\nddgw --capture eth0 --capture-seconds 10 --capture-filter \"host 10.129.0.205 and port 53\"\nddgw --capture eth0 --capture-file /tmp/eth0.pcap\nddgw --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz\n(without --capture-file the packets are printed, the first 500; with --all-nodes a file is needed)"],
     ],
   },
   log: {

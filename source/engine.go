@@ -79,11 +79,13 @@ type Engine struct {
 	cancel     context.CancelFunc
 
 	failoverPrimary int
-	takeover        map[int]bool // AFN slots assumed on behalf of dead peers
-	lingering       map[int]bool // slots whose macvlan stays up for a while after a hand-over, see lingerLocked
-	assertUntil     time.Time    // until then this node has asked for the controller role (assertAGCLocked) and does not give way to the old controller
-	vipSlot         int          // the slot whose macvlan holds this engine's VIP (controller only), 0 = none
-	lastAnnounce    time.Time    // when a forwarder last told the network where its virtual MAC is
+	takeover        map[int]bool             // AFN slots assumed on behalf of dead peers
+	lingering       map[int]bool             // slots whose macvlan stays up for a while after a hand-over, see lingerLocked
+	peerMACs        map[string]*peerMACEntry // real-MAC mode: the real MAC of each node, learned (see realmac.go)
+	arpSaved        map[string]string        // real-MAC mode: the ARP settings of the real interface before they were changed
+	assertUntil     time.Time                // until then this node has asked for the controller role (assertAGCLocked) and does not give way to the old controller
+	vipSlot         int                      // the slot whose macvlan holds this engine's VIP (controller only), 0 = none
+	lastAnnounce    time.Time                // when a forwarder last told the network where its virtual MAC is
 
 	arp, ns *rawResponder
 
@@ -1043,6 +1045,10 @@ func (e *Engine) setupVmacsLocked() {
 	if e.afnID == 0 {
 		return
 	}
+	if e.cfg.RealMACs {
+		e.setupRealLocked()
+		return
+	}
 	infof("Setting up vMAC for AFN id=%d (%s)", e.afnID, e.tag())
 	// The vMAC is shared by the v4 and v6 engines of a group; addVmac is
 	// idempotent (delete then add).
@@ -1093,6 +1099,10 @@ var reannounceEvery = 2 * time.Second
 // every query sent to that MAC went to the wrong node.  The frame is an ARP probe with sender 0.0.0.0, which no
 // host takes into its cache.
 func (e *Engine) reannounceLocked() {
+	if e.cfg.RealMACs {
+		e.resolvePeerMACsLocked() // no virtual MACs to announce; the controller keeps the nodes' real MACs up to date
+		return
+	}
 	if time.Since(e.lastAnnounce) < reannounceEvery {
 		return
 	}
@@ -1127,6 +1137,13 @@ func (e *Engine) cleanupVmacsLocked() {
 // takeoverAFNLocked assumes a dead peer's vMAC so clients with that MAC
 // cached are not blackholed.  AGC only.
 func (e *Engine) takeoverAFNLocked(dead int) {
+	if e.cfg.RealMACs {
+		// no MAC to take over: tell the neighbors the VIP is at this node (the ones that cached the dead node's MAC)
+		if e.state == stateActive {
+			e.repointVIPLocked()
+		}
+		return
+	}
 	if e.state != stateActive || e.takeover[dead] {
 		return
 	}
@@ -1175,7 +1192,25 @@ func (e *Engine) releaseTakeoverLocked(slot int) {
 
 func (e *Engine) setupDNSLocked(macvlanUp bool) {
 	vip := e.cfg.vipFor(e.af)
-	if e.state == stateActive {
+	if e.cfg.RealMACs {
+		// no macvlan: the VIP is on lo on every node, the controller included, and the real interface is told not to
+		// answer ARP for it (the controller's responder is the one that does)
+		if !e.dnsLoAdded {
+			if e.af == afIPv4 {
+				for _, dev := range []string{e.cfg.Interface, "all"} {
+					base := "/proc/sys/net/ipv4/conf/" + dev + "/"
+					if !e.rememberSysctl(base+"arp_ignore", "1") || !e.rememberSysctl(base+"arp_announce", "2") {
+						warnf("could not set arp_ignore/arp_announce on %s: this node may answer ARP for the VIP (%s)", dev, e.tag())
+					}
+				}
+			}
+			if runCmd("ip", "addr", "replace", hostCIDR(vip), "dev", "lo") {
+				e.dnsLoAdded = true
+			} else {
+				warnf("dns: could not add %s to lo (%s)", vip, e.tag())
+			}
+		}
+	} else if e.state == stateActive {
 		if e.dnsLoAdded {
 			runCmd("ip", "addr", "del", hostCIDR(vip), "dev", "lo")
 			e.dnsLoAdded = false
@@ -1224,6 +1259,7 @@ func (e *Engine) teardownDNSLocked() {
 		runCmd("ip", "addr", "del", hostCIDR(e.cfg.vipFor(e.af)), "dev", "lo")
 		e.dnsLoAdded = false
 	}
+	e.restoreSysctls() // real-MAC mode changed the real interface's ARP settings: put them back
 }
 
 // RestartDNS re-creates the listener (listen_port changed).
@@ -1290,6 +1326,10 @@ type SnapshotRow struct {
 	VIP6     string `json:"vip6"`
 	AGCIP    string `json:"agc_ip"`
 	DNSUp    bool   `json:"dns_listening"`
+	// RealMACs: the gateway runs without virtual MACs; MAC is then the node's real MAC address, when known (the
+	// controller learns the others'; a forwarder knows only its own)
+	RealMACs bool   `json:"real_macs,omitempty"`
+	MAC      string `json:"mac,omitempty"`
 }
 
 func (e *Engine) snapshot() []SnapshotRow {
@@ -1301,6 +1341,12 @@ func (e *Engine) snapshot() []SnapshotRow {
 			DNSUp: e.dnsFE != nil && e.dnsFE.Listening()}
 	}
 	local := row()
+	if e.cfg.RealMACs {
+		local.RealMACs = true
+		if m := ifaceMACFn(e.cfg.Interface); m != ([6]byte{}) {
+			local.MAC = net.HardwareAddr(m[:]).String()
+		}
+	}
 	local.PeerIP, local.Priority, local.AfnID, local.Weight = e.myIP, e.cfg.Priority, e.afnID, e.cfg.Weight
 	local.Preempt, local.State, local.Local = e.cfg.Preempt, lower(e.state.String()), true
 	rows := []SnapshotRow{local}
@@ -1309,6 +1355,12 @@ func (e *Engine) snapshot() []SnapshotRow {
 		r.PeerIP, r.Priority, r.AfnID, r.Weight, r.Preempt = ip, p.Priority, p.AfnID, p.Weight, p.Preempt
 		r.AgeMS = time.Since(p.LastSeen).Milliseconds()
 		r.State = p.stateName(e.cfg.HoldMS)
+		if e.cfg.RealMACs {
+			r.RealMACs = true
+			if en := e.peerMACs[ip]; en != nil {
+				r.MAC = net.HardwareAddr(en.mac[:]).String()
+			}
+		}
 		rows = append(rows, r)
 	}
 	return rows

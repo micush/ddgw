@@ -19,7 +19,7 @@ type GatewayMember struct {
 	AgeMS     int64  `json:"age_ms"`
 	Local     bool   `json:"local"`
 	Preempt   bool   `json:"preempt"`
-	VMAC      string `json:"vmac"`
+	VMAC      string `json:"vmac"` // the virtual MAC, or in real-MAC mode the node's real MAC
 	DNSListen bool   `json:"dns_listening"`
 	Name      string `json:"name,omitempty"` // the node that has this address, when the cluster can say (see nodeNamesByIP)
 }
@@ -71,7 +71,10 @@ func buildGateways(rows []SnapshotRow) []GatewayGroup {
 			role = "AFN"
 		}
 		vmac := ""
-		if r.AfnID != 0 {
+		switch {
+		case r.RealMACs:
+			vmac = r.MAC // the node's real MAC address, when it is known (no virtual MACs in this mode)
+		case r.AfnID != 0:
 			vmac = vmacStr(r.GroupID, r.AfnID)
 		}
 		g.Members = append(g.Members, GatewayMember{

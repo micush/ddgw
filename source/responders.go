@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/netip"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -67,38 +66,19 @@ func (e *Engine) startARPResponderLocked() {
 	r := &rawResponder{fd: fd}
 	e.arp = r
 	vip4 := vip.As4()
-	gid := e.cfg.GroupID
-	// The answer names the slot's virtual MAC in its payload, but is sent from this node's own MAC.  With the
-	// slot's MAC as the Ethernet source, every answer made the switch learn that MAC on the controller's port,
-	// and the queries sent to the forwarder that really owns it were then delivered to the wrong node until it
-	// next spoke.
+	// The answer names the slot's MAC in its payload (a virtual MAC, or in real-MAC mode the real MAC of the node that has
+	// the slot), but is sent from this node's own MAC.  With the slot's virtual MAC as the Ethernet source, every answer
+	// made the switch learn that MAC on the controller's port, and the queries sent to the forwarder that really owns it
+	// were then delivered to the wrong node until it next spoke.
 	selfMAC := ifaceMAC(e.cfg.Interface)
 	go r.loop(func(fd int, frame []byte) {
-		// Ethernet(14) + ARP(28): op@20, sender mac@22, sender ip@28, target ip@38
-		if len(frame) < 42 {
-			return
-		}
-		arp := frame[14:]
-		if arp[6] != 0 || arp[7] != 1 { // only requests
-			return
-		}
-		if [4]byte(arp[24:28]) != vip4 {
-			return
-		}
-		senderMAC := [6]byte(frame[6:12])
-		senderIP := [4]byte(arp[14:18])
-		requester := netip.AddrFrom4(senderIP).String()
-
-		slot := e.PickAFN(requester)
-		mac := vmacBytes(gid, slot)
-		debugf("ARP req for VIP from %s — replying with slot %d vMAC %s", requester, slot, vmacStr(gid, slot))
-
-		out := buildARPReply(senderMAC, selfMAC, mac, vip4, senderIP)
-		if _, err := syscall.Write(fd, out); err != nil {
-			debugf("ARP reply send failed: %v", err)
+		if out := e.arpAnswer(frame, selfMAC, vip4); out != nil {
+			if _, err := syscall.Write(fd, out); err != nil {
+				debugf("ARP reply send failed: %v", err)
+			}
 		}
 	})
-	infof("ARP responder started (group=%d vip=%s)", gid, e.cfg.VIP4)
+	infof("ARP responder started (group=%d vip=%s)", e.cfg.GroupID, e.cfg.VIP4)
 }
 
 // ── NS (IPv6) ────────────────────────────────────────────────────────────────
@@ -119,36 +99,15 @@ func (e *Engine) startNSResponderLocked() {
 	r := &rawResponder{fd: fd}
 	e.ns = r
 	vip6 := vip.As16()
-	gid := e.cfg.GroupID
 	selfMAC := ifaceMAC(e.cfg.Interface) // see the ARP responder: the answer is sent from this node's own MAC
 	go r.loop(func(fd int, frame []byte) {
-		const eth, ip6 = 14, 40
-		if len(frame) < eth+ip6+24 {
-			return
-		}
-		h := frame[eth:]
-		if h[0]>>4 != 6 || h[6] != 58 { // IPv6, next header ICMPv6
-			return
-		}
-		icmp := h[ip6:]
-		if icmp[0] != 135 || [16]byte(icmp[8:24]) != vip6 { // NS for our VIP
-			return
-		}
-		src := [16]byte(h[8:24])
-		srcMAC := [6]byte(frame[6:12])
-		requester := netip.AddrFrom16(src).String()
-
-		slot := e.PickAFN(requester)
-		debugf("NS for VIP6 from %s — replying with slot %d vMAC %s", requester, slot, vmacStr(gid, slot))
-
-		// Solicited + Override, unicast back to the solicitor.
-		vm := vmacBytes(gid, slot)
-		out := buildNA(srcMAC, [6]byte(ethSource(selfMAC, vm)), vm, vip6, src, 0x60000000)
-		if _, err := syscall.Write(fd, out); err != nil {
-			debugf("NA reply send failed: %v", err)
+		if out := e.nsAnswer(frame, selfMAC, vip6); out != nil {
+			if _, err := syscall.Write(fd, out); err != nil {
+				debugf("NA reply send failed: %v", err)
+			}
 		}
 	})
-	infof("NS responder started (group=%d vip=%s)", gid, e.cfg.VIP6)
+	infof("NS responder started (group=%d vip=%s)", e.cfg.GroupID, e.cfg.VIP6)
 }
 
 // ethSource is the Ethernet source of an answer sent on behalf of a slot: this node's own MAC, or the slot's MAC

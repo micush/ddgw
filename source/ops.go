@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,6 +48,9 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		User     string   `json:"username"`
 		Password string   `json:"password"`
 		Expires  int64    `json:"expires"`
+		Iface    string   `json:"iface"`
+		Filter   string   `json:"filter"`
+		Seconds  int      `json:"seconds"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -171,6 +175,37 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		}
 		return qstats.Query(from, to, f), nil
 	// the same for the whole cluster: every node's numbers added together (Node menu ▸ Cluster, --stats --all-nodes)
+	// packet capture: this node's Capture page, a timed capture (also what each node runs for the cluster-wide one), and
+	// the capture on every node at once
+	case "capture.interfaces":
+		return m.captureInterfaces(), nil
+	case "capture.start":
+		return map[string]any{"started": true}, m.CaptureStart(a.Iface, a.Filter, actor)
+	case "capture.stop":
+		m.CaptureStop()
+		return map[string]any{"stopped": true}, nil
+	case "capture.clear":
+		m.CaptureClear()
+		return map[string]any{"cleared": true}, nil
+	case "capture.packets":
+		since, _ := strconv.ParseInt(a.LogSince, 10, 64)
+		return m.capture.since(since, 3000), nil
+	case "capture.run":
+		return m.CaptureRun(context.Background(), a.Iface, a.Filter, a.Seconds, actor)
+	case "capture.job.start":
+		return m.CaptureJobStart(a.ID, a.Iface, a.Filter, a.Seconds, actor)
+	case "capture.job.get":
+		return m.CaptureJobGet(a.ID)
+	case "capture.cluster.start":
+		return m.CaptureClusterStart(a.Iface, a.Filter, a.Seconds, actor)
+	case "capture.cluster.bundle":
+		b, err := m.CaptureClusterBundle()
+		return map[string]any{"tgz": b}, err
+	case "capture.cluster.status":
+		if j := m.CaptureClusterStatus(); j != nil {
+			return j, nil
+		}
+		return map[string]any{"none": true}, nil
 	case "qstats.cluster":
 		from, to, err := qstatsRange(a.QFrom, a.QTo)
 		if err != nil {

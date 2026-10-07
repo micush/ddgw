@@ -23,6 +23,10 @@ type Mgmt struct {
 	confPath string
 	stateDir string
 
+	capture captureState // this node's Capture page
+	capjobs capJobs      // the cluster-wide capture
+	capruns capRuns      // timed captures started on this node (by the cluster-wide one, from another node)
+
 	versions *VersionStore
 	certs    *CertManager
 	upd      *Updater

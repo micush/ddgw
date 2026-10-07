@@ -42,6 +42,9 @@ var delVIPFn = delVIP
 
 // claimVmacLocked makes sure the slot's macvlan exists and records that this engine uses it.
 func (e *Engine) claimVmacLocked(slot int, add func(iface string, group, slot int) bool) bool {
+	if e.cfg.RealMACs {
+		return true // real-MAC mode has no virtual MACs: nothing to create
+	}
 	k := vmacKey{e.cfg.GroupID, slot}
 	vmacReg.Lock()
 	if vmacReg.users[k] == nil {
@@ -55,6 +58,9 @@ func (e *Engine) claimVmacLocked(slot int, add func(iface string, group, slot in
 // releaseVmacLocked ends this engine's use of the slot: its VIP comes off the macvlan, and the macvlan itself goes
 // only when no other engine on the node still uses it.
 func (e *Engine) releaseVmacLocked(slot int) {
+	if e.cfg.RealMACs {
+		return
+	}
 	if e.vipSlot == slot {
 		delVIPFn(e.cfg.GroupID, slot, e.cfg.vipFor(e.af))
 		e.vipSlot = 0

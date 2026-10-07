@@ -41,9 +41,51 @@ type clusterPart[T any] struct {
 	R          *T
 }
 
+// clusterTarget is a node a cluster-wide request goes to.
+type clusterTarget struct {
+	Name, Addr string
+	Self       bool
+	Err        string // why it cannot be asked (not reachable)
+}
+
+// clusterTargets lists the cluster's nodes, this node first as the cluster view has it, named by host name (or by
+// address when two nodes share a name, as the Node menu does).  Not clustered: this node alone.
+func clusterTargets(m *Mgmt) []clusterTarget {
+	var peers []PeerView
+	if m.cl != nil && m.cl.Enabled() {
+		peers = m.cl.View().Peers
+	}
+	if len(peers) == 0 {
+		return []clusterTarget{{Name: "this node", Self: true}}
+	}
+	same := map[string]int{}
+	for _, p := range peers {
+		same[p.Hostname]++
+	}
+	var out []clusterTarget
+	for _, p := range peers {
+		t := clusterTarget{Name: p.Hostname, Addr: p.Addr, Self: p.Self}
+		if t.Name == "" || same[p.Hostname] > 1 {
+			t.Name = p.Addr
+		}
+		if !p.Self && !p.Reachable {
+			t.Err = "not reachable"
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
 // clusterGather asks every reachable node for path (this one through local, the others through the relay) and decodes
 // each answer into a T.  Nodes that could not answer are listed, with the reason, in the second result.
 func clusterGather[T any](ctx context.Context, m *Mgmt, actor, path string, local func() *T) ([]clusterPart[T], []ClusterNodeInfo) {
+	return clusterGatherReq(ctx, m, proxyReq{User: actor, Method: "GET", Path: path}, clusterStatsTimeout,
+		func() (*T, error) { return local(), nil })
+}
+
+// clusterGatherReq is clusterGather for any request (a POST with a body, say) and a longer time allowed.  Every node,
+// this one included, works at the same time, so a request that takes a while (a capture) takes that while for all of them.
+func clusterGatherReq[T any](ctx context.Context, m *Mgmt, req proxyReq, timeout time.Duration, local func() (*T, error)) ([]clusterPart[T], []ClusterNodeInfo) {
 	var peers []PeerView
 	if m.cl != nil && m.cl.Enabled() {
 		peers = m.cl.View().Peers
@@ -62,32 +104,40 @@ func clusterGather[T any](ctx context.Context, m *Mgmt, actor, path string, loca
 	type slot struct {
 		part *clusterPart[T]
 		info ClusterNodeInfo
+		self bool
 	}
 	slots := make([]slot, 0, len(peers)+1)
 	if len(peers) == 0 {
-		slots = append(slots, slot{part: &clusterPart[T]{Name: "this node", R: local()}, info: ClusterNodeInfo{Name: "this node", OK: true}})
+		slots = append(slots, slot{info: ClusterNodeInfo{Name: "this node"}, self: true})
 	}
 	for _, p := range peers {
-		slots = append(slots, slot{info: ClusterNodeInfo{Name: label(p), Addr: p.Addr}})
-		if p.Self {
-			s := &slots[len(slots)-1]
-			s.part, s.info.OK = &clusterPart[T]{Name: s.info.Name, Addr: p.Addr, R: local()}, true
-		} else if !p.Reachable {
-			slots[len(slots)-1].info.Error = "not reachable"
+		sl := slot{info: ClusterNodeInfo{Name: label(p), Addr: p.Addr}, self: p.Self}
+		if !p.Self && !p.Reachable {
+			sl.info.Error = "not reachable"
 		}
+		slots = append(slots, sl)
 	}
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(ctx, clusterStatsTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	for i := range slots {
 		s := &slots[i]
-		if s.part != nil || s.info.Error != "" {
+		if s.info.Error != "" {
 			continue
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, err := m.cl.Relay(ctx, s.info.Addr, proxyReq{User: actor, Method: "GET", Path: path})
+			if s.self {
+				r, err := local()
+				if err != nil {
+					s.info.Error = err.Error()
+					return
+				}
+				s.part, s.info.OK = &clusterPart[T]{Name: s.info.Name, Addr: s.info.Addr, R: r}, true
+				return
+			}
+			resp, err := m.cl.Relay(ctx, s.info.Addr, req)
 			if err != nil {
 				s.info.Error = err.Error()
 				return

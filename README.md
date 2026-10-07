@@ -443,6 +443,28 @@ when neither uses it any more. The two families elect their controllers separate
 may pick different nodes; the IPv6 controller then moves off slot 1 to a free slot, so
 no MAC is ever on two nodes.
 
+### Real-MAC mode (no virtual MACs)
+
+Virtual MACs need the network to deliver frames addressed to a MAC that is not the NIC's own. A VMware port group with
+promiscuous mode off drops them, and clouds that allow one MAC per interface do the same. For those, a gateway has a setting,
+**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; off by default, shared by
+the cluster, and changing it restarts the gateway), and everything above is replaced as follows.
+
+- There is no macvlan and no slot MAC. Every node, the controller too, holds the VIP on `lo` and has `arp_ignore=1` /
+  `arp_announce=2` set on the real interface (put back when the gateway stops).
+- The controller still answers ARP and IPv6 neighbor solicitations for the VIP and still picks a node by the load-balancing
+  method, but the answer names the **real MAC** of the node it picked (its own MAC for its own slot, and for any node whose
+  MAC it does not know yet: it holds the VIP too, so that is always right). It is sent from the controller's own MAC.
+- The controller learns the real MACs without any change to the gateway protocol: from an ARP a node sends, from any IPv6
+  frame from a node's link-local address, and by asking (an ARP request or a neighbor solicitation of its own) for the ones it
+  has not heard, again every minute. Nodes of any version take part.
+- A real MAC cannot be taken over. When a node dies or leaves, the controller announces the VIP at its own MAC with an
+  unsolicited ARP (or neighbor advertisement), now and twice more within a second. Neighbors that honor one repoint at once;
+  the others keep sending to the dead node until their ARP entry ages out (a Palo Alto's default is 30 minutes), so check
+  how your firewalls treat it before relying on this mode. A planned stop gives the announcement a head start (the leaving
+  node stays up for a moment after the controller has been told).
+- The vMAC column of Monitor ▸ Gateways shows real MAC addresses (the controller knows all of them, a forwarder only its own).
+
 ## Web GUI
 
 Everything the CLI does is also in a browser, over HTTPS on port **53853**
@@ -470,6 +492,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
+| `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
@@ -716,6 +739,40 @@ With **Cluster** chosen in the Node menu (or `--all-nodes`) the nodes are added 
 averages, memory, swap, disk sizes and cores are summed; CPU is averaged over all the cores, memory and each filesystem
 per byte of the whole, disk-busy is the mean; a peak is the busiest node's (the network's is the sum of the nodes'
 peaks, an upper bound). A node that cannot answer is named and left out.
+
+### Capture
+
+Monitor ▸ Capture (or `ddgw --capture`) is a `tcpdump` on any node of the cluster, or on all of them at once. It only
+listens: nothing is sent and nothing is changed. It uses a raw socket (no libpcap), so it needs the privileges the daemon
+already has, and it does nothing until you press Start.
+
+**One node** (the Node menu picks it): choose an interface (a gateway's is marked; the virtual-MAC `ddgwN.M` interfaces
+are listed too), optionally a filter, and Start. The newest packets are listed live, one line each, with TCP flags, DNS
+names and answers, and for ARP and IPv6 neighbor discovery the Ethernet addresses they were sent from and to (so a
+virtual MAC that is announced but not the one that answers shows at once). The buffer holds the newest 5000 packets or
+32 MB; **Download .pcap** saves it for Wireshark. A node has one capture of its own: starting another replaces it.
+
+**Every node:** choose **Cluster** in the Node menu, an interface (every node needs one of that name), a filter and 5,
+10, 30 or 60 seconds. All nodes capture at the same moment into a buffer of their own (so nobody's Capture page is
+disturbed), keep their newest packets (about 4 MB each), and **Download .tgz** gives one `.pcap` per node (this node's
+ends in `-this-node`), a `summary.txt`, and an `errors.txt` naming any node that could not capture and why (a node on a
+version without capture says so). One capture of this kind runs at a time. It is the way to see whether what one node
+sent is what another received.
+
+The **filter** is a small version of the tcpdump language, applied in the daemon before a packet is kept: `host`,
+`src host`, `dst host`, `net 10.0.0.0/24`, `port 53`, `src port`, `dst port`, `portrange 50-60`, `tcp`, `udp`, `icmp`,
+`icmp6`, `arp`, `ip`, `ip6`, `dns` (port 53), `ether host 00:1a:7c:01:02:00` (also `src` and `dst`), joined with `and`,
+`or`, `not` and brackets; a protocol before host, net or port narrows it (`tcp port 53`). Addresses only, no names. A
+filter that is not understood is refused when the capture starts. The filter runs in the daemon, not in the kernel, so
+a very busy interface still costs the daemon every packet; keep captures short.
+
+    ddgw --capture-interfaces
+    ddgw --capture eth0 --capture-seconds 10 --capture-filter "host 10.129.0.205 and port 53"
+    ddgw --capture eth0 --capture-file /tmp/eth0.pcap
+    ddgw --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz
+
+Without `--capture-file` the packets are printed (the first 500); with `--all-nodes` a file is required. Every start is
+logged with the name of the user who made it.
 
 ### Log
 

@@ -827,16 +827,68 @@ func (c *Cluster) requireEnabled() error {
 	return nil
 }
 
+// sharedAddrs are the addresses that belong to the gateways and not to this node: every gateway's VIPs and its anycast
+// addresses.  Every node answers on them, so one of them can never be a way to reach one particular node.
+func (c *Cluster) sharedAddrs() map[string]bool {
+	out := map[string]bool{}
+	if c.mg == nil {
+		return out
+	}
+	dc, _, err := c.mg.LiveConfig()
+	if err != nil || dc == nil {
+		return out
+	}
+	for _, g := range dc.Groups {
+		for _, v := range []string{g.VIP4, g.VIP6} {
+			if a, err := vipAddr(v); err == nil {
+				out[a.String()] = true
+			}
+		}
+		for _, x := range g.ExtraVIPs {
+			if a, err := netip.ParseAddr(strings.TrimSuffix(strings.TrimSuffix(x, "/32"), "/128")); err == nil {
+				out[a.String()] = true
+			}
+		}
+	}
+	return out
+}
+
 func (c *Cluster) candidateAddrs() []string {
-	self := c.node.Self().Addr
+	var ifs []ifaceAddrs
+	if all, err := net.Interfaces(); err == nil {
+		for _, i := range all {
+			if as, err := i.Addrs(); err == nil {
+				ifs = append(ifs, ifaceAddrs{Name: i.Name, Loopback: i.Flags&net.FlagLoopback != 0, Addrs: as})
+			}
+		}
+	}
+	host, _ := os.Hostname()
+	return nodeAddrCandidates(c.node.Self().Addr, host, ifs, c.sharedAddrs())
+}
+
+type ifaceAddrs struct {
+	Name     string
+	Loopback bool
+	Addrs    []net.Addr
+}
+
+// nodeAddrCandidates is the addresses this node tells the others it can be reached on: its cluster address, its host name
+// and the addresses of its interfaces, each with the cluster port.  Left out: the loopback and its addresses (the anycast
+// addresses live there), the virtual-MAC interfaces ddgwN.M (the VIP lives there), link-local addresses, and any address
+// in shared (the VIPs and anycast addresses of the gateways, which every node answers on).  A peer that dialled one of
+// those would reach whichever node holds it at the moment, and be refused there for the certificate.
+func nodeAddrCandidates(self, host string, ifs []ifaceAddrs, shared map[string]bool) []string {
 	_, port, _ := net.SplitHostPort(self)
 	addrs := []string{self}
-	if host, _ := os.Hostname(); host != "" {
+	if host != "" {
 		addrs = append(addrs, net.JoinHostPort(host, port))
 	}
-	if ifs, err := net.InterfaceAddrs(); err == nil {
-		for _, a := range ifs {
-			if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() {
+	for _, i := range ifs {
+		if i.Loopback || strings.HasPrefix(i.Name, "ddgw") {
+			continue
+		}
+		for _, a := range i.Addrs {
+			if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() && !shared[n.IP.String()] {
 				addrs = append(addrs, net.JoinHostPort(n.IP.String(), port))
 			}
 		}

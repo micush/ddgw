@@ -26,6 +26,26 @@
     return el;
   }
   const clear = (el) => { while (el.firstChild) el.removeChild(el.firstChild); return el; };
+
+  // morph makes the children of dst the same as the children of src, reusing the elements that are already there (only
+  // their text and attributes are patched).  A page that is redrawn on a timer uses it so that what the browser keeps
+  // about an element survives the redraw: the position of a horizontal scroll bar, a text selection.  Emptying a
+  // container and building it again, which these pages did, destroys every scroll box in it, so a scroll bar that had been
+  // moved sprang back and the bars flashed on every redraw.  Only for markup without event handlers: the handlers are
+  // not copied.  An inline style is skipped too (the page's policy allows it only through the CSSOM, so the caller sets it).
+  function morph(dst, src) {
+    const from = Array.from(src.childNodes);
+    from.forEach((s, i) => {
+      const d = dst.childNodes[i];
+      if (!d) { dst.appendChild(s); return; }
+      if (d.nodeType !== s.nodeType || d.nodeName !== s.nodeName) { dst.replaceChild(s, d); return; }
+      if (s.nodeType !== 1) { if (d.nodeValue !== s.nodeValue) d.nodeValue = s.nodeValue; return; }
+      for (const at of Array.from(d.attributes)) if (at.name !== "style" && !s.hasAttribute(at.name)) d.removeAttribute(at.name);
+      for (const at of Array.from(s.attributes)) if (at.name !== "style" && d.getAttribute(at.name) !== at.value) d.setAttribute(at.name, at.value);
+      morph(d, s);
+    });
+    while (dst.childNodes.length > from.length) dst.removeChild(dst.lastChild);
+  }
   // Width (in chart units) the y-axis labels need: the chart's left margin grows with the longest label so big
   // numbers are never cut off.  ~6.6 units a character at the 11px axis font, plus the gap and a little edge room.
   const axisMargin = (labels, min) => Math.max(min, Math.ceil(Math.max(0, ...labels.map((t) => String(t).length)) * 6.6) + 14);
@@ -41,7 +61,7 @@
   // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
   // anything else a page asks goes to this node as before.
   const CLUSTER = "*cluster";
-  const CLUSTER_TABS = ["stats", "host"];
+  const CLUSTER_TABS = ["stats", "host", "capture"];
   const CLUSTER_API = [[/^\/api\/qstats(\?|$)/, "/api/clusterstats"], [/^\/api\/host(\?|$)/, "/api/clusterhost"]];
   function route(path) {
     if (state.target === CLUSTER) {
@@ -90,6 +110,21 @@
     if (res.status === 401) { stopAllTimers(); state.session = null; showLogin(); throw new Error("unauthenticated"); }
     if (!res.ok) throw new Error((data && data.error) || res.statusText || "upload failed");
     return data;
+  }
+
+  // Download a file the daemon builds (a capture): fetched with the session, named by the server's Content-Disposition.
+  async function apiDownload(path, fallback) {
+    const res = await fetch(route(path), { credentials: "same-origin" });
+    if (res.status === 401) { stopAllTimers(); state.session = null; showLogin(); throw new Error("unauthenticated"); }
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch (_) { /* not JSON */ }
+      throw new Error((data && data.error) || res.statusText || "download failed");
+    }
+    const m = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") || "");
+    const a = h("a", { href: URL.createObjectURL(await res.blob()), download: m ? m[1] : fallback });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
 
   // ── login ─────────────────────────────────────────────────────────────────
@@ -167,7 +202,7 @@
   // Topology comes first; its items are the gateways themselves (filled in from the daemon).
   const TOPO = "Topology";
   const NAV_GROUPS = [
-    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["log", "Log"]]],
+    ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["capture", "Capture"], ["log", "Log"]]],
     ["Configure", [["config", "Settings"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
     ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["updates", "Upgrade"]]],
   ];
@@ -1513,14 +1548,15 @@
       },
       async poll() {
         const r = await api("GET", "/api/gateways");
-        clear(body);
+        const out = h("div", {});   // built aside, then patched into the page (see morph)
         if (!r.data.length) {
-          body.append(h("div", { class: "card" }, h("div", { class: "empty" }, "No gateway groups running.")));
+          out.append(h("div", { class: "card" }, h("div", { class: "empty" }, "No gateway groups running.")));
+          morph(body, out);
           return;
         }
         for (const g of r.data) {
           const rows = g.members.map((m) => h("tr", { class: m.local ? "local" : "" },
-            h("td", {}, m.name || "–", m.local ? " ★" : ""),
+            h("td", { class: "nname", title: m.name || null }, m.name || "–", m.local ? " ★" : ""),
             h("td", { class: "mono" }, m.ip),
             h("td", { class: "num" }, m.priority),
             h("td", { class: "num" }, m.slot || "–"),
@@ -1531,14 +1567,15 @@
             h("td", { class: "num" }, m.local ? "local" : m.age_ms),
             h("td", { class: "mono" }, m.vmac || "–"),
             h("td", {}, pill(m.dns_listening ? "answering" : "not answering", m.dns_listening ? "ok" : "warn"))));
-          body.append(h("div", { class: "card" },
+          out.append(h("div", { class: "card" },
             h("header", {}, h("h2", {}, g.name ? g.name + " · group " + g.group_id : "Group " + g.group_id),
               h("span", { class: "mono muted" }, "VIP " + g.vip),
               g.agc ? h("span", { class: "muted" }, "AGC ", h("span", { class: "mono" }, g.agc)) : null),
-            h("div", { class: "scroll" }, h("table", {},
+            h("div", { class: "scroll" }, h("table", { class: "tight" },
               h("thead", {}, h("tr", {}, ["Node name", "Node IP", "Pri", "Slot", "Weight", "Role", "State", "Age (ms)", "vMAC", "DNS"].map((t, i) => h("th", { class: [2, 3, 4, 7].includes(i) ? "num" : "" }, t)))),
               h("tbody", {}, rows)))));
         }
+        morph(body, out);
       },
     };
   })();
@@ -1550,14 +1587,15 @@
       mount(main) { body = h("div", {}); main.append(body, h("p", { class: "hint" }, "★ marks this node")); },
       async poll() {
         const c = await api("GET", "/api/cluster").catch(() => null);
-        clear(body);
+        const out = h("div", {});
         if (c && c.data) {
           const v = c.data;
-          body.append(h("div", { class: "card" },
+          out.append(h("div", { class: "card" },
             h("header", {}, h("h2", {}, "Cluster members"), h("span", { class: "muted" }, "Nodes sharing these settings."),
               v.conflict ? pill("conflict", "bad") : null),
             membersTable(v, null, true)));
         }
+        morph(body, out);
       },
     };
   })();
@@ -1570,18 +1608,18 @@
       mount(main) { body = h("div", {}); main.append(body); },
       async poll() {
         const r = await api("GET", "/api/dns");
-        clear(body);
-        if (!r.ok) { body.append(h("div", { class: "notice info" }, r.error)); return; }
+        const out = h("div", {});
+        if (!r.ok) { out.append(h("div", { class: "notice info" }, r.error)); morph(body, out); return; }
         const d = r.data;
         const pools = d.pools && d.pools.length ? d.pools : [{ key: 0, groups: [], servers: d.servers, down_percent: d.down_percent, probes: d.probes }];
-        body.append(h("div", { class: "stats" }, stat("Queries", d.queries), stat("Answered", d.answered), stat("SERVFAIL", d.servfail)));
+        out.append(h("div", { class: "stats" }, stat("Queries", d.queries), stat("Answered", d.answered), stat("SERVFAIL", d.servfail)));
         // "group 1 192.168.0.5:53" -> where each gateway answers, shown on its own card
         const addrsOf = {};
         for (const l of d.listeners || []) { const m = /^group (\d+) (.+)$/.exec(l); if (m) (addrsOf[m[1]] = addrsOf[m[1]] || []).push(m[2]); }
         const fills = [];
         for (const p of pools) {
           const maxE = Math.max(1, ...p.servers.filter((s) => s.healthy).map((s) => s.ewma_ms));
-          body.append(h("div", { class: "card" },
+          out.append(h("div", { class: "card" },
             h("header", {}, h("h2", {}, p.key ? "Gateway " + p.key + (p.name ? " · " + p.name : "") : "Shared pool" + (p.groups.length ? " (group " + p.groups.join(", ") + ")" : "")),
               h("span", { class: "muted" }, p.probes + " test" + (p.probes === 1 ? "" : "s") + " per round, down at " + p.down_percent + "% failing"),
               p.ecs ? pill("client subnet sent · " + p.ecs_sent, "info") : h("span", { class: "muted small" }, "servers see this node's address"),
@@ -1617,6 +1655,7 @@
                 h("td", { class: "wrap muted" }, s.last_error || ""))))))));
           for (const s of p.servers) if (s.healthy) fills.push([s, maxE]);
         }
+        morph(body, out);
         // widths are set via the CSSOM (allowed under the page's CSP)
         const els = body.querySelectorAll(".bar-fill");
         fills.forEach(([s, maxE], i) => { els[i].style.width = Math.max(4, (s.ewma_ms / maxE) * 100) + "%"; });
@@ -1640,6 +1679,7 @@
     { shared: true, k: "max_afns", l: "Max forwarders", t: "int", min: 1, max: 255 },
     { shared: true, k: "key", l: "HMAC shared key", t: "text" },
     { k: "preempt", l: "Preemption", t: "bool" },
+    { shared: true, k: "real_macs", l: "Use real MAC addresses (no virtual MACs)", t: "bool", hint: "Off is the normal way. On, for where virtual MACs cannot work (a VMware port group that is not promiscuous, a cloud with one MAC per interface): the VIP is on every node's lo and the controller answers ARP with the real MAC of the node it picks. Failover then depends on the neighbors honoring an unsolicited ARP. Restarts the gateway; set it on every node's cluster together." },
     { shared: true, k: "neighbors", l: "Neighbors (unicast mode)", t: "list", wide: true, hint: "Every node, one IP per line. Empty: multicast." },
   ];
   const DNS_FIELDS = [
@@ -1919,7 +1959,7 @@
   const membersTable = (v, onRemove, named) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
     const rows = v.peers.map((p) => h("tr", { class: p.self ? "local" : "" },
-      named ? h("td", { title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "") : h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
+      named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "") : h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
       named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
       h("td", {}, p.reachable ? pill("yes", "ok") : pill("NO", "bad"), p.updating ? [" ", pill("updating", "warn")] : null),
@@ -1928,7 +1968,7 @@
       h("td", {}, p.self ? "now" : when(p.last_seen)),
       h("td", { class: "wrap muted" }, p.error || ""),
       onRemove ? h("td", { class: "actions" }, p.self ? null : h("button", { class: "btn small danger", type: "button", onclick: () => onRemove(p) }, "Remove")) : null));
-    return h("div", { class: "scroll" }, h("table", {},
+    return h("div", { class: "scroll" }, h("table", { class: named ? "tight" : null },
       h("thead", {}, h("tr", {}, (named ? ["Node name", "Node IP"] : ["Node"]).concat(["Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""], onRemove ? [""] : []).map((t, i) => h("th", { class: i >= (named ? 4 : 3) && i <= (named ? 6 : 5) ? "num" : "" }, t)))),
       h("tbody", {}, rows)));
   };
@@ -2901,6 +2941,148 @@
         if (first || live.checked) await load();
       },
       poll_ms: 3000,
+    };
+  })();
+
+  // ── Capture, Monitor  (CLI: --capture, --capture-interfaces) ────────────────────
+  // One node: a tcpdump-like capture on the node picked in the Node menu, shown live and downloadable as a .pcap.
+  // Cluster: the same capture on every node at once for a chosen time, one .pcap per node in a .tgz.
+  VIEWS.capture = (() => {
+    let status, iface, filter, info, box, startBtn, stopBtn, dlBtn, ifs = null, cursor = 0, shown = 0, last = null, running = false;
+    let job = null, jobBox, durSel, goBtn, dlJob;
+    const ROWS = 1500;
+    const cluster = () => state.target === CLUSTER;
+    const sizeText = (n) => (n < 1024 ? n + " bytes" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB");
+    const FILTER_HELP = "Filter (optional): host 10.0.0.5 · src host … · net 10.0.0.0/24 · port 53 · dst port 53 · portrange 50-60 · tcp · udp · icmp · arp · ip6 · dns · ether host 00:1a:7c:01:02:00 · and · or · not · ( )  —  for example: host 10.129.0.205 and port 53";
+
+    const ifaceSelect = () => h("select", { "aria-label": "Interface", class: "capif" });
+    async function loadIfaces() {
+      const r = (await api("GET", "/api/capture/interfaces")).data;
+      ifs = r;
+      const gw = new Set(r.gateway || []);
+      const keep = iface.value;
+      clear(iface).append(...r.interfaces.map((i) => h("option", { value: i.name }, i.name + (gw.has(i.name) ? " (gateway)" : "") + (i.up ? "" : " (down)"))));
+      const pick = [keep, last && last.iface, ...(r.gateway || []), (r.interfaces.find((i) => i.up && i.name !== "lo") || {}).name, (r.interfaces[0] || {}).name].find((n) => n && r.interfaces.some((i) => i.name === n));
+      if (pick) iface.value = pick;
+    }
+    function addRows(pk) {
+      const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      if (box.firstChild && box.firstChild.classList && box.firstChild.classList.contains("empty")) clear(box);
+      for (const p of pk) {
+        const dns = / DNS /.test(p.summary), arp = /^(ARP|ICMPv6 .*neighbor)/.test(p.summary) || p.summary.startsWith("ARP");
+        box.append(h("div", { class: "capline" + (dns ? " dns" : "") + (arp ? " arp" : ""), title: p.len + " bytes" },
+          h("span", { class: "ct" }, p.time), h("span", { class: "cs" }, p.summary)));
+      }
+      shown += pk.length;
+      while (box.childNodes.length > ROWS) { box.removeChild(box.firstChild); }
+      if (stick) box.scrollTop = box.scrollHeight;
+    }
+    function empty(text) { clear(box).append(h("div", { class: "empty" }, text)); shown = 0; }
+    function setButtons() {
+      stopBtn.disabled = !running;
+      dlBtn.disabled = !(last && last.count > 0);
+    }
+    async function refresh(full) {
+      const q = full ? 0 : cursor;
+      const st = (await api("GET", "/api/capture/packets?since=" + q)).data;
+      if (st.cursor < cursor || (last && st.iface !== last.iface && !full)) return refresh(true); // another capture began, or this one was reset
+      if (full) { clear(box); shown = 0; }
+      if (st.packets.length) addRows(st.packets);
+      cursor = st.cursor;
+      last = st;
+      running = st.running;
+      if (!shown && !box.firstChild) empty(st.iface ? "Waiting for packets on " + st.iface + (st.filter ? " matching: " + st.filter : "") + "…" : "Not capturing. Choose an interface and press Start.");
+      clear(info).append(!st.iface ? "Not capturing." :
+        (st.running ? "Capturing on " : "Stopped on ") + st.iface + (st.filter ? " · filter: " + st.filter : "") + " · " + st.count + " packet" + (st.count === 1 ? "" : "s") + " kept" +
+        (st.seen > st.matched ? " (" + st.seen + " seen, the filter turned away " + (st.seen - st.matched) + ")" : "") +
+        " · " + sizeText(st.bytes) + " in the buffer, the newest 5000 or 32 MB");
+      setButtons();
+    }
+    async function start() {
+      try {
+        await api("POST", "/api/capture/start", { iface: iface.value, filter: filter.value.trim() });
+        say(status, "ok"); cursor = 0; last = null; empty("Waiting for packets…");
+        await refresh(true);
+      } catch (e) { fail(status)(e); }
+    }
+    async function stop() { try { await api("POST", "/api/capture/stop", {}); await refresh(false); } catch (e) { fail(status)(e); } }
+    async function clearAll() { try { await api("POST", "/api/capture/clear", {}); empty(running ? "Waiting for packets…" : "Cleared."); await refresh(false); } catch (e) { fail(status)(e); } }
+
+    // ── every node ──
+    function drawJob() {
+      clear(jobBox);
+      if (!job || job.none) return;
+      const left = Math.max(0, job.seconds - job.elapsed);
+      // Nothing to say when it went well (the table does): only while it runs, and when a node could not capture
+      const failed = (job.nodes || []).filter((n) => n.status !== "done").length;
+      if (!job.done) jobBox.append(h("div", { class: "notice info", role: "status" }, "Capturing on " + job.iface + (job.filter ? " (" + job.filter + ")" : "") + " on every node… " + Math.ceil(left) + " s left"));
+      else if (job.error) jobBox.append(h("div", { class: "notice bad", role: "status" }, job.error));
+      else if (failed) jobBox.append(h("div", { class: "notice warn", role: "status" }, failed + " of " + job.nodes.length + " nodes could not capture (see the list); the others are in the download."));
+      if (job.nodes && job.nodes.length) {
+        jobBox.append(h("div", { class: "scroll" }, h("table", {},
+          h("thead", {}, h("tr", {}, ["Node", "Interface", "Result", "Packets kept", "Seen", "Size", "Why not"].map((t, i) => h("th", { class: i >= 3 && i <= 5 ? "num" : "" }, t)))),
+          h("tbody", {}, job.nodes.map((n) => h("tr", {},
+            h("td", {}, n.name, n.self ? " ★" : ""), h("td", { class: "mono" }, n.iface),
+            h("td", {}, pill(n.status, n.status === "done" ? "ok" : n.status === "error" ? "bad" : "")),
+            h("td", { class: "num" }, n.status === "done" ? String(n.kept) : "–"), h("td", { class: "num" }, n.status === "done" ? String(n.seen) : "–"),
+            h("td", { class: "num" }, n.status === "done" ? sizeText(n.bytes) : "–"),
+            h("td", {}, n.error || "")))))));
+      }
+      dlJob.disabled = !(job.done && job.ready);
+      goBtn.disabled = !job.done;
+    }
+    async function pollJob() {
+      const r = (await api("GET", "/api/clustercapture/status")).data;
+      job = r.none ? null : r;
+      drawJob();
+    }
+    async function goAll() {
+      try {
+        await api("POST", "/api/clustercapture/start", { iface: iface.value, filter: filter.value.trim(), seconds: Number(durSel.value) });
+        say(status, "ok");
+        await pollJob();
+      } catch (e) { fail(status)(e); }
+    }
+
+    return {
+      async mount(main) {
+        cursor = 0; shown = 0; last = null; running = false; job = null; ifs = null;
+        status = h("div", { "aria-live": "polite" });
+        iface = ifaceSelect();
+        filter = h("input", { type: "text", class: "grow", placeholder: "Filter, e.g. host 10.129.0.205 and port 53", "aria-label": "Capture filter", spellcheck: "false", autocomplete: "off", maxlength: "300",
+          onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); (cluster() ? goAll : start)(); } } });
+        const hint = h("div", { class: "hint" }, FILTER_HELP);
+        if (cluster()) {
+          durSel = h("select", { "aria-label": "How long" }, [["5", "5 seconds"], ["10", "10 seconds"], ["30", "30 seconds"], ["60", "60 seconds"]].map(([v, t]) => h("option", { value: v }, t)));
+          durSel.value = "10";
+          goBtn = h("button", { class: "btn primary", type: "button", onclick: goAll }, "Capture on all nodes");
+          dlJob = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/clustercapture/download", "ddgw-cluster-capture.tgz").catch(fail(status)) }, "Download .tgz");
+          jobBox = h("div", {});
+          main.append(status, section("Capture on every node",
+            h("div", { class: "hint nomargin" }, "Runs the same capture on every node of the cluster at the same time, for the time you choose, and bundles one .pcap per node in a .tgz. Each node keeps its newest packets (about 4 MB). The capture only listens."),
+            h("div", { class: "toolbar tight logbar" }, iface, filter, durSel, goBtn, dlJob), hint, jobBox));
+          await loadIfaces().catch(fail(status));
+          await pollJob().catch(fail(status));
+          return;
+        }
+        startBtn = h("button", { class: "btn primary", type: "button", onclick: start }, "Start");
+        stopBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: stop }, "Stop");
+        dlBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/capture/pcap", "ddgw-capture.pcap").catch(fail(status)) }, "Download .pcap");
+        info = h("div", { class: "hint nomargin" });
+        box = h("div", { class: "logbox capbox", tabindex: "0", role: "log", "aria-label": "Captured packets" });
+        main.append(status, section("Packet capture",
+          h("div", { class: "toolbar tight logbar" }, iface, filter, startBtn, stopBtn,
+            h("button", { class: "btn", type: "button", onclick: clearAll }, "Clear"), dlBtn),
+          hint, box, info,
+          h("div", { class: "hint" }, "This captures on the node chosen in the Node menu and only listens. Choosing Cluster there captures on every node at once.")));
+        empty("Not capturing. Choose an interface and press Start.");
+        try { await loadIfaces(); await refresh(true); } catch (e) { fail(status)(e); }
+      },
+      async poll() {
+        if (cluster()) { if (job && !job.done) await pollJob(); return; }
+        if (running || (last && !last.iface)) await refresh(false);
+      },
+      poll_ms: 1000,
     };
   })();
 

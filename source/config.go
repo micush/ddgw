@@ -95,6 +95,12 @@ type GroupConfig struct {
 	VIP6      string   `json:"vip6"`
 	Priority  int      `json:"priority"`
 	LBMethod  LBMethod `json:"lb_method"`
+	// RealMACs turns the virtual MACs off: no macvlan interfaces, and the controller answers ARP and neighbor
+	// solicitations for the VIP with the real MAC address of the node it picks.  Every node then holds the VIP on lo.  For
+	// where virtual MACs cannot work (a VMware port group that is not promiscuous, a cloud that allows one MAC per
+	// interface); the price is failover that depends on the neighbors honoring an unsolicited ARP.  Off (the usual way) is
+	// not written to the file, so a configuration that never used it stays readable by older versions.
+	RealMACs  bool     `json:"real_macs,omitempty"`
 	Weight    int      `json:"weight"`
 	HelloMS   int      `json:"hello_ms"`
 	HoldMS    int      `json:"hold_ms"`
@@ -266,7 +272,7 @@ func (g *GroupConfig) Validate() error {
 // restartDiffers reports whether a change between a and b needs an engine restart.
 func restartDiffers(a, b *GroupConfig) bool {
 	return a.Paused != b.Paused || a.Interface != b.Interface || a.VIP4 != b.VIP4 || a.VIP6 != b.VIP6 ||
-		a.Key != b.Key ||
+		a.Key != b.Key || a.RealMACs != b.RealMACs || // the MAC mode changes what the node sets up: restart the gateway
 		!reflect.DeepEqual(a.Neighbors, b.Neighbors)
 }
 

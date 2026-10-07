@@ -37,6 +37,8 @@ type SharedGroup struct {
 	PausedVIPs []string `json:"paused_vips,omitempty"`
 	// PausedAll: the gateway is paused on every node (omitted when not).
 	PausedAll bool `json:"paused_all,omitempty"`
+	// RealMACs: the gateway runs without virtual MACs on every node (omitted when not, so the hash is unchanged).
+	RealMACs bool `json:"real_macs,omitempty"`
 	// DNS is the group's own upstream pool (nil: it uses the shared one).
 	DNS *DNSConfig `json:"dns,omitempty"`
 }
@@ -70,7 +72,7 @@ func sharedOf(dc *DaemonConfig) SharedConfig {
 		sc.Groups = append(sc.Groups, SharedGroup{
 			GroupID: g.GroupID, Name: g.Name, VIP4: g.VIP4, VIP6: g.VIP6, LBMethod: g.LBMethod,
 			HelloMS: g.HelloMS, HoldMS: g.HoldMS, MaxAFNs: g.MaxAFNs, Key: g.Key, DNSProxy: g.DNSProxy,
-			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors),
+			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors), RealMACs: g.RealMACs,
 		})
 	}
 	sort.Slice(sc.Groups, func(i, j int) bool { return sc.Groups[i].GroupID < sc.Groups[j].GroupID })
@@ -111,6 +113,7 @@ func applySharedGroup(gc *GroupConfig, g SharedGroup) {
 	gc.ExtraVIPs = append([]string(nil), g.ExtraVIPs...)
 	gc.PausedVIPs = append([]string(nil), g.PausedVIPs...)
 	gc.PausedAll = g.PausedAll
+	gc.RealMACs = g.RealMACs
 	gc.Neighbors = append([]string{}, g.Neighbors...)
 }
 
