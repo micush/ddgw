@@ -1,5 +1,31 @@
 # Changelog
 
+## [v228] - 2026-10-07 — A single node now updates itself
+
+### Fixed
+- **Auto-update (and Update now) never updated a node that was the only member.** With a newer release uploaded the Upgrade page said "behind" and stayed there, because the rule that keeps every gateway served during an update waited for another member to cover the node's gateways, and a lone node has none, so it waited for ever (the log said "holding back — gateway 1 would have no other cluster member serving it (this is the only member…)"). A node that knows no other member is now never held back; it builds, installs and restarts, which is a brief interruption of its gateways, as an update of one node must be. With other members known the rule is unchanged: a node still waits while it is the only one serving a gateway. Change: `clusternet.go` (`updateSafeToApply`: the update paths; a power action on the only serving node stays refused); README ("is the only member").
+- Test: `TestUpdateSafeForTheOnlyMember` (a lone serving node is safe; after another member joins, the serving one waits again).
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+- Live, one real daemon with a gateway and no peers, real build with PAM: before the fix, v226 with v228 uploaded stayed "behind" and logged the hold-back; with the fix (run twice), v227 built v228 and v228 built v229 about 30 s after the upload, installed it, restarted and reported "Running v228".
+
+### Not verified
+- Light theme (no GUI change); the GUI's Update now button for a lone node (the CLI path is the same `updateSafe`); a lone node under systemd (the live run re-executed itself without a supervisor). `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
+
+## [v227] - 2026-10-07 — A lone node is drawn beside its gateway
+
+### Changed
+- **The Topology drawing always shows the node.** On an install with one node (no cluster) the gateway's circle had nothing beside it, which read as "no node is attached" even while this node was serving it. Now this node is drawn to the left of the circle, starred, with the same colours, tooltip and right-click menu (Host statistics, Pause node, Remove from this gateway) as a node in a cluster; "Remove from this gateway" still refuses to leave the gateway with no node. In a cluster nothing changes. A node that is not on the gateway's subnet shows "not serving" there instead of an unexplained empty drawing. The sidebar's gateway colour is now worked out from this node too. Change: `clusternodes.go` (a lone node, or no cluster at all, is a list of one), help and README ("just this node when it is alone").
+- Tests: `TestCanvasClusterNodes` and `TestMarkNodesOnCanvas` now expect the lone node (with and without a cluster object) instead of nothing.
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `help.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+- Live, one daemon with no cluster, real PAM login, headless Chromium (dark): the gateway with no DNS server shows one starred node shape beside the circle; right-click lists Host statistics, Pause node and Remove from this gateway; Remove from this gateway answers "That would leave no node serving gateway…".
+
+### Not verified
+- Light theme; a lone node that is off the gateway's subnet (the "not serving" shape), which is covered by the existing node-label test but was not looked at in the browser. `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
+
 ## [v226] - 2026-10-07 — The product is now called Anyname DNS Director
 
 ### Changed

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -46,12 +47,20 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 
 // canvasNodesEx is canvasNodes with the node IDs removed from the gateway: those nodes read "removed" whichever node is asked.
 func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaused bool, excluded []string) []CanvasNode {
-	if c == nil || !c.Enabled() {
-		return nil
+	var view ClusterView
+	if c != nil && c.Enabled() {
+		view = c.View()
 	}
-	view := c.View()
 	if len(view.Peers) < 2 {
-		return nil // a single node is not a cluster: nothing to draw
+		// a single node is still drawn, so the gateway is seen to be served by something: this node, with the same shape
+		// and menu as in a cluster (its Remove from this gateway refuses to leave the gateway with no node)
+		host, _ := os.Hostname()
+		addr := view.Self
+		if addr == "" {
+			addr = host
+		}
+		view.Peers = []PeerView{{Addr: addr, NodeID: localNodeID(), Self: true, Reachable: true, Role: RolePrimary, IsPrimary: true,
+			Hostname: host, Version: version()}}
 	}
 	var primaryRev uint64
 	for _, p := range view.Peers {
@@ -59,14 +68,16 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 			primaryRev = p.SharedRev
 		}
 	}
-	c.mu.Lock()
 	infos := map[string]peerInfo{}
-	for addr, pi := range c.info {
-		if pi != nil {
-			infos[addr] = *pi
+	if c != nil {
+		c.mu.Lock()
+		for addr, pi := range c.info {
+			if pi != nil {
+				infos[addr] = *pi
+			}
 		}
+		c.mu.Unlock()
 	}
-	c.mu.Unlock()
 	out := make([]CanvasNode, 0, len(view.Peers))
 	for _, p := range view.Peers {
 		n := CanvasNode{Addr: p.Addr, Name: p.Hostname, Self: p.Self, Role: p.Role, Reachable: p.Reachable, Version: p.Version,
@@ -194,7 +205,7 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 
 // markNodes adds the cluster's nodes to each gateway of the picture.
 func (s *StatusServer) markNodes(groups []CanvasGateway) {
-	if s.mg == nil || s.mg.cl == nil {
+	if s.mg == nil {
 		return
 	}
 	for i := range groups {
@@ -233,7 +244,7 @@ func gwStateOf(gs *GwState, nodePaused bool) string {
 // selfGw is this node's own state for the gateway, worked out the same way as the other nodes' (from the same numbers it
 // reports to them); without them (before the daemon wires them up) from the gateway's colour here.
 func (c *Cluster) selfGw(gid int, selfStatus string, selfPaused bool) string {
-	if c.mg != nil && c.mg.gwFn != nil {
+	if c != nil && c.mg != nil && c.mg.gwFn != nil {
 		var gs *GwState
 		for _, g := range c.mg.localGateways() {
 			if g.GroupID == gid {

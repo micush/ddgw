@@ -1615,7 +1615,7 @@ func (m *Mgmt) updateTick(ctx context.Context) {
 	if m.cl.Enabled() && m.cl.shouldWaitForOthers(target, intent) {
 		return
 	}
-	if ok, why := m.updateSafe(); !ok {
+	if ok, why := m.updateSafeToApply(); !ok {
 		m.upd.SetWaiting(why)
 		return
 	}
@@ -1784,6 +1784,16 @@ func (m *Mgmt) updateSafe() (bool, string) {
 		return true, ""
 	}
 	return safeToTakeDown(m.localGateways(), m.cl.peerGateways())
+}
+
+// updateSafeToApply is updateSafe for installing an update: a node that knows no other member is never held back, since no
+// node exists that could ever cover its gateways and waiting would be for ever (a brief restart is the price of updating
+// a single node).  Power actions keep the stricter updateSafe: rebooting the only server of a gateway stays a decision.
+func (m *Mgmt) updateSafeToApply() (bool, string) {
+	if m.cl != nil && len(m.cl.node.Snapshot().Peers) == 0 {
+		return true, ""
+	}
+	return m.updateSafe()
 }
 
 func (c *Cluster) peerGateways() []peerGateways {

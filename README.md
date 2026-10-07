@@ -205,7 +205,7 @@ every domain that server has to answer.
 * Hover the circle to see which cluster nodes are serving the gateway right now
   (which is this node, which is the gateway controller, each node's slot).
 
-* **Cluster nodes** (only with two or more nodes): each node of the cluster is a **parallelogram** to the left of the
+* **Cluster nodes** (just this node when it is alone): each node of the cluster is a **parallelogram** to the left of the
   circle, this node first (marked with a star), named by host name (by address when two nodes share a name), with how it stands for this gateway:
   green *serving*, amber *not serving* (up, but not serving the gateway yet), amber *degraded* (serving, but its own view of the gateway is degraded, e.g. some of its DNS servers are down), dashed *paused* (the node is paused on the Power page, or
   the gateway is paused or absent there), red dashed *not answering*. A node whose **CPU, memory or fullest disk is over 85%** (the Monitor ▸ Host numbers: the last 10-second CPU sample, memory in use, the fullest of the tracked filesystems) is **solid yellow** (degraded) — whatever else it is doing, even paused — and names what is over ("CPU 91% · disk 88%"; the tooltip names the mount) until every one is back at 85% or below. The log records it too: a warning when a node goes over (naming CPU, memory and/or disk) and an info line when it is back at or under, for this node and every reachable member, checked each sync interval; a reading that only moves while still over is not logged again. Hover one for its address, role, last-seen time, version, whether it has caught up
@@ -926,7 +926,7 @@ a node holds back its update until every gateway it is serving is also being ser
 by another reachable member (so a node that is still recovering from its own update
 keeps the next one waiting; the Upgrade page says why). `--update-apply` on one node
 refuses in the same situation unless you add `--yes` (the GUI asks). A node that is
-not clustered, or serves nothing, is never held back. A new binary that does not stay up is
+not clustered, is the only member, or serves nothing, is never held back (a lone node restarts briefly: nothing could cover for it). A new binary that does not stay up is
 rolled back automatically (three boot attempts; it is confirmed after 60 s), and the
 failure is shown in the Upgrade tab. The queue and auto-update setting are
 cluster-wide and live on the primary. Run it under a supervisor that restarts

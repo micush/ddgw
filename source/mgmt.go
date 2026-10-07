@@ -331,7 +331,7 @@ func (m *Mgmt) UpdateApplyLocal(by string, force bool) (string, error) {
 	case m.upd.Busy():
 		return "", errors.New("an update is already in progress on this node")
 	}
-	if ok, why := m.updateSafe(); !ok && !force {
+	if ok, why := m.updateSafeToApply(); !ok && !force {
 		return "", fmt.Errorf("not safe to update this node now: %s (to update anyway: ddgw --update-apply --yes, or confirm in the GUI)", why)
 	}
 	go func() {
@@ -360,7 +360,7 @@ func (m *Mgmt) scheduleRestart(force bool) {
 	}
 	go func() {
 		time.Sleep(1500 * time.Millisecond) // let the HTTP/socket reply go out
-		waitUntilSafe(m.updateSafe, force, restartRecheck, m.upd.SetWaiting)
+		waitUntilSafe(m.updateSafeToApply, force, restartRecheck, m.upd.SetWaiting)
 		m.restartFn()
 	}()
 }

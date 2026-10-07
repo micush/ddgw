@@ -648,12 +648,16 @@ func TestClusterGatewayStatsAddUpNodes(t *testing.T) {
 }
 
 // The Topology drawing's cluster nodes: this node first with the gateway's own colour, the others from what they report,
-// and a node that stops answering turns red; one node alone is not a cluster and draws nothing.
+// and a node that stops answering turns red; one node alone is drawn too: just this node.
 func TestCanvasClusterNodes(t *testing.T) {
 	failDelay = 0
 	a, b := newTNode(t, "A"), newTNode(t, "B")
-	if got := a.mg.cl.canvasNodes(1, "ok", "fine", false); got != nil {
-		t.Fatalf("a lone node drew %d nodes", len(got))
+	if got := a.mg.cl.canvasNodes(1, "ok", "fine", false); len(got) != 1 || !got[0].Self || got[0].Status != "ok" || got[0].Gw != "ok" || got[0].Name == "" {
+		t.Fatalf("a lone node is drawn as just itself, serving: %+v", got)
+	}
+	var none *Cluster // no cluster at all: still this node
+	if got := none.canvasNodes(1, "warn", "no server", false); len(got) != 1 || !got[0].Self || got[0].Gw != "degraded" {
+		t.Fatalf("no cluster: %+v", got)
 	}
 	a.join2(t, b)
 	a.mg.gwFn = func() []GwState { return []GwState{{GroupID: 1, Serving: true}} }
@@ -698,7 +702,7 @@ func TestCanvasClusterNodes(t *testing.T) {
 	}
 }
 
-// The picture the GUI and the CLI get carries the nodes, and a daemon without a cluster adds none.
+// The picture the GUI and the CLI get carries the nodes; a daemon alone carries just itself.
 func TestMarkNodesOnCanvas(t *testing.T) {
 	failDelay = 0
 	(&StatusServer{}).markNodes([]CanvasGateway{{GroupID: 1}}) // no management at all: no panic
@@ -706,8 +710,8 @@ func TestMarkNodesOnCanvas(t *testing.T) {
 	s := &StatusServer{mg: a.mg}
 	gs := []CanvasGateway{{GroupID: 1, Status: "ok", Detail: "up"}}
 	s.markNodes(gs)
-	if len(gs[0].Nodes) != 0 {
-		t.Fatalf("a lone node: %+v", gs[0].Nodes)
+	if len(gs[0].Nodes) != 1 || !gs[0].Nodes[0].Self || gs[0].ClusterStatus != "ok" {
+		t.Fatalf("a lone node: %+v (%q)", gs[0].Nodes, gs[0].ClusterStatus)
 	}
 	a.join2(t, b)
 	a.sync()
@@ -852,5 +856,26 @@ func TestCanvasSelfNodeSaysWhatThePeersSay(t *testing.T) {
 	// a healthy colour does not hide that the node itself is paused
 	if n := self("ok", "fine", true); n.Detail != "fine" {
 		t.Errorf("paused node: detail %q", n.Detail)
+	}
+}
+
+// A node that is the only member has nobody to cover its gateways, so the "keep every gateway served" rule must not hold
+// its update back for ever; once another member is known the rule applies again.
+func TestUpdateSafeForTheOnlyMember(t *testing.T) {
+	failDelay = 0
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	a.mg.gwFn = func() []GwState { return []GwState{{GroupID: 1, Serving: true}} }
+	b.mg.gwFn = func() []GwState { return []GwState{} }
+	if ok, why := a.mg.updateSafeToApply(); !ok {
+		t.Fatalf("the only member serving a gateway was held back from updating: %q", why)
+	}
+	if ok, _ := a.mg.updateSafe(); ok {
+		t.Fatal("a power action on the only serving member must stay refused")
+	}
+	a.join2(t, b)
+	a.sync()
+	b.sync()
+	if ok, why := a.mg.updateSafeToApply(); ok || why == "" {
+		t.Fatalf("with a second member that serves nothing, the serving one must wait: %v %q", ok, why)
 	}
 }
