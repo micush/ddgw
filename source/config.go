@@ -131,6 +131,11 @@ type GroupConfig struct {
 	// Paused takes this node out of the gateway for maintenance: it resigns and
 	// stops answering, other nodes carry on.  Local to the node, never replicated.
 	Paused bool `json:"paused,omitempty"`
+	// ExcludedNodes are the cluster nodes (by node ID) that do not serve this gateway: shared, so every node agrees.  A
+	// node not listed serves it, a node that joins later too.  Omitted when empty, so a configuration that never used it
+	// stays readable by older versions.  ExcludedHere is set by effective() when this node is one of them (never written).
+	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
+	ExcludedHere  bool     `json:"-"`
 }
 
 func defaultGroup() GroupConfig {
@@ -244,6 +249,11 @@ func (g *GroupConfig) Validate() error {
 	}
 	g.PausedVIPs = keepAnycast(g.PausedVIPs, g.ExtraVIPs)
 	g.PausedVIPsHere = keepAnycast(g.PausedVIPsHere, g.ExtraVIPs)
+	if l, err := cleanNodeIDs(g.ExcludedNodes); err != nil {
+		return fmt.Errorf("%s: excluded_nodes: %v", pre, err)
+	} else {
+		g.ExcludedNodes = l
+	}
 	for _, f := range []struct {
 		name      string
 		v, lo, hi int
@@ -801,6 +811,9 @@ func (dc *DaemonConfig) effective() *DaemonConfig {
 	for i := range c.Groups {
 		if dc.NodePaused || c.Groups[i].PausedAll { // paused on every node, or this whole node is
 			c.Groups[i].Paused = true
+		}
+		if id := localNodeID(); id != "" && containsStr(c.Groups[i].ExcludedNodes, id) { // removed from this gateway: it serves nothing here
+			c.Groups[i].Paused, c.Groups[i].ExcludedHere = true, true
 		}
 		if c.Groups[i].DNS != nil {
 			d := here(*c.Groups[i].DNS)

@@ -9,6 +9,8 @@ import (
 // CanvasNode is one cluster node as the Topology drawing shows it (a parallelogram beside the gateway's circle), seen
 // from the gateway it is drawn for: whether that node is serving it.
 type CanvasNode struct {
+	NodeID    string      `json:"node_id,omitempty"`
+	Excluded  bool        `json:"excluded,omitempty"` // removed from this gateway (shared setting)
 	Addr      string      `json:"addr"`
 	Name      string      `json:"name"` // host name, else the address (the address when two nodes share a host name)
 	Hostname  string      `json:"hostname,omitempty"`
@@ -36,6 +38,11 @@ var circleLabel = map[string]string{"ok": "serving", "warn": "degraded", "bad": 
 // canvasNodes lists the cluster for one gateway: this node first (its state is the gateway's own), then the others by
 // address. selfStatus/selfDetail are the gateway's colour and reason on this node; selfPaused says the node itself is paused.
 func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused bool) []CanvasNode {
+	return c.canvasNodesEx(gid, selfStatus, selfDetail, selfPaused, nil)
+}
+
+// canvasNodesEx is canvasNodes with the node IDs removed from the gateway: those nodes read "removed" whichever node is asked.
+func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaused bool, excluded []string) []CanvasNode {
 	if c == nil || !c.Enabled() {
 		return nil
 	}
@@ -62,6 +69,8 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 		n := CanvasNode{Addr: p.Addr, Name: p.Hostname, Self: p.Self, Role: p.Role, Reachable: p.Reachable, Version: p.Version,
 			Updating: p.Updating, UpdateErr: p.UpdateFailed, Error: p.Error}
 		n.Hostname = p.Hostname
+		n.NodeID = p.NodeID
+		n.Excluded = p.NodeID != "" && containsStr(excluded, p.NodeID)
 		if n.Name == "" {
 			n.Name = p.Addr
 		}
@@ -81,12 +90,20 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 		case p.Self:
 			n.Status, n.Detail, n.Paused = selfStatus, selfDetail, selfPaused
 			n.Label = circleLabel[selfStatus]
+			if n.Excluded {
+				n.Status, n.Label = "paused", "removed"
+			}
+			if selfStatus == "idle" && strings.HasPrefix(selfDetail, "not running here") {
+				// held back because this node has no address in the gateway's subnet (markOffnet): the other nodes see
+				// "not serving" (amber) for it, so say the same here instead of "starting", which is for the DNS warm-up
+				n.Status, n.Label = "warn", "not serving"
+			}
 			if selfStatus == "ok" && !selfPaused {
 				// healthy: the same words as the other nodes' tooltips (what is said about a node should not depend on
 				// which node you ask); in any other state the gateway's own reason on this node is the more useful text
 				n.Detail = "Serving this gateway"
 			}
-		case !p.Reachable:
+		case !p.Reachable && !n.Excluded:
 			n.Status, n.Label = "bad", "not answering"
 			n.Detail = "Not answering"
 			if !p.LastSeen.IsZero() {
@@ -94,6 +111,11 @@ func (c *Cluster) canvasNodes(gid int, selfStatus, selfDetail string, selfPaused
 			}
 			if p.Error != "" {
 				n.Detail += ": " + p.Error
+			}
+		case n.Excluded:
+			n.Status, n.Label, n.Detail = "paused", "removed", "Removed from this gateway: it does not serve it; the other nodes carry on"
+			if !p.Reachable {
+				n.Detail += " (and is not answering)"
 			}
 		default:
 			pi := infos[p.Addr]
@@ -164,7 +186,7 @@ func (s *StatusServer) markNodes(groups []CanvasGateway) {
 		return
 	}
 	for i := range groups {
-		groups[i].Nodes = s.mg.cl.canvasNodes(groups[i].GroupID, groups[i].Status, groups[i].Detail, groups[i].NodePaused)
+		groups[i].Nodes = s.mg.cl.canvasNodesEx(groups[i].GroupID, groups[i].Status, groups[i].Detail, groups[i].NodePaused, groups[i].ExcludedNodes)
 	}
 }
 

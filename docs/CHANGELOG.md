@@ -1,5 +1,60 @@
 # Changelog
 
+## [v218] - 2026-10-06 — Choose which nodes serve which gateway
+
+### Added
+- **A shared list of the nodes that do not serve a gateway.** Every node serves every gateway, as before, until it is removed from one. Topology ▸ right-click a node ▸ **Remove from this gateway…** (asks first) / **Add to this gateway**; CLI `--canvas-del node --group N --node NODE` / `--canvas-add node --group N --node NODE`, NODE being the node's address (with or without the port) or host name (a host name two nodes share is refused: use the address). It works from any node, with the Node menu on any node, and is a shared setting, so every node follows, it survives restarts and it is in the configuration history ("excluded_nodes null → […]").
+- **What a removed node does:** the gateway is carried out on it as if paused there (it resigns, gives up the address, stops answering and probing, anycast addresses are withdrawn) and only that gateway: its other gateways run. Its shape reads **removed** (dashed grey) on every node's drawing, and on the removed node the gateway's circle says "This node was removed from the gateway". A node that joins the cluster later serves every gateway until it is removed from it. This is separate from *Pause ▸ This node*, which is kept on the node itself for maintenance.
+- **The last node serving a gateway cannot be removed** (CLI and GUI): the error says to pause the gateway on all nodes instead.
+- Storage: `excluded_nodes` in the gateway's block, a list of node IDs (they survive an address change), sorted and de-duplicated, omitted while empty — so a configuration that never used it is byte-for-byte what it was and older versions still read it. It is part of the shared settings, so the hash of a cluster that never used it is unchanged. An entry for a node that has left the cluster can still be cleared by its node ID. A cluster of mixed versions during an update: a node still on v217 or older rejects the unknown key until it is updated, so update every node before removing one (the list is empty until then).
+- Help (a new section on the Topology page and the CLI block), README (Topology, the CLI/GUI table), `--help`.
+- Tests (`nodeset_test.go`): a removed node stops serving only that gateway and others and later nodes do not (and the flag is never written), the list is shared, sorted, validated and absent when empty (hash unchanged), add/remove/last-node/stale entries, finding a node by address, host name or ID, every node's drawing says "removed", the circle says why, and two real clustered nodes: removing B from A reaches B's file and B's effective configuration, not A's; the last node is refused; B adds itself back and A follows.
+
+### Fixed
+- Saving the Settings page rebuilds each gateway from its fields; it carries `excluded_nodes` through like the pauses (checked live: renaming a gateway there kept the list on both nodes).
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers; `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...`; `node --check` on `app.js` and `help.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so the fail-closed PAM stub).
+- Live, two real clustered daemons on 127.0.0.1 (own state dirs, a throwaway PAM user in group `ddgw`, a gateway on a subnet the host is not on): the CLI refused a shared host name and an unknown node; `--canvas-del node` on A reached B (its log: "Group 1 is paused on this node — not starting", history "excluded_nodes null → […]"), A's and B's `--canvas` both read removed, removing the last node was refused, `--canvas-add node` from B reached A and the key left both files.
+- Live in headless Chromium (dark and light), against the daemons above: right-click a node shows **Remove from this gateway…**, the confirmation names the node and the gateway, the shape becomes a dashed grey "removed", the removed node's menu offers **Add to this gateway**, the last-node refusal stays on the page (it is shown in the page's message area, not the line the next redraw clears), and renaming the gateway on the Settings page kept the list on both nodes.
+- `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` fails intermittently with `connection reset by peer` (also on the unmodified v215 tree); not related, not investigated.
+
+### Not verified
+- A mixed-version cluster during an update (the unknown-key note above is from how older versions read the file, not a run).
+- Taking traffic off a removed node on a real wire (the same release path as pausing a gateway, which was not changed; this sandbox has no second host).
+- The jsdom smoke test of `app.js` (Chromium was used instead).
+- The removed node's own shape on a node that is also over 85% disk/CPU/memory: it stays yellow with the numbers, as a paused node does.
+
+## [v217] - 2026-10-06 — Capture on one node downloads as a .tgz, not a .pcap
+
+### Changed
+- **Monitor ▸ Capture, one node: the button is now "Download .tgz" and the .pcap download is gone.** The archive holds the one `.pcap` of the node's buffer (`ddgw-<host>-<interface>-<time>.tgz` containing `ddgw-<host>-<interface>-<time>.pcap`), the same way the all-nodes download already bundles its files. Through another node (the Node menu) it is still the newest packets that fit the peer channel (about 5 MB, taken before compression). The route `GET /api/capture/pcap` is removed and `GET /api/capture/download` replaces it (relayable like the rest of `/api/capture`). Help text and README updated. Change: `capops.go` (`handleCaptureDownload`), `webui/app.js`, `webui/help.js`.
+- The command line is unchanged: `--capture --capture-file FILE.pcap` still writes a plain `.pcap` (and `.tgz` with `--all-nodes`).
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers; `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...`; `node --check` on `app.js` and `help.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so the fail-closed PAM stub).
+- `TestCaptureAPI` now unpacks the download (gzip, one `.pcap` in it, readable, at least the three packets sent) and checks the old route no longer answers; `TestCaptureRelayRules` covers the new route.
+- Live, real PAM: a scratch daemon on `127.0.0.1`, a throwaway user in group `ddgw`, login over HTTPS, a capture on `lo` with filter `udp`, five UDP packets sent, `GET /api/capture/download` gave `content-type: application/gzip`, a `.tgz` filename, and an archive holding one `.pcap` that extracted; `/api/capture/pcap` answered 404 and the download without a session 401. The user, group, PAM file and daemon were removed afterwards.
+- `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` fails intermittently with `connection reset by peer` (also on the unmodified v215 tree); not related and not investigated.
+
+### Not verified
+- The page in Chromium (light and dark) and the download through the Node menu to a second clustered daemon; the button text and the relay of the new route are covered by `node --check`, the relay-rules test and the code path being the same as the old one.
+- The jsdom smoke test of `app.js`.
+
+## [v216] - 2026-10-06 — A node on another subnet says "not serving" about itself, not "starting"
+
+### Fixed
+- **Topology: a node held back because it has no address in the gateway's subnet called itself "starting".** On a two-site setup (gateway `208.67.131.248`, second-site nodes on `91.221.255.x`) the second-site nodes correctly do not run that gateway (`onGatewaySubnet`, grey "not running here"), and the nodes on the gateway's subnet already showed them as amber "not serving". But the node's own entry took its label from the gateway's idle colour, and idle reads "starting" (the word for the DNS warm-up), so picking such a node in the Node menu showed a grey "starting" that never ended, while every other node said "not serving" about it. Its own entry now reads "not serving" in amber, the same as the others say, with its own reason ("not running here — …; members on that subnet serve it") as the tooltip. The gateway's circle stays grey and the DNS warm-up still reads "starting". Change: `clusternodes.go` (`canvasNodes`).
+- Test: `TestCanvasSelfNodeSaysWhatThePeersSay` now also checks an off-subnet node ("not serving", warn) and a warming one ("starting").
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers (`libpam0g-dev`); `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...`; `node --check webui/app.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the fail-closed PAM stub).
+- Everything passed except `TestClusterLegacyRequestsAreLimitedBeforeTheSignature`, which fails intermittently with `connection reset by peer` (2 of 3 runs on the unmodified v215 tree, so it is not caused by this change; not investigated).
+
+### Not verified
+- No live run: not a two-daemon cluster with a gateway on a subnet the host is not on, and not the Topology page in Chromium (light and dark). The change is the label and colour of one node entry, covered by the unit test only.
+- The PAM login check, update push and other live checks do not apply (nothing in those paths changed).
+
 ## [v215] - 2026-10-06 — Real-MAC mode: a gateway setting for networks where virtual MACs cannot work
 
 ### Added

@@ -175,6 +175,7 @@ func NewCluster(mg *Mgmt, cfg ClusterConfig) (*Cluster, error) {
 		joinFails: map[string]*failRec{}, goodAddr: map[string]string{}, kick: make(chan struct{}, 1),
 	}
 	c.refreshAlts()
+	setLocalNodeID(node.Self().NodeID)
 	return c, nil
 }
 

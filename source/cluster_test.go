@@ -842,6 +842,13 @@ func TestCanvasSelfNodeSaysWhatThePeersSay(t *testing.T) {
 			t.Errorf("%s: detail %q, want the gateway's own reason %q", c.status, n.Detail, c.detail)
 		}
 	}
+	// a node held back for being on another subnet says "not serving" like the others do, not "starting"
+	if n := self("idle", "not running here — this node has no address in the gateway's subnet 10.0.0.0/24 on eth0; members on that subnet serve it", false); n.Label != "not serving" || n.Status != "warn" {
+		t.Errorf("off-net: %+v", n)
+	}
+	if n := self("idle", "starting — waiting for the DNS servers to answer before this node serves", false); n.Label != "starting" {
+		t.Errorf("warming: %+v", n)
+	}
 	// a healthy colour does not hide that the node itself is paused
 	if n := self("ok", "fine", true); n.Detail != "fine" {
 		t.Errorf("paused node: detail %q", n.Detail)

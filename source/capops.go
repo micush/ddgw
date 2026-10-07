@@ -491,16 +491,16 @@ func (w *WebServer) registerCapture(mux *http.ServeMux) {
 	// gives a slow request only a few seconds per address before it tries the next one)
 	mux.HandleFunc("POST /api/capture/job", w.authed(w.op("capture.job.start", nil)))
 	mux.HandleFunc("GET /api/capture/job", w.authed(w.op("capture.job.get", []string{"id"})))
-	mux.HandleFunc("GET /api/capture/pcap", w.authed(w.handleCapturePcap))
+	mux.HandleFunc("GET /api/capture/download", w.authed(w.handleCaptureDownload))
 	// every node at once: the node asked asks the others itself, so none of these can be relayed
 	mux.HandleFunc("POST /api/clustercapture/start", w.authed(w.op("capture.cluster.start", nil)))
 	mux.HandleFunc("GET /api/clustercapture/status", w.authed(w.op("capture.cluster.status", nil)))
 	mux.HandleFunc("GET /api/clustercapture/download", w.authed(w.handleClusterCaptureDownload))
 }
 
-// handleCapturePcap sends the buffer of this node's Capture page as a .pcap.  Reached through another node it is the newest
-// packets that fit the peer channel.
-func (w *WebServer) handleCapturePcap(rw http.ResponseWriter, r *http.Request, s *session) {
+// handleCaptureDownload sends the buffer of this node's Capture page as a .tgz holding one .pcap.  Reached through another
+// node it is the newest packets that fit the peer channel.
+func (w *WebServer) handleCaptureDownload(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.mg.capture.mu.Lock()
 	iface := w.mg.capture.iface
 	w.mg.capture.mu.Unlock()
@@ -512,9 +512,21 @@ func (w *WebServer) handleCapturePcap(rw http.ResponseWriter, r *http.Request, s
 		limit = capRelayBytes
 	}
 	host, _ := hostnameShort()
-	rw.Header().Set("Content-Type", "application/vnd.tcpdump.pcap")
-	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("ddgw-%s-%s-%s.pcap", host, capNameRe.ReplaceAllString(iface, "_"), time.Now().Format("20060102-150405"))))
-	w.mg.capture.writePcap(rw, limit)
+	now := time.Now()
+	base := fmt.Sprintf("ddgw-%s-%s-%s", host, capNameRe.ReplaceAllString(iface, "_"), now.Format("20060102-150405"))
+	var pcap bytes.Buffer
+	w.mg.capture.writePcap(&pcap, limit)
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	tw := tar.NewWriter(gz)
+	if tw.WriteHeader(&tar.Header{Name: base + ".pcap", Mode: 0o644, Size: int64(pcap.Len()), ModTime: now}) == nil {
+		tw.Write(pcap.Bytes())
+	}
+	tw.Close()
+	gz.Close()
+	rw.Header().Set("Content-Type", "application/gzip")
+	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", base+".tgz"))
+	rw.Write(out.Bytes())
 }
 
 func (w *WebServer) handleClusterCaptureDownload(rw http.ResponseWriter, r *http.Request, s *session) {

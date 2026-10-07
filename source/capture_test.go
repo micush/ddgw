@@ -400,12 +400,28 @@ func TestCaptureHTTP(t *testing.T) {
 	if !pk.Data.Running || pk.Data.Iface != "lo" || len(pk.Data.Packets) < 3 {
 		t.Fatalf("packets: %s", r.raw)
 	}
-	r = e.do("GET", "/api/capture/pcap", nil, withAuth(e, false))
-	if r.code != 200 || r.hdr.Get("Content-Type") != "application/vnd.tcpdump.pcap" || !strings.Contains(r.hdr.Get("Content-Disposition"), ".pcap") {
-		t.Fatalf("pcap: %d %v", r.code, r.hdr)
+	r = e.do("GET", "/api/capture/download", nil, withAuth(e, false))
+	if r.code != 200 || r.hdr.Get("Content-Type") != "application/gzip" || !strings.HasSuffix(r.hdr.Get("Content-Disposition"), `.tgz"`) {
+		t.Fatalf("download: %d %v", r.code, r.hdr)
 	}
-	if _, p, err := readPcap(r.raw); err != nil || len(p) < 3 {
+	zr, err := gzip.NewReader(bytes.NewReader(r.raw))
+	if err != nil {
+		t.Fatalf("not a gzip: %v", err)
+	}
+	tr := tar.NewReader(zr)
+	hd, err := tr.Next()
+	if err != nil || !strings.HasSuffix(hd.Name, ".pcap") {
+		t.Fatalf("the archive's first file: %v %+v", err, hd)
+	}
+	pcapBytes, _ := io.ReadAll(tr)
+	if _, p, err := readPcap(pcapBytes); err != nil || len(p) < 3 {
 		t.Fatalf("the pcap: %v %d", err, len(p))
+	}
+	if _, err := tr.Next(); err != io.EOF {
+		t.Fatalf("the archive holds more than the one .pcap: %v", err)
+	}
+	if r := e.do("GET", "/api/capture/pcap", nil, withAuth(e, false)); r.code == 200 {
+		t.Fatalf("the old .pcap download still answers")
 	}
 	if r := e.do("POST", "/api/capture/clear", map[string]string{}, withAuth(e, true)); r.code != 200 {
 		t.Fatalf("clear: %d", r.code)
@@ -450,7 +466,7 @@ func TestCaptureHTTP(t *testing.T) {
 
 // What a node relays must be allowed, and what asks the other nodes itself must not be.
 func TestCaptureRelayRules(t *testing.T) {
-	for _, p := range []string{"/api/capture/interfaces", "/api/capture/start", "/api/capture/packets?since=3", "/api/capture/pcap", "/api/capture/job", "/api/capture/job?id=x"} {
+	for _, p := range []string{"/api/capture/interfaces", "/api/capture/start", "/api/capture/packets?since=3", "/api/capture/download", "/api/capture/job", "/api/capture/job?id=x"} {
 		m := "GET"
 		if strings.HasSuffix(p, "start") || p == "/api/capture/job" {
 			m = "POST"

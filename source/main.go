@@ -73,6 +73,9 @@ the web GUI):
                                          address on the Topology page; - clears)
                    --canvas-pause|--canvas-resume gateway --group N   (this node stops/starts serving it)
                    --canvas-pause|--canvas-resume server --group N --server ADDR  (no queries/probes)
+                   --canvas-del node --group N --node NODE   (remove a cluster node from the gateway: it stops serving it, on every
+                                         node's view; NODE is its address or host name, as --cluster-status lists them)
+                   --canvas-add node --group N --node NODE   (put it back; a node that joins later serves every gateway)
                    --dns-lookup IP|NAME   (the reverse name of an address, or the address of a name, as the Add DNS server form fills them in)
                    --server-stats ADDR [--stats-range 1h|1d|7d]   (how one DNS server has answered: latency and loss)
                    --server-stats ADDR --name DOMAIN [--type A]   (one monitored domain on that server)

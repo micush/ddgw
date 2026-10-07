@@ -198,8 +198,18 @@ every domain that server has to answer.
   green *serving*, amber *not serving* (up, but not serving the gateway yet), amber *degraded* (serving, but its own view of the gateway is degraded, e.g. some of its DNS servers are down), dashed *paused* (the node is paused on the Power page, or
   the gateway is paused or absent there), red dashed *not answering*. A node whose **CPU, memory or fullest disk is over 85%** (the Monitor ▸ Host numbers: the last 10-second CPU sample, memory in use, the fullest of the tracked filesystems) is **solid yellow** (degraded) — whatever else it is doing, even paused — and names what is over ("CPU 91% · disk 88%"; the tooltip names the mount) until every one is back at 85% or below. The log records it too: a warning when a node goes over (naming CPU, memory and/or disk) and an info line when it is back at or under, for this node and every reachable member, checked each sync interval; a reading that only moves while still over is not logged again. Hover one for its address, role, last-seen time, version, whether it has caught up
   with the primary's settings and any update under way. Right-click any reachable node ▸ *Pause node…* / *Resume node* (another node is paused through the cluster, like the Node page does
-  with the Node menu; its shape reads "pausing…" until it reports back), *Host statistics…*, and for another node *Open this node* (the Node menu, top right); an unreachable one ▸ *Cluster page…*. They are read-only here: add or remove nodes on the Cluster page.
+  with the Node menu; its shape reads "pausing…" until it reports back), *Remove from this gateway…* / *Add to this gateway* (see **Which nodes serve a gateway** below), *Host statistics…*, and for another node *Open this node* (the Node menu, top right); an unreachable one ▸ *Cluster page…*. They are read-only here: add or remove nodes on the Cluster page.
   `ddgw --canvas` lists them as `/_/ cluster node` lines.
+
+* **Which nodes serve a gateway** (right-click a node ▸ *Remove from this gateway…* / *Add to this gateway*; CLI
+  `--canvas-del node --group N --node NODE` / `--canvas-add node --group N --node NODE`, NODE being the node's address or
+  host name): every node serves every gateway unless it is removed from it. The removal is **shared** (`excluded_nodes` in the
+  gateway's block, a list of node IDs, absent while empty so older versions still read the file): any node can change it,
+  every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives
+  up the address and stops answering and probing for that gateway only, and its shape reads *removed* (dashed grey) on every
+  node's drawing, while the gateway's circle on that node says it was removed. A node that joins the cluster later serves
+  every gateway until it is removed from it. The last node serving a gateway cannot be removed (pause the gateway on all
+  nodes instead). This is not the same as *Pause ▸ This node*, which is kept on that node alone for maintenance.
 
 * **Four rows per side, or three.** The anycast addresses (right of the circle) and the cluster nodes (left) stand four to a column; the fifth starts a new
   column further out, and so on. When a four-row side would have a line to a server run through a box, both sides use three rows instead. Anycast addresses can be dragged to any slot, in any column. The drawing grows wider as columns are added (pan with the mouse).
@@ -473,6 +483,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | CLI | Web GUI |
 | --- | --- |
 | `--canvas`, `--canvas-add`, `--canvas-del` | Topology page (draw gateways, servers, domains; live colours) |
+| `--canvas-add node` / `--canvas-del node` `--group N` `--node NODE` | Topology page: right-click a node ▸ **Add to this gateway** / **Remove from this gateway…** |
 | `--server-stats ADDR` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click a server ▸ **Statistics…** (latency and loss graphs) |
 | `--canvas-move server\|domain\|anycast` `--group N` `--server ADDR` `[--name DOMAIN \| --address ADDR]` `--to N` | Topology page: drag a server left/right, a domain or an anycast address up/down |
 | `--dns-lookup IP\|NAME` | Add DNS server form: the Name is filled in from the address (reverse DNS), or the address from a name |
@@ -750,7 +761,7 @@ already has, and it does nothing until you press Start.
 are listed too), optionally a filter, and Start. The newest packets are listed live, one line each, with TCP flags, DNS
 names and answers, and for ARP and IPv6 neighbor discovery the Ethernet addresses they were sent from and to (so a
 virtual MAC that is announced but not the one that answers shows at once). The buffer holds the newest 5000 packets or
-32 MB; **Download .pcap** saves it for Wireshark. A node has one capture of its own: starting another replaces it.
+32 MB; **Download .tgz** saves it as an archive with one `.pcap` in it, for Wireshark. A node has one capture of its own: starting another replaces it.
 
 **Every node:** choose **Cluster** in the Node menu, an interface (every node needs one of that name), a filter and 5,
 10, 30 or 60 seconds. All nodes capture at the same moment into a buffer of their own (so nobody's Capture page is

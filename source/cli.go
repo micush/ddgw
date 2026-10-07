@@ -33,7 +33,7 @@ type cliFlags struct {
 	asn, routerID, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                      *string
 	updateUpload, updatePush, updateCancel, updateAuto                                                                                                                            *string
 	canvas                                                                                                                                                                        *bool
-	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope                           *string
+	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node                     *string
 	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                 *int
 	serverStats, gatewayStats, spread, lbMode                                                                                                                                     *string
 	latencyAlpha                                                                                                                                                                  *float64
@@ -54,7 +54,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		certFile: s("cert-file"), keyFile: s("key-file"), cn: s("cn"), san: s("san"),
 		clusterJoin: s("cluster-join"), clusterRemove: s("cluster-remove"), clusterUnremove: s("cluster-unremove"),
 		canvas: b("canvas"), canvasAdd: s("canvas-add"), canvasDel: s("canvas-del"),
-		canvasSet: s("canvas-set"), canvasMove: s("canvas-move"), pos: fs.Int("to", 0, ""), canvasPause: s("canvas-pause"), canvasResume: s("canvas-resume"), vip6: s("vip6"), ecs: s("ecs"), label: s("label"), anycast: s("anycast"), address: s("address"), scope: s("scope"),
+		canvasSet: s("canvas-set"), canvasMove: s("canvas-move"), pos: fs.Int("to", 0, ""), canvasPause: s("canvas-pause"), canvasResume: s("canvas-resume"), vip6: s("vip6"), ecs: s("ecs"), label: s("label"), anycast: s("anycast"), address: s("address"), scope: s("scope"), node: s("node"),
 		ecsV4: fs.Int("ecs-v4", 0, ""), ecsV6: fs.Int("ecs-v6", 0, ""),
 		serverStats: s("server-stats"), gatewayStats: s("gateway-stats"), spread: s("spread"), lbMode: s("lb"), spreadBand: fs.Int("spread-band", 0, ""), downPercent: fs.Int("down-percent", 0, ""),
 		failThreshold: fs.Int("fail-threshold", 0, ""), maxAttempts: fs.Int("max-attempts", 0, ""), latencyAlpha: fs.Float64("latency-alpha", 0, ""),
@@ -132,7 +132,7 @@ func (f *cliFlags) run(sock string) bool {
 	case *f.canvas:
 		showCanvas(sock)
 	case *f.canvasAdd != "" || *f.canvasDel != "" || *f.canvasSet != "" || *f.canvasPause != "" || *f.canvasResume != "" || *f.canvasMove != "":
-		e := canvasEdit{Action: "add", Kind: *f.canvasAdd, Group: *f.group, VIP: *f.vip, VIP6: *f.vip6, Interface: *f.ifname, Label: *f.label, Anycast: *f.anycast, Address: *f.address, Scope: *f.scope,
+		e := canvasEdit{Action: "add", Kind: *f.canvasAdd, Group: *f.group, VIP: *f.vip, VIP6: *f.vip6, Interface: *f.ifname, Label: *f.label, Anycast: *f.anycast, Address: *f.address, Scope: *f.scope, Node: *f.node,
 			Server: *f.server, Name: *f.name, Type: *f.qtype, ECS: *f.ecs, ECSv4: *f.ecsV4, ECSv6: *f.ecsV6,
 			LB: *f.lbMode, Spread: *f.spread, SpreadBand: *f.spreadBand, DownPercent: *f.downPercent, FailThreshold: *f.failThreshold, MaxAttempts: *f.maxAttempts, LatencyAlpha: *f.latencyAlpha, Pos: *f.pos}
 		if *f.canvasMove != "" {

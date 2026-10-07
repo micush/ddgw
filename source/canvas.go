@@ -77,8 +77,11 @@ type CanvasGateway struct {
 	// NodePaused says the pause comes from the whole node being paused, not from this gateway.
 	NodePaused bool `json:"node_paused,omitempty"`
 	// PausedScope says where this gateway is paused by its own setting: "all" (every node) or "node" (this one).
-	PausedScope string  `json:"paused_scope,omitempty"`
-	Uptime      *UpInfo `json:"uptime,omitempty"`
+	PausedScope string `json:"paused_scope,omitempty"`
+	// Excluded says this node has been removed from the gateway (shared setting); ExcludedNodes lists the node IDs removed.
+	Excluded      bool     `json:"excluded,omitempty"`
+	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
+	Uptime        *UpInfo  `json:"uptime,omitempty"`
 	// Nodes are the cluster's nodes and how each stands for this gateway (empty without a cluster); this node first.
 	Nodes []CanvasNode `json:"nodes,omitempty"`
 }
@@ -128,7 +131,7 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 	for i := range dc.Groups {
 		g := &dc.Groups[i]
 		cg := CanvasGateway{Name: g.Name, GroupID: g.GroupID, Interface: g.Interface, VIP4: g.VIP4, VIP6: g.VIP6,
-			Servers: []CanvasServer{}, Fallback: []string{}, Families: []CanvasFamily{}, Members: membersOf(rows, g.GroupID), Paused: g.Paused, NodePaused: dc.NodePaused}
+			Servers: []CanvasServer{}, Fallback: []string{}, Families: []CanvasFamily{}, Members: membersOf(rows, g.GroupID), Paused: g.Paused, NodePaused: dc.NodePaused, ExcludedNodes: append([]string(nil), g.ExcludedNodes...)}
 
 		stats := map[string]ServerStat{}
 		var cfg DNSConfig
@@ -279,6 +282,13 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 			}
 			for i := range cg.Families {
 				cg.Families[i].Status, cg.Families[i].Detail = "paused", "paused on this node"
+			}
+			if g.ExcludedHere { // removed from the gateway, which says more than the pause it is carried out as
+				cg.Excluded, cg.PausedScope = true, ""
+				cg.Detail = "This node was removed from the gateway — it does not serve it; the other nodes carry on"
+				for i := range cg.Families {
+					cg.Families[i].Detail = "this node was removed from the gateway"
+				}
 			}
 		}
 		cg.ECS = cfg.ECS
@@ -449,6 +459,11 @@ type canvasEdit struct {
 	Name          string  `json:"name"`
 	Type          string  `json:"type"`
 	Pos           int     `json:"pos"` // --canvas-move: the new place in the list, 1 = first
+	// Node names a cluster node for --canvas-add|del node: its address, host name or node ID.  CanvasEdit turns it into
+	// nodeID and lists the cluster's node IDs in members, so the last member cannot be removed.
+	Node    string `json:"node"`
+	nodeID  string
+	members string // the cluster's node IDs, comma separated (a slice would make canvasEdit incomparable)
 }
 
 // moveTo returns list with the item at index from moved to index to (both 0-based, to clamped).
@@ -781,6 +796,48 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 			dc.Groups = kept
 			return fmt.Sprintf("deleted gateway %d with all its DNS servers and domains", e.Group), nil
 		}
+	case "node":
+		g, err := findGroup(dc, e.Group)
+		if err != nil {
+			return "", err
+		}
+		if e.nodeID == "" {
+			return "", errors.New("--node is required: the node's address, host name or node ID (see --cluster)")
+		}
+		who := orDefault(e.Node, e.nodeID)
+		out := containsStr(g.ExcludedNodes, e.nodeID)
+		switch e.Action {
+		case "del": // removed from the gateway
+			if out {
+				return fmt.Sprintf("node %s is already removed from gateway %d", who, e.Group), nil
+			}
+			if e.members != "" {
+				left := 0
+				for _, id := range strings.Split(e.members, ",") {
+					if id != e.nodeID && !containsStr(g.ExcludedNodes, id) {
+						left++
+					}
+				}
+				if left == 0 {
+					return "", fmt.Errorf("that would leave no node serving gateway %d — pause it on all nodes instead (--canvas-pause gateway --group %d --scope all)", e.Group, e.Group)
+				}
+			}
+			g.ExcludedNodes = append(g.ExcludedNodes, e.nodeID)
+			return fmt.Sprintf("node %s removed from gateway %d — it stops serving it and the other nodes carry on", who, e.Group), nil
+		case "add": // back in the gateway
+			if !out {
+				return fmt.Sprintf("node %s is already serving gateway %d", who, e.Group), nil
+			}
+			kept := g.ExcludedNodes[:0:0]
+			for _, id := range g.ExcludedNodes {
+				if id != e.nodeID {
+					kept = append(kept, id)
+				}
+			}
+			g.ExcludedNodes = kept
+			return fmt.Sprintf("node %s added back to gateway %d — it serves it again once its DNS servers answer", who, e.Group), nil
+		}
+		return "", fmt.Errorf("a node can be added to or removed from a gateway: --canvas-add|--canvas-del node --group N --node NODE")
 	case "server":
 		g, err := findGroup(dc, e.Group)
 		if err != nil {
@@ -1121,6 +1178,11 @@ func (m *Mgmt) CanvasEdit(e canvasEdit, actor string) (string, error) {
 	}
 	if e.Action == "add" && e.Kind == "server" && e.Name == "" {
 		return "", errors.New("a DNS server needs at least one domain to test it with: add --name example.com")
+	}
+	if e.Kind == "node" {
+		if err := m.resolveNode(dc, &e); err != nil {
+			return "", err
+		}
 	}
 	msg, err := applyCanvasEdit(dc, e)
 	if err != nil {

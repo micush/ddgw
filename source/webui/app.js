@@ -539,9 +539,11 @@
       // what is staged wins over the last live view, so the pause / resume shows at once
       const nodePaused = !!(v && v.node_paused);
       const gwPaused = !!(g.paused || g.paused_all);
-      if (gwPaused || nodePaused) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
+      const me = ((v && v.nodes) || []).find((n) => n.self);
+      const removed = !!(me && me.node_id && (g.excluded_nodes || []).includes(me.node_id));   // this node was removed from the gateway
+      if (gwPaused || nodePaused || removed) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : removed && !g.paused && !nodePaused ? "This node was removed from the gateway — it does not serve it; the other nodes carry on" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
       else if (circle === "paused") { circle = "idle"; why = "Resuming…"; }
-      return { circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused ? v.uptime : null };
+      return { circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
     }
     // Where a server / domain is paused: "all" (shared, every node), "node" (this node's own settings) or "".
     const srvPausedScope = (g, addr) => (((g.dns || cv.cfg.dns || {}).paused_servers || []).includes(addr) ? "all" : (cv.cfg.paused_servers_here || []).includes(addr) ? "node" : "");
@@ -1198,10 +1200,28 @@
       if (!want) { go(); return; }
       confirmDialog("Pause " + (n.self ? "this node" : n.name) + "?", "All of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.", "Pause node", go, "btn primary");
     }
+    // Add a node to / remove it from the gateway shown (a shared setting, kept in the gateway's own settings): a removed node serves
+    // nothing of it, whichever node you look from.  The last node serving it cannot be removed (pause the gateway instead).
+    function nodeMember(n, add) {
+      const g = curGroup();
+      if (!g) return;
+      if (add) { quick(() => toggleIn(g, "excluded_nodes", n.node_id, false)); return; }
+      const left = (statusOf(g).nodes || []).filter((x) => x.node_id && x.node_id !== n.node_id && !(g.excluded_nodes || []).includes(x.node_id)).length;
+      if (!left) { errorBox(msgEl, "That would leave no node serving gateway " + gwLabel(g) + ". Pause it on all nodes instead."); return; }
+      confirmDialog("Remove " + (n.self ? "this node" : n.name) + " from gateway " + gwLabel(g) + "?",
+        "It stops serving the gateway — it gives up the address and stops answering DNS — and the other nodes carry on. Other gateways are not affected. Add it back from the same menu.",
+        "Remove node", () => quick(() => toggleIn(g, "excluded_nodes", n.node_id, true)), "btn primary");
+    }
+    const memberItem = (n) => {
+      const g = curGroup();
+      if (!g || !n.node_id) return [];
+      const out = (g.excluded_nodes || []).includes(n.node_id);
+      return [[out ? "Add to this gateway" : "Remove from this gateway…", () => nodeMember(n, out)]];
+    };
     const nodeMenu = (n) => (e) => openMenu(e, n.self
-      ? [["Host statistics…", () => selectTab("host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)]]
-      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)]]
-      : [["Cluster page…", () => selectTab("cluster")]]);
+      ? [["Host statistics…", () => selectTab("host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ...memberItem(n)]
+      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ...memberItem(n)]
+      : [["Cluster page…", () => selectTab("cluster")], ...memberItem(n)]);
     // right-click on a shape: select it, then show what can be done with it
     const rightClick = (kind, addr, di) => (e) => {
       cv.sel = { kind, addr, di }; refresh();
@@ -1828,7 +1848,7 @@
       collect = () => ({
         ...general.get(),
         // keep what this form has no fields for (a gateway's own DNS pool, per-server domains)
-        groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
+        groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.excluded_nodes ? { excluded_nodes: g.orig.excluded_nodes } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
         dns: { ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get() },
         // the certificate is managed under Web GUI; keep any file paths already in the config
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },
@@ -2945,7 +2965,7 @@
   })();
 
   // ── Capture, Monitor  (CLI: --capture, --capture-interfaces) ────────────────────
-  // One node: a tcpdump-like capture on the node picked in the Node menu, shown live and downloadable as a .pcap.
+  // One node: a tcpdump-like capture on the node picked in the Node menu, shown live and downloadable as a .tgz (one .pcap in it).
   // Cluster: the same capture on every node at once for a chosen time, one .pcap per node in a .tgz.
   VIEWS.capture = (() => {
     let status, iface, filter, info, box, startBtn, stopBtn, dlBtn, ifs = null, cursor = 0, shown = 0, last = null, running = false;
@@ -3067,7 +3087,7 @@
         }
         startBtn = h("button", { class: "btn primary", type: "button", onclick: start }, "Start");
         stopBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: stop }, "Stop");
-        dlBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/capture/pcap", "ddgw-capture.pcap").catch(fail(status)) }, "Download .pcap");
+        dlBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/capture/download", "ddgw-capture.tgz").catch(fail(status)) }, "Download .tgz");
         info = h("div", { class: "hint nomargin" });
         box = h("div", { class: "logbox capbox", tabindex: "0", role: "log", "aria-label": "Captured packets" });
         main.append(status, section("Packet capture",
