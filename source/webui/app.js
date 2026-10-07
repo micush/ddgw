@@ -213,9 +213,10 @@
   // The gateways listed under Topology: bare address, a status dot, nothing else.
   async function refreshTopoNav() {
     try {
-      const r = await api("GET", "/api/canvas");
+      // always the node you signed in to, and the gateway's state for the cluster as a whole (from its nodes), so the dot does not change with the Node menu
+      const r = await api("GET", "/api/canvas?own=1", undefined, true);
       state.topo.list = (r.data || []).map((g) => ({ id: g.group_id, label: g.name || bareIP(g.vip4) || bareIP(g.vip6) || "gateway " + g.group_id,
-        status: g.status, title: "Group " + g.group_id + (g.name ? " · " + (bareIP(g.vip4) || bareIP(g.vip6)) : "") + " — " + g.detail }));
+        status: g.cluster_status || g.status, title: "Group " + g.group_id + (g.name ? " · " + (bareIP(g.vip4) || bareIP(g.vip6)) : "") + " — " + (g.cluster_status ? g.cluster_detail : g.detail) }));
     } catch (_) { return; }
     if (!state.topo.list.some((g) => g.id === state.topo.gid)) state.topo.gid = state.topo.list.length ? state.topo.list[0].id : null;
     renderTopoNav();
@@ -412,8 +413,7 @@
     state.target = addr || null;
     document.body.classList.toggle("remote", !!state.target && state.target !== CLUSTER);   // another node's page is marked; the cluster's is no node
     renderTopbar();
-    state.topo = { list: [], gid: null, action: null };
-    renderTopoNav();
+    state.topo.action = null;   // the gateway picked stays picked: the sidebar list is the signed-in node's, whichever node is driven
     refreshTopoNav();
     certBanner();
     if (document.getElementById("main")) selectTab(state.tab);
@@ -537,13 +537,15 @@
       const members = v ? v.members || [] : [];
       let circle = v ? v.status : "idle", why = v ? v.detail : "Starting — not running yet";
       // what is staged wins over the last live view, so the pause / resume shows at once
-      const nodePaused = !!(v && v.node_paused);
-      const gwPaused = !!(g.paused || g.paused_all);
+      const via = !!(v && v.via);   // this node does not serve the gateway: the picture is that of a node that does, so nothing local colours it
+      const nodePaused = !via && !!(v && v.node_paused);
+      const gwPaused = !via && !!(g.paused || g.paused_all);
       const me = ((v && v.nodes) || []).find((n) => n.self);
-      const removed = !!(me && me.node_id && (g.excluded_nodes || []).includes(me.node_id));   // this node was removed from the gateway
+      const removed = !via && !!(me && me.node_id && (g.excluded_nodes || []).includes(me.node_id));   // this node was removed from the gateway
       if (gwPaused || nodePaused || removed) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : removed && !g.paused && !nodePaused ? "This node was removed from the gateway — it does not serve it; the other nodes carry on" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
-      else if (circle === "paused") { circle = "idle"; why = "Resuming…"; }
-      return { circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
+      else if (!via && circle === "paused") { circle = "idle"; why = "Resuming…"; }
+      if (via) why = "As " + v.via + " sees it (it serves the gateway; this node does not): " + why;
+      return { via: (v && v.via) || "", circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
     }
     // Where a server / domain is paused: "all" (shared, every node), "node" (this node's own settings) or "".
     const srvPausedScope = (g, addr) => (((g.dns || cv.cfg.dns || {}).paused_servers || []).includes(addr) ? "all" : (cv.cfg.paused_servers_here || []).includes(addr) ? "node" : "");
@@ -551,10 +553,10 @@
     const qKey = (addr, q) => addr + "|" + String(q.name).replace(/\.$/, "").toLowerCase() + "|" + String(q.type).toUpperCase();
     const qPausedScope = (g, addr, q) => ((((g.dns || cv.cfg.dns || {}).paused_queries || []).includes(qKey(addr, q))) ? "all" : (cv.cfg.paused_queries_here || []).includes(qKey(addr, q)) ? "node" : "");
     const scopeWord = (sc) => (sc === "all" ? "all nodes" : "this node");
-    function serverState(g, addr, st) {
-      const sc = srvPausedScope(g, addr);
+    function serverState(g, addr, st, via) {
+      const sc = via ? "" : srvPausedScope(g, addr);   // seen from a serving node: what it says, not this node's own pauses
       if (sc) return { c: "paused", why: "Paused on " + scopeWord(sc) + " — not queried or probed until resumed" };
-      if (st && st.status === "paused") return { c: "idle", why: "Resuming…" };
+      if (st && st.status === "paused") return via ? { c: "paused", why: st.detail } : { c: "idle", why: "Resuming…" };
       return st ? { c: st.status, why: st.detail } : { c: "idle", why: "Not probed yet" };
     }
     // Pause / resume: saved at once like every other change.
@@ -608,7 +610,8 @@
       const anys = g.extra_vips || [], AH = 40, AG = 8;      // anycast pills sit to the right of the circle, the cluster's nodes to the left
       const AW = Math.max(170, Math.ceil(Math.max(0, ...anys.map((a) => a.length)) * 7.3 + 28));  // wide enough for the longest address in full (monospace 12px)
       const waiting = cv.nodeWait || {};
-      const nodes = (st.nodes || []).map((n) => {   // a pause or resume just asked for, not yet reported back
+      // a node removed from the gateway is not drawn (right-click the gateway ▸ Add node brings it back); the saved list decides, so it goes at once
+      const nodes = (st.nodes || []).filter((n) => !(g.excluded_nodes || []).includes(n.node_id)).map((n) => {   // a pause or resume just asked for, not yet reported back
         const w = waiting[n.addr];
         if (!w) return n;
         if (!!n.node_paused === w.want || Date.now() > w.until) { delete waiting[n.addr]; return n; }
@@ -739,11 +742,11 @@
         const noSrv = !(g.dns && (g.dns.servers || []).length);
         // A pill is never more alarming than its gateway: green while announced,
         // otherwise it takes the gateway's own colour only when that is amber, red or paused.
-        const pzAll = (g.paused_vips || []).includes(addr), pzHere = (g.paused_vips_here || []).includes(addr), pz = pzAll || pzHere;
+        const pzAll = (g.paused_vips || []).includes(addr), pzHere = !st.via && (g.paused_vips_here || []).includes(addr), pz = pzAll || pzHere;
         const c = pz ? "paused" : noSrv || !a ? "idle" : a.up ? (a.status === "warn" || a.status === "bad" ? a.status : "ok") : ["warn", "bad", "paused"].includes(st.circle) ? st.circle : "idle";
         const why = pz ? "Paused on " + (pzAll ? "all nodes" : "this node") + ": not announced until resumed" : noSrv ? "Add a DNS server to this gateway: the address is only announced while a server answers"
-          : g.paused || g.paused_all ? "Gateway paused on " + (g.paused_all ? "all nodes" : "this node") + ": not announced"
-          : !a ? "Applying…" : a.up ? "Announced from this node (on lo)" + (a.detail ? " — " + a.detail : "") : "Withdrawn on this node" + (a.reason ? ": " + a.reason : "");
+          : !st.via && (g.paused || g.paused_all) ? "Gateway paused on " + (g.paused_all ? "all nodes" : "this node") + ": not announced"
+          : !a ? "Applying…" : a.up ? "Announced from " + (st.via || "this node") + " (on lo)" + (a.detail ? " — " + a.detail : "") : "Withdrawn on " + (st.via || "this node") + (a.reason ? ": " + a.reason : "");
         lines.push(sv("line", { x1: cx + R, y1: CY, x2: x, y2: y + AH / 2, class: "edge" }));
         shapes.push(sv("g", { class: "shape drag st-" + c + (sel("any", addr) ? " sel" : ""), tabindex: "0", role: "button", "aria-label": "Anycast address " + addr, onclick: pick("any", addr), oncontextmenu: rightClick("any", addr),
           onpointerdown: dragStart({ axis: "xy", n: anys.length, index: i, pos: { x, y }, slot: (k) => ({ x: cx + anyAt(k).x, y: anyAt(k).y }),
@@ -767,7 +770,7 @@
       });
       servers.forEach((addr, i) => {
         const x = rowX + i * COLW + (COLW - SW) / 2, mx = x + SW / 2;
-        const ss = serverState(g, addr, st.servers[addr]);
+        const ss = serverState(g, addr, st.servers[addr], st.via);
         const info = st.servers[addr];
         lines.push(sv("line", { x1: cx, y1: CY + R, x2: mx, y2: SY, class: "edge" + (info && info.in_band ? " spread" : "") }));
         shapes.push(sv("g", { class: "shape drag st-" + ss.c + (sel("srv", addr) ? " sel" : ""), "data-col": addr, tabindex: "0", role: "button", "aria-label": "DNS server " + srvTitle(g, addr), onclick: pick("srv", addr), oncontextmenu: rightClick("srv", addr),
@@ -784,9 +787,9 @@
         qs.forEach((q, di) => {
           const y = DY0 + di * DGE;
           const t = info && (info.tests || []).find((z) => z.name === q.name && z.type === q.type);
-          const qsc = qPausedScope(g, addr, q);
+          const qsc = st.via ? "" : qPausedScope(g, addr, q);
           const sp = ss.c === "paused" || !!qsc;
-          const c = sp ? "paused" : t && t.status !== "paused" ? t.status : "idle";
+          const c = sp ? "paused" : t && t.status !== "paused" ? t.status : st.via && t ? "paused" : "idle";
           const why = ss.c === "paused" ? "Server paused" : qsc ? "Paused on " + scopeWord(qsc) + " — not asked until resumed" : t && t.status !== "paused" ? t.detail : "Not tested yet";
           lines.push(sv("line", { x1: mx, y1: di ? y - DGE + DH : SY + SH, x2: mx, y2: y, class: "edge", "data-col": addr }));
           shapes.push(sv("g", { class: "shape drag st-" + c + (sel("dom", addr, di) ? " sel" : ""), "data-col": addr, tabindex: "0", role: "button", "aria-label": "Domain " + q.name, onclick: pick("dom", addr, di), oncontextmenu: rightClick("dom", addr, di),
@@ -1145,7 +1148,7 @@
       else items.push(["Pause " + noun, null, "", subs(true)]);
       return items;
     };
-    const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)],
+    const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)], ...addNodeItems(g),
       ...pauseItems("gateway", (sc) => !!g[sc === "all" ? "paused_all" : "paused"], (sc, p) => pauseGateway(g, sc, p)), ["Delete gateway", delSel, "danger"]];
     const srvItems = (g, addr) => [["Statistics…", () => serverStats(g, addr)], ["Edit server…", () => serverForm(g, addr)], ["Add domain…", () => domainForm(g, addr, null)],
       ...pauseItems("server", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p)), ["Delete server", delSel, "danger"]];
@@ -1200,23 +1203,30 @@
       if (!want) { go(); return; }
       confirmDialog("Pause " + (n.self ? "this node" : n.name) + "?", "All of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.", "Pause node", go, "btn primary");
     }
-    // Add a node to / remove it from the gateway shown (a shared setting, kept in the gateway's own settings): a removed node serves
-    // nothing of it, whichever node you look from.  The last node serving it cannot be removed (pause the gateway instead).
-    function nodeMember(n, add) {
+    // Remove a node from the gateway shown (a shared setting, kept in the gateway's own settings): it serves nothing of it, whichever
+    // node you look from, and is no longer drawn.  The gateway's right-click ▸ Add node brings it back.  The last node serving it
+    // cannot be removed (pause the gateway instead).
+    function nodeMember(n) {
       const g = curGroup();
       if (!g) return;
-      if (add) { quick(() => toggleIn(g, "excluded_nodes", n.node_id, false)); return; }
       const left = (statusOf(g).nodes || []).filter((x) => x.node_id && x.node_id !== n.node_id && !(g.excluded_nodes || []).includes(x.node_id)).length;
       if (!left) { errorBox(msgEl, "That would leave no node serving gateway " + gwLabel(g) + ". Pause it on all nodes instead."); return; }
       confirmDialog("Remove " + (n.self ? "this node" : n.name) + " from gateway " + gwLabel(g) + "?",
         "It stops serving the gateway — it gives up the address and stops answering DNS — and the other nodes carry on. Other gateways are not affected. Add it back from the same menu.",
         "Remove node", () => quick(() => toggleIn(g, "excluded_nodes", n.node_id, true)), "btn primary");
     }
-    const memberItem = (n) => {
-      const g = curGroup();
-      if (!g || !n.node_id) return [];
-      const out = (g.excluded_nodes || []).includes(n.node_id);
-      return [[out ? "Add to this gateway" : "Remove from this gateway…", () => nodeMember(n, out)]];
+    const memberItem = (n) => (curGroup() && n.node_id ? [["Remove from this gateway…", () => nodeMember(n)]] : []);
+    // the nodes removed from a gateway, by name (an entry for a node that has left the cluster can still be cleared)
+    const removedNodes = (g) => {
+      const nodes = statusOf(g).nodes || [];
+      return (g.excluded_nodes || []).map((id) => {
+        const n = nodes.find((x) => x.node_id === id);
+        return { id, label: n ? n.name + (n.self ? " (this node)" : "") : "A node that left the cluster (" + id.slice(0, 8) + ")" };
+      });
+    };
+    const addNodeItems = (g) => {
+      const l = removedNodes(g);
+      return l.length ? [["Add node", null, "", l.map((r) => [r.label, () => quick(() => toggleIn(g, "excluded_nodes", r.id, false))])]] : [];
     };
     const nodeMenu = (n) => (e) => openMenu(e, n.self
       ? [["Host statistics…", () => selectTab("host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ...memberItem(n)]

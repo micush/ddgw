@@ -79,6 +79,13 @@ type CanvasGateway struct {
 	// PausedScope says where this gateway is paused by its own setting: "all" (every node) or "node" (this one).
 	PausedScope string `json:"paused_scope,omitempty"`
 	// Excluded says this node has been removed from the gateway (shared setting); ExcludedNodes lists the node IDs removed.
+	// ClusterStatus / ClusterDetail are the gateway's state for the whole cluster, from its nodes (the sidebar's dot): the same
+	// whichever node is asked.  Absent without a cluster, where Status is it.
+	ClusterStatus string `json:"cluster_status,omitempty"`
+	ClusterDetail string `json:"cluster_detail,omitempty"`
+	// Via names the node whose picture of the gateway this is, when this node does not serve it itself (see viaServing).
+	Via           string   `json:"via,omitempty"`
+	ViaAddr       string   `json:"via_addr,omitempty"`
 	Excluded      bool     `json:"excluded,omitempty"`
 	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
 	Uptime        *UpInfo  `json:"uptime,omitempty"`

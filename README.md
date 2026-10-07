@@ -183,7 +183,7 @@ with no servers yet answers SERVFAIL and shows amber.
 ## Topology
 
 The first page of the GUI is a drawing of your configuration. Each **gateway is an
-item under Topology** in the sidebar (with *＋ New gateway…* at the end): a **circle** (the shared gateway address, its VIP), a **square** under
+item under Topology** in the sidebar (with *＋ New gateway…* at the end; its dot is the gateway for the **cluster as a whole**, built from its nodes and the same whichever node the Node menu has selected: green while any node serves it, amber while it is only served degraded, dashed grey when every node has it paused, red when no node serves it; a node on another subnet that does not run it does not count against it). **The drawing is the gateway, not the selected node:** when the node picked in the Node menu does not serve the gateway (another subnet, removed from it, paused there) it has no servers probed of its own, so the circle, servers, domains and anycast addresses are those of a node that does serve it, asked over the cluster channel; the circle's tooltip says which ("As NODE sees it"), and the node shapes still say what each node, this one included, is doing. If no node serves it, or the one asked does not answer in a few seconds, it is the selected node's own view. `ddgw --canvas` is always the node's own view): a **circle** (the shared gateway address, its VIP), a **square** under
 it for every DNS server it forwards to, and a **trapezoid** under each square for
 every domain that server has to answer.
 
@@ -198,16 +198,17 @@ every domain that server has to answer.
   green *serving*, amber *not serving* (up, but not serving the gateway yet), amber *degraded* (serving, but its own view of the gateway is degraded, e.g. some of its DNS servers are down), dashed *paused* (the node is paused on the Power page, or
   the gateway is paused or absent there), red dashed *not answering*. A node whose **CPU, memory or fullest disk is over 85%** (the Monitor ▸ Host numbers: the last 10-second CPU sample, memory in use, the fullest of the tracked filesystems) is **solid yellow** (degraded) — whatever else it is doing, even paused — and names what is over ("CPU 91% · disk 88%"; the tooltip names the mount) until every one is back at 85% or below. The log records it too: a warning when a node goes over (naming CPU, memory and/or disk) and an info line when it is back at or under, for this node and every reachable member, checked each sync interval; a reading that only moves while still over is not logged again. Hover one for its address, role, last-seen time, version, whether it has caught up
   with the primary's settings and any update under way. Right-click any reachable node ▸ *Pause node…* / *Resume node* (another node is paused through the cluster, like the Node page does
-  with the Node menu; its shape reads "pausing…" until it reports back), *Remove from this gateway…* / *Add to this gateway* (see **Which nodes serve a gateway** below), *Host statistics…*, and for another node *Open this node* (the Node menu, top right); an unreachable one ▸ *Cluster page…*. They are read-only here: add or remove nodes on the Cluster page.
+  with the Node menu; its shape reads "pausing…" until it reports back), *Remove from this gateway…* (see **Which nodes serve a gateway** below), *Host statistics…*, and for another node *Open this node* (the Node menu, top right); an unreachable one ▸ *Cluster page…*. They are read-only here: add or remove nodes on the Cluster page.
   `ddgw --canvas` lists them as `/_/ cluster node` lines.
 
-* **Which nodes serve a gateway** (right-click a node ▸ *Remove from this gateway…* / *Add to this gateway*; CLI
+* **Which nodes serve a gateway** (right-click a node ▸ *Remove from this gateway…*, right-click the gateway ▸ *Add node* ▸ the node; CLI
   `--canvas-del node --group N --node NODE` / `--canvas-add node --group N --node NODE`, NODE being the node's address or
   host name): every node serves every gateway unless it is removed from it. The removal is **shared** (`excluded_nodes` in the
   gateway's block, a list of node IDs, absent while empty so older versions still read the file): any node can change it,
   every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives
-  up the address and stops answering and probing for that gateway only, and its shape reads *removed* (dashed grey) on every
-  node's drawing, while the gateway's circle on that node says it was removed. A node that joins the cluster later serves
+  up the address and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any
+  node (`ddgw --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node*
+  on the gateway lists the removed nodes by name. A node that joins the cluster later serves
   every gateway until it is removed from it. The last node serving a gateway cannot be removed (pause the gateway on all
   nodes instead). This is not the same as *Pause ▸ This node*, which is kept on that node alone for maintenance.
 
@@ -483,7 +484,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | CLI | Web GUI |
 | --- | --- |
 | `--canvas`, `--canvas-add`, `--canvas-del` | Topology page (draw gateways, servers, domains; live colours) |
-| `--canvas-add node` / `--canvas-del node` `--group N` `--node NODE` | Topology page: right-click a node ▸ **Add to this gateway** / **Remove from this gateway…** |
+| `--canvas-add node` / `--canvas-del node` `--group N` `--node NODE` | Topology page: right-click the gateway ▸ **Add node** / right-click a node ▸ **Remove from this gateway…** |
 | `--server-stats ADDR` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click a server ▸ **Statistics…** (latency and loss graphs) |
 | `--canvas-move server\|domain\|anycast` `--group N` `--server ADDR` `[--name DOMAIN \| --address ADDR]` `--to N` | Topology page: drag a server left/right, a domain or an anycast address up/down |
 | `--dns-lookup IP\|NAME` | Add DNS server form: the Name is filled in from the address (reverse DNS), or the address from a name |

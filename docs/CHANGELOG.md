@@ -1,5 +1,60 @@
 # Changelog
 
+## [v222] - 2026-10-06 — The gateway you picked stays picked when you change nodes
+
+### Fixed
+- **Switching the Node menu made the Topology page jump to the first gateway.** Changing nodes reset the sidebar's topology state, so the gateway you had selected (ptxsitedns, say) was forgotten and the first one (phxsitedns) was shown. The sidebar list is the signed-in node's, whichever node you drive, so the selection and list are now kept; only a pending action is cleared and the list is refreshed. Change: `webui/app.js` (`setTarget`).
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `app.js` and `help.js`.
+- Live, two clustered daemons with real PAM login, two gateways, headless Chromium: picked the second gateway, switched the Node menu to B and back to A; the selection stayed on the second gateway each time.
+
+### Not verified
+- Light theme; `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the pristine tree) and fails intermittently in the cgo-off run.
+
+## [v221] - 2026-10-06 — The Topology drawing shows the nodes that serve the gateway, not the selected node
+
+### Fixed
+- **A node that does not serve a gateway drew it grey and empty.** With the Node menu on a node that does not run the gateway (another subnet, removed from it, paused there), the circle was dashed grey and the servers and domains showed nothing, though other nodes were serving the gateway and probing its servers. Now the circle, servers, domains, anycast addresses, serving-node count and uptime are those of a node that serves it: this node asks one (the nodes that serve it well first, then those serving it degraded, in address order) for its picture over the cluster channel and draws that. The circle's tooltip says which node ("As NODE sees it (it serves the gateway; this node does not): …"). The node shapes still say what each node, this one included, is doing. Nothing local colours that picture: this node's own pauses, removal and node pause are not applied to it. If no node serves the gateway, or the one asked does not answer within 4 s, you get the selected node's own view as before.
+- How: `/api/canvas` fills in such a gateway from `GET /api/canvas?own=1` on the serving node (`canvasvia.go`; `own=1` is a node's own view and is what the sidebar and the node-to-node ask use, so they never chain); the data carries `via` / `via_addr`. `ddgw --canvas` (the status socket) is unchanged: a node's own view. Change: `canvasvia.go`, `canvas.go`, `web.go`, `webui/app.js`; help and README.
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers; `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...`; `node --check` on `app.js` and `help.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so the fail-closed PAM stub).
+- New tests (`canvasvia_test.go`): which nodes are asked (only when this node is not serving, serving before degraded, never an unreachable, removed, paused or not-serving one) and that taking a serving node's picture leaves this node's own entry and the node list alone.
+- Live, two real clustered daemons with real PAM login and a stub DNS server: with the gateway served on A, `/api/canvas` on B (its own view `warn`) returned A's picture (`ok`, A's server and latency, `via` A) and `?own=1` on B its own; with B removed from the gateway (its own view: paused, the server idle), the Topology page signed in to B, headless Chromium, showed the circle, server (0.3 ms · #1) and domain green with the "As … sees it" tooltip, and B's node entry unchanged.
+
+### Not verified
+- The case in the report itself (second-site nodes on another subnet): the sandbox has one host, so "does not serve" was a removed node and a node that could not bind the shared DNS port.
+- The light theme, the jsdom smoke test, a serving node that is on an older version, and the failure path (the serving node not answering) beyond the unit tests of which nodes are asked.
+
+## [v220] - 2026-10-06 — The sidebar's gateway dot is the cluster's, not the selected node's
+
+### Fixed
+- **The dot beside each gateway under Topology followed the node picked in the Node menu.** It was that node's own colour for the gateway, so with a node selected that does not run the gateway (another subnet, say), or one that was still warming up, a gateway that the cluster is serving fine showed grey, dashed or amber, and it changed as you changed the Node menu. It is now the gateway for the cluster as a whole, built from its nodes' own states and the same whichever node is asked: **green** while any node serves it, **amber** while it is only served degraded, **dashed grey** when every node has it paused, **grey** while the nodes are all still starting, **red** when no node serves it. A node removed from the gateway does not count; a node that is up but does not run it (another subnet) does not count against it while another serves it. The tooltip says how many ("Served by 1 of 2 nodes"). With no cluster it is the gateway's own colour, as before. The circle in the drawing is unchanged: it is still how the selected node sees the gateway.
+- How: each node's entry for the gateway now carries its own state apart from the host-load colour (`gw`: ok, degraded, bad, starting, notserving, paused, down, removed), worked out the same way for this node and the others from the same numbers every node reports; `clusterGateway` adds them up into `cluster_status` / `cluster_detail` in the Topology data (`/api/canvas`, `ddgw --canvas` is unchanged). The sidebar always asks the node you signed in to, so the Node menu cannot change it. Change: `clusternodes.go`, `canvas.go`, `webui/app.js`; help and README.
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers; `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...` (the first run hit `bind: address already in use` on a random test port in `updates_test.go`; it passed on the rerun); `node --check` on `help.js` and `app.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so the fail-closed PAM stub).
+- New tests (`clusterstatus_test.go`): the roll-up over 13 mixes of node states (including nodes on another subnet, degraded, paused, starting, removed, and an old node that reports nothing); what each reported state means; and two real clustered nodes, one serving and one not, where the cluster reads "Served by 1 of 2 nodes" whichever node is asked while the gateway's own colour differs.
+- Live, two real clustered daemons with real PAM login and a stub DNS server on 127.0.0.2: the gateway on `lo` served on A and not on B (the DNS port is shared). `/api/canvas` from A says own status `ok`, from B `warn`; both say `cluster_status` `ok`, "Served by 1 of 2 nodes". In headless Chromium, with the Node menu on A and then on B (whose own circle is amber), the sidebar dot stayed `st-ok` with the same tooltip.
+- `TestClusterGatewayStatsAddUpNodes` fails when run twice in one process (`-count=2`), also on the unmodified v215 tree; not related, not investigated.
+
+### Not verified
+- The red and dashed-grey cases live (only in the unit tests), the light theme, the jsdom smoke test, and a node that is not running a version with this change (an older node reports the same numbers, so it should roll up the same).
+
+## [v219] - 2026-10-06 — A removed node is no longer drawn; Add node is on the gateway
+
+### Changed
+- **A node removed from a gateway is not drawn on that gateway** (on any node's Topology page), instead of showing a dashed grey "removed" shape. The page goes by the saved list, so the shape goes at once.
+- **Adding a node back is on the gateway:** right-click the gateway ▸ **Add node** ▸ the node, by name (a node that has left the cluster appears as "A node that left the cluster (id)", so its entry can still be cleared). The item is there only while a node is removed. The node's own menu now offers only **Remove from this gateway…**; "Add to this gateway" is gone. Removing, the last-node refusal, the CLI (`--canvas-del|--canvas-add node`) and the sharing are as in v218; `ddgw --canvas` still lists a removed node, as *removed*. Help and README updated. Change: `webui/app.js`, `webui/help.js`.
+
+### Verified
+- `gofmt -l .` clean; `go build`; `go vet ./...`; `go test -race -count=1 ./...` natively with the PAM headers; `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test ./...`; `node --check` on `app.js` and `help.js`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64 (cgo off, so the fail-closed PAM stub). All passed this time, including `TestClusterLegacyRequestsAreLimitedBeforeTheSignature`, which is intermittent.
+- Live, two real clustered daemons with real PAM login, headless Chromium (dark): with one node removed only the other is drawn; right-click the gateway shows **Add node** with the removed node's name in its submenu; clicking it draws the node again; removing the other from its menu takes its shape away at once and it stays away after a refresh, and **Add node** is offered again.
+
+### Not verified
+- Light theme for this change (the menu is the existing one), the jsdom smoke test, a mixed-version cluster during an update and traffic leaving a removed node on a real wire (as in v218).
+
 ## [v218] - 2026-10-06 — Choose which nodes serve which gateway
 
 ### Added

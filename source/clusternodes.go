@@ -9,7 +9,10 @@ import (
 // CanvasNode is one cluster node as the Topology drawing shows it (a parallelogram beside the gateway's circle), seen
 // from the gateway it is drawn for: whether that node is serving it.
 type CanvasNode struct {
-	NodeID    string      `json:"node_id,omitempty"`
+	NodeID string `json:"node_id,omitempty"`
+	// Gw is this node's state for the gateway on its own, apart from the host-load colour: ok, degraded, bad, starting,
+	// notserving, paused, down (not answering) or removed.  clusterGateway adds them up.
+	Gw        string      `json:"gw,omitempty"`
 	Excluded  bool        `json:"excluded,omitempty"` // removed from this gateway (shared setting)
 	Addr      string      `json:"addr"`
 	Name      string      `json:"name"` // host name, else the address (the address when two nodes share a host name)
@@ -90,8 +93,9 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 		case p.Self:
 			n.Status, n.Detail, n.Paused = selfStatus, selfDetail, selfPaused
 			n.Label = circleLabel[selfStatus]
+			n.Gw = c.selfGw(gid, selfStatus, selfPaused)
 			if n.Excluded {
-				n.Status, n.Label = "paused", "removed"
+				n.Status, n.Label, n.Gw = "paused", "removed", "removed"
 			}
 			if selfStatus == "idle" && strings.HasPrefix(selfDetail, "not running here") {
 				// held back because this node has no address in the gateway's subnet (markOffnet): the other nodes see
@@ -104,6 +108,7 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 				n.Detail = "Serving this gateway"
 			}
 		case !p.Reachable && !n.Excluded:
+			n.Gw = "down"
 			n.Status, n.Label = "bad", "not answering"
 			n.Detail = "Not answering"
 			if !p.LastSeen.IsZero() {
@@ -113,6 +118,7 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 				n.Detail += ": " + p.Error
 			}
 		case n.Excluded:
+			n.Gw = "removed"
 			n.Status, n.Label, n.Detail = "paused", "removed", "Removed from this gateway: it does not serve it; the other nodes carry on"
 			if !p.Reachable {
 				n.Detail += " (and is not answering)"
@@ -128,6 +134,12 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 				}
 			}
 			n.Paused = pi.Msg.NodePaused
+			n.Gw = "ok"
+			if pi.Msg.GwKnown {
+				n.Gw = gwStateOf(gs, pi.Msg.NodePaused)
+			} else if pi.Msg.NodePaused {
+				n.Gw = "paused"
+			}
 			switch {
 			case pi.Msg.NodePaused:
 				n.Status, n.Label, n.Detail = "paused", "paused", "This node is paused (Operate ▸ Node): it is not serving; the others carry on"
@@ -187,6 +199,9 @@ func (s *StatusServer) markNodes(groups []CanvasGateway) {
 	}
 	for i := range groups {
 		groups[i].Nodes = s.mg.cl.canvasNodesEx(groups[i].GroupID, groups[i].Status, groups[i].Detail, groups[i].NodePaused, groups[i].ExcludedNodes)
+		if len(groups[i].Nodes) > 0 {
+			groups[i].ClusterStatus, groups[i].ClusterDetail = clusterGateway(groups[i].Nodes)
+		}
 	}
 }
 
@@ -195,4 +210,87 @@ func hostLoadPtr() *HostLoad {
 		return &l
 	}
 	return nil
+}
+
+// gwStateOf is one node's state for a gateway from what it reports (nil: the gateway is paused or not set up there).
+func gwStateOf(gs *GwState, nodePaused bool) string {
+	switch {
+	case nodePaused || gs == nil:
+		return "paused"
+	case !gs.Serving:
+		if strings.HasPrefix(gs.HealthWhy, "starting") {
+			return "starting"
+		}
+		return "notserving"
+	case gs.Health == "warn":
+		return "degraded"
+	case gs.Health == "bad":
+		return "bad"
+	}
+	return "ok"
+}
+
+// selfGw is this node's own state for the gateway, worked out the same way as the other nodes' (from the same numbers it
+// reports to them); without them (before the daemon wires them up) from the gateway's colour here.
+func (c *Cluster) selfGw(gid int, selfStatus string, selfPaused bool) string {
+	if c.mg != nil && c.mg.gwFn != nil {
+		var gs *GwState
+		for _, g := range c.mg.localGateways() {
+			if g.GroupID == gid {
+				g := g
+				gs = &g
+			}
+		}
+		return gwStateOf(gs, selfPaused)
+	}
+	switch selfStatus {
+	case "ok":
+		return "ok"
+	case "warn":
+		return "degraded"
+	case "bad":
+		return "bad"
+	case "paused":
+		return "paused"
+	}
+	return "starting"
+}
+
+// clusterGateway is the gateway's state for the cluster as a whole, from its nodes' own states and no node's point of view:
+// green while any node serves it, amber while it is only served degraded, grey dashed when every node has it paused, grey
+// while the nodes are still starting, red when no node is serving it.  Nodes removed from the gateway do not count.
+func clusterGateway(nodes []CanvasNode) (status, detail string) {
+	cnt := map[string]int{}
+	total := 0
+	for _, n := range nodes {
+		if n.Gw == "removed" || n.Excluded {
+			continue
+		}
+		total++
+		g := n.Gw
+		if g == "" {
+			g = "ok"
+		}
+		cnt[g]++
+	}
+	of := func(k int) string {
+		return fmt.Sprintf("%d of %d node%s", k, total, map[bool]string{true: "", false: "s"}[total == 1])
+	}
+	switch {
+	case total == 0:
+		return "idle", "No node is set to serve this gateway"
+	case cnt["ok"] > 0:
+		detail = "Served by " + of(cnt["ok"])
+		if cnt["degraded"] > 0 {
+			detail += fmt.Sprintf(", degraded on %d more", cnt["degraded"])
+		}
+		return "ok", detail
+	case cnt["degraded"] > 0:
+		return "warn", "Served, but degraded, by " + of(cnt["degraded"])
+	case cnt["paused"] == total:
+		return "paused", "Paused on every node"
+	case cnt["starting"] > 0 && cnt["bad"] == 0:
+		return "idle", "Starting — the nodes are waiting for their DNS servers to answer"
+	}
+	return "bad", "No node is serving this gateway"
 }

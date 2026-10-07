@@ -281,7 +281,11 @@ func (w *WebServer) Handler() http.Handler {
 	mux.HandleFunc("GET /api/neighbors", w.authed(w.handleNeighbors))
 	mux.HandleFunc("GET /api/dns", w.authed(w.handleDNS))
 	mux.HandleFunc("GET /api/canvas", w.authed(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		writeJSON(rw, http.StatusOK, w.status.canvasView())
+		groups := w.status.canvasGroups()
+		if r.URL.Query().Get("own") == "" { // ?own=1: this node's own view, as asked by another node or by the sidebar
+			w.status.viaServing(r.Context(), groups)
+		}
+		writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "data": groups})
 	}))
 	mux.HandleFunc("POST /api/assert-agc", w.authed(w.handleAssertAGC))
 	mux.HandleFunc("GET /api/config", w.authed(w.handleGetConfig))
