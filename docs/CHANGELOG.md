@@ -1,5 +1,20 @@
 # Changelog
 
+## [v231] - 2026-10-07 — The same anycast address on several gateways
+
+### Changed
+- **An anycast address may now be on more than one gateway** (the normal anycast setup: both sites announce one address). Before, the GUI said "Gateway … already uses that address" and the config validation refused it. Still refused: an anycast address equal to a gateway's shared address, and the same address twice on one gateway.
+- The gateways carrying an address share **one listener and one `lo` entry** on each node. The address is on `lo` (so the routing daemon announces it) while **any** of them has a DNS server answering, and it is answered from the first (lowest group number) that can. It is withdrawn only when none can: all unhealthy, paused (this node or all nodes) or stopped. Pausing the address on one gateway only takes that gateway's claim away.
+- A gateway that cannot answer while another keeps the address up shows it: the pill stays announced and its tooltip says "kept up by <gateway>, because this gateway's DNS cannot answer here (…)" (`carried` in the API).
+- Per-gateway query statistics for a shared address are recorded under the gateway that opened the listener.
+
+### Verified
+- New `TestAnycastSharedByTwoGateways` (both healthy; one down keeps it up and names the carrier; both unavailable withdraws; one stopping keeps it, the last stopping removes it); the validation test now expects the same address on two gateways to be accepted and a shared-address clash refused. `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` (connection reset; also flaky on v228); `gofmt`, `go vet`, `node --check`, cgo-off vet, five cross-compiles.
+
+### Not verified
+- Real BGP announcement from both gateways on the same node (the sandbox has no routing daemon); the lo and listener handling is tested with the replaceable add/delete hooks and a real loopback listener.
+- The GUI form and tooltip in a browser.
+
 ## [v230] - 2026-10-07 — One blurb for the virtual-MAC warning
 
 ### Changed

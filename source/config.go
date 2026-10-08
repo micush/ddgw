@@ -896,21 +896,38 @@ func (dc *DaemonConfig) Validate() error {
 		}
 		ids[g.GroupID] = true
 	}
-	// two gateways cannot own the same shared address
+	// two gateways cannot own the same shared address, and an anycast address is not a gateway's shared address; the same
+	// anycast address on several gateways is how an anycast service is run (it is held while any of them can answer)
 	vips := map[string]int{}
+	norm := func(v string) string {
+		if p, err := netip.ParsePrefix(v); err == nil {
+			return p.Addr().String()
+		}
+		return v
+	}
 	for _, g := range dc.Groups {
-		for _, v := range append([]string{g.VIP4, g.VIP6}, g.ExtraVIPs...) {
+		for _, v := range []string{g.VIP4, g.VIP6} {
 			if v == "" {
 				continue
 			}
-			a := v
-			if p, err := netip.ParsePrefix(v); err == nil {
-				a = p.Addr().String()
-			}
+			a := norm(v)
 			if other, dup := vips[a]; dup {
 				return fmt.Errorf("groups %d and %d both use the shared address %s", other, g.GroupID, a)
 			}
 			vips[a] = g.GroupID
+		}
+	}
+	for _, g := range dc.Groups {
+		seen := map[string]bool{}
+		for _, v := range g.ExtraVIPs {
+			a := norm(v)
+			if other, dup := vips[a]; dup {
+				return fmt.Errorf("group %d: anycast address %s is the shared address of group %d", g.GroupID, a, other)
+			}
+			if seen[a] {
+				return fmt.Errorf("group %d lists the anycast address %s twice", g.GroupID, a)
+			}
+			seen[a] = true
 		}
 	}
 	// this node's own pauses must still name a server / probe domain that exists somewhere

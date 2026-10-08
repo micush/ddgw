@@ -301,7 +301,7 @@ every domain that server has to answer.
   name (resolved each time it is probed).
 * In a cluster the whole drawing (address, servers, domains) is shared and edited
   anywhere; the network interface stays per node.
-* Two gateways cannot use the same address.
+* Two gateways cannot use the same shared address. An anycast address may be on several gateways (see Anycast addresses): it is held while any of them can answer.
 * **IPv4 and IPv6**: a gateway may have both addresses (one engine per family).
   The circle then shows both, with a small green/yellow/red chip for each
   family, and the gateway's own colour is the worst of the two (an IPv6 engine

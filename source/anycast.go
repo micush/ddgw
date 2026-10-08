@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/netip"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -66,6 +67,81 @@ type AnycastState struct {
 	Detail string  `json:"detail,omitempty"` // what Status means
 	BGP    string  `json:"bgp,omitempty"`    // why Status is not ok: disabled | none | down | partial (for the drawing's label)
 	Uptime *UpInfo `json:"uptime,omitempty"` // filled in for the topology view
+	// Carried lists the other gateways (group numbers) that keep the address up while this one cannot answer on it.
+	Carried []int `json:"carried,omitempty"`
+}
+
+// anycastClaim is one gateway's say about an anycast address: its pool, and whether it can answer on it now.
+type anycastClaim struct {
+	pool func() *Pool
+	want bool
+}
+
+// The same anycast address may be carried by several gateways (every site of an anycast service announces the same
+// address).  They share one listener and one lo entry per address: the address is on lo while ANY gateway carrying it can
+// answer, and the listener answers from the pool of the first (lowest group number) gateway that can.
+var anycastReg = struct {
+	sync.Mutex
+	claims map[string]map[int]*anycastClaim
+	fes    map[string]*DNSFrontend
+	onLo   map[string]bool
+}{claims: map[string]map[int]*anycastClaim{}, fes: map[string]*DNSFrontend{}, onLo: map[string]bool{}}
+
+// resetAnycast forgets everything (tests).
+func resetAnycast() {
+	anycastReg.Lock()
+	defer anycastReg.Unlock()
+	for _, fe := range anycastReg.fes {
+		fe.Stop()
+	}
+	anycastReg.claims, anycastReg.fes, anycastReg.onLo = map[string]map[int]*anycastClaim{}, map[string]*DNSFrontend{}, map[string]bool{}
+}
+
+// anycastPool is the pool that answers on addr: the first gateway that can answer, else the first one carrying it.
+func anycastPool(addr string) *Pool {
+	anycastReg.Lock()
+	cl := anycastReg.claims[addr]
+	ids := make([]int, 0, len(cl))
+	for id := range cl {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	var pick func() *Pool
+	for _, id := range ids {
+		if pick == nil {
+			pick = cl[id].pool
+		}
+		if cl[id].want {
+			pick = cl[id].pool
+			break
+		}
+	}
+	anycastReg.Unlock()
+	if pick == nil {
+		return nil
+	}
+	return pick()
+}
+
+// carriers lists the other gateways that can answer on addr (registry locked).
+func carriersLocked(addr string, self int) []int {
+	var out []int
+	for id, c := range anycastReg.claims[addr] {
+		if id != self && c.want {
+			out = append(out, id)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+func anyWantLocked(addr string) bool {
+	for _, c := range anycastReg.claims[addr] {
+		if c.want {
+			return true
+		}
+	}
+	return false
 }
 
 type anycastSet struct {
@@ -79,8 +155,6 @@ type anycastSet struct {
 	paused func() map[string]string
 
 	mu     sync.Mutex
-	fes    map[string]*DNSFrontend
-	up     map[string]bool
 	reason map[string]string
 
 	cancel context.CancelFunc
@@ -88,8 +162,7 @@ type anycastSet struct {
 }
 
 func newAnycastSet(gid int, addrs []string, pool func() *Pool, port func() int) *anycastSet {
-	return &anycastSet{gid: gid, addrs: append([]string(nil), addrs...), pool: pool, port: port,
-		fes: map[string]*DNSFrontend{}, up: map[string]bool{}, reason: map[string]string{}}
+	return &anycastSet{gid: gid, addrs: append([]string(nil), addrs...), pool: pool, port: port, reason: map[string]string{}}
 }
 
 func (a *anycastSet) start(parent context.Context) {
@@ -112,7 +185,8 @@ func (a *anycastSet) start(parent context.Context) {
 	}()
 }
 
-// stop ends the renewals, removes every address and closes the listeners.
+// stop ends the renewals and gives up this gateway's claim on every address; an address no other gateway can answer on
+// is taken off lo and its listener closed.
 func (a *anycastSet) stop() {
 	if a.cancel == nil {
 		return
@@ -121,16 +195,22 @@ func (a *anycastSet) stop() {
 	<-a.done
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	anycastReg.Lock()
+	defer anycastReg.Unlock()
 	for _, addr := range a.addrs {
-		if a.up[addr] {
+		delete(anycastReg.claims[addr], a.gid)
+		if len(anycastReg.claims[addr]) == 0 {
+			delete(anycastReg.claims, addr)
+			if fe := anycastReg.fes[addr]; fe != nil {
+				fe.Stop()
+				delete(anycastReg.fes, addr)
+			}
+		}
+		if anycastReg.onLo[addr] && !anyWantLocked(addr) {
 			anycastDelFn(addr)
 			infof("anycast: %s withdrawn (group %d stopped)", addr, a.gid)
+			anycastReg.onLo[addr] = false
 		}
-		a.up[addr] = false
-	}
-	for addr, fe := range a.fes {
-		fe.Stop()
-		delete(a.fes, addr)
 	}
 }
 
@@ -140,8 +220,8 @@ func (a *anycastSet) healthy() bool {
 	return p != nil && len(p.Ranked()) > 0
 }
 
-// step brings every address in line with what this node can answer: listener
-// up, pool healthy.  It renews the lifetime of the addresses that stay.
+// step brings every address in line with what the gateways carrying it can answer: listener up, a pool healthy.  It
+// renews the lifetime of the addresses that stay.
 func (a *anycastSet) step() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -159,6 +239,8 @@ func (a *anycastSet) step() {
 	if a.paused != nil {
 		paused = a.paused()
 	}
+	anycastReg.Lock()
+	defer anycastReg.Unlock()
 	for _, addr := range a.addrs {
 		why := ""
 		if !healthy {
@@ -170,16 +252,24 @@ func (a *anycastSet) step() {
 		case "all":
 			why = pausedAllWhy
 		}
-		fe := a.fes[addr]
+		if anycastReg.claims[addr] == nil {
+			anycastReg.claims[addr] = map[int]*anycastClaim{}
+		}
+		cl := anycastReg.claims[addr]
+		if cl[a.gid] == nil {
+			cl[a.gid] = &anycastClaim{pool: a.pool}
+		}
+		cl[a.gid].pool = a.pool
+		fe := anycastReg.fes[addr]
 		if fe != nil && (fe.port != port || fe.dotPort != dot || fe.dohPort != doh) { // a port changed
 			fe.Stop()
-			delete(a.fes, addr)
+			delete(anycastReg.fes, addr)
 			fe = nil
 		}
 		if fe == nil {
 			ip, err := netip.ParseAddr(addr)
 			if err == nil {
-				f := NewDNSFrontend(ip, port, a.pool)
+				f := NewDNSFrontend(ip, port, func() *Pool { return anycastPool(addr) })
 				f.gw = srvhist.series(gwKey(a.gid))
 				f.dotPort = dot
 				f.dohPort = doh
@@ -189,28 +279,29 @@ func (a *anycastSet) step() {
 						errorf("anycast: cannot listen on %s: %v", f.listenAddr(), err)
 					}
 				} else {
-					a.fes[addr] = f
+					anycastReg.fes[addr] = f
 				}
 			}
 		}
-		if a.fes[addr] == nil && why == "" {
+		if anycastReg.fes[addr] == nil && why == "" {
 			why = "not listening"
 		}
 		a.reason[addr] = why
+		cl[a.gid].want = why == ""
 		switch {
-		case why == "" && anycastAddFn(addr):
-			if !a.up[addr] {
+		case anyWantLocked(addr) && anycastAddFn(addr):
+			if !anycastReg.onLo[addr] {
 				infof("anycast: %s announced (group %d)", addr, a.gid)
 			}
-			a.up[addr] = true
-		case why == "":
+			anycastReg.onLo[addr] = true
+		case anyWantLocked(addr):
 			if a.reason[addr] != "could not add it to lo" {
 				warnf("anycast: could not add %s to lo", addr)
 			}
 			a.reason[addr] = "could not add it to lo"
-			a.up[addr] = false
+			anycastReg.onLo[addr] = false
 		default:
-			if a.up[addr] {
+			if anycastReg.onLo[addr] {
 				anycastDelFn(addr)
 				if paused[addr] != "" {
 					infof("anycast: %s withdrawn (group %d: %s)", addr, a.gid, why)
@@ -218,7 +309,7 @@ func (a *anycastSet) step() {
 					warnf("anycast: %s withdrawn (group %d: %s)", addr, a.gid, why)
 				}
 			}
-			a.up[addr] = false
+			anycastReg.onLo[addr] = false
 		}
 	}
 }
@@ -226,9 +317,15 @@ func (a *anycastSet) step() {
 func (a *anycastSet) state() []AnycastState {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	anycastReg.Lock()
+	defer anycastReg.Unlock()
 	out := make([]AnycastState, 0, len(a.addrs))
 	for _, addr := range a.addrs {
-		out = append(out, AnycastState{Addr: addr, Up: a.up[addr], Reason: a.reason[addr]})
+		st := AnycastState{Addr: addr, Up: anycastReg.onLo[addr], Reason: a.reason[addr]}
+		if st.Up && st.Reason != "" { // on lo because another gateway carrying it can answer
+			st.Carried = carriersLocked(addr, a.gid)
+		}
+		out = append(out, st)
 	}
 	return out
 }

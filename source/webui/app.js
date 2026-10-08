@@ -766,7 +766,7 @@
         const c = pz ? "paused" : noSrv || !a ? "idle" : a.up ? (a.status === "warn" || a.status === "bad" ? a.status : "ok") : ["warn", "bad", "paused"].includes(st.circle) ? st.circle : "idle";
         const why = pz ? "Paused on " + (pzAll ? "all nodes" : "this node") + ": not announced until resumed" : noSrv ? "Add a DNS server to this gateway: the address is only announced while a server answers"
           : !st.via && (g.paused || g.paused_all) ? "Gateway paused on " + (g.paused_all ? "all nodes" : "this node") + ": not announced"
-          : !a ? "Applying…" : a.up ? "Announced from " + (st.via || "this node") + " (on lo)" + (a.detail ? " — " + a.detail : "") : "Withdrawn on " + (st.via || "this node") + (a.reason ? ": " + a.reason : "");
+          : !a ? "Applying…" : a.up ? "Announced from " + (st.via || "this node") + " (on lo)" + (a.carried && a.carried.length ? " — kept up by " + a.carried.map((n) => { const x = groups().find((z) => z.group_id === n); return x ? gwLabel(x) : "group " + n; }).join(", ") + (a.reason ? ", because this gateway's DNS cannot answer here (" + a.reason + ")" : "") : "") + (a.detail ? " — " + a.detail : "") : "Withdrawn on " + (st.via || "this node") + (a.reason ? ": " + a.reason : "");
         lines.push(sv("line", { x1: cx + R, y1: CY, x2: x, y2: y + AH / 2, class: "edge" }));
         shapes.push(sv("g", { class: "shape drag st-" + c + (sel("any", addr) ? " sel" : ""), tabindex: "0", role: "button", "aria-label": "Anycast address " + addr, onclick: pick("any", addr), oncontextmenu: rightClick("any", addr),
           onpointerdown: dragStart({ axis: "xy", n: anys.length, index: i, pos: { x, y }, slot: (k) => ({ x: cx + anyAt(k).x, y: anyAt(k).y }),
@@ -1428,13 +1428,14 @@
     function anycastForm(g, edit) {
       form(edit ? "Edit anycast address" : "Add anycast address", [
         { k: "addr", l: "Anycast address", v: edit || "", ph: "203.0.113.53 or 2001:db8:53::1",
-          hint: "Any subnet. Held on every node while a DNS server answers." },
+          hint: "Any subnet. Held on every node while a DNS server answers. Other gateways may carry it too." },
       ], (v) => {
         const a = (v.addr || "").trim().replace(/\/(32|128)$/, "").toLowerCase();
         if (!a) return "Enter an IPv4 or IPv6 address.";
         if (!/^[0-9a-f:.]+$/.test(a) || !(a.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(a))) return "That has to be a plain IPv4 or IPv6 address, without a subnet.";
         if (/^(127\.|0\.|22\d\.|23\d\.)/.test(a) || /^(::1?|fe80:|ff)/.test(a)) return "Loopback, link-local and multicast addresses cannot be used.";
-        const own = groups().find((x) => x.extra_vips && x.extra_vips.includes(a) && !(x === g && a === edit));
+        // the same anycast address on several gateways is how an anycast service is run; only this gateway's own list and every gateway's shared address are refused
+        const own = (g.extra_vips || []).includes(a) && !(a === edit) ? g : null;
         const shared = groups().find((x) => [x.vip4, x.vip6].some((z) => z && z.split("/")[0].toLowerCase() === a));
         if (own || shared) return "Gateway " + gwLabel(own || shared) + " already uses that address.";
         g.extra_vips = g.extra_vips || [];

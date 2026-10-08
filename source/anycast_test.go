@@ -36,12 +36,12 @@ func TestAnycastConfigRules(t *testing.T) {
 	if got := dc.Groups[0].ExtraVIPs; got[0] != "203.0.113.53" || got[1] != "2001:db8:53::1" {
 		t.Fatalf("not normalised: %v", got)
 	}
-	// the same address on two gateways, or equal to a shared address, is refused
+	// the same anycast address on two gateways is how an anycast service is run; equal to a shared address, or listed twice, is refused
 	g2 := defaultGroup()
 	g2.GroupID, g2.VIP4, g2.ExtraVIPs = 2, "10.9.0.1/24", []string{"203.0.113.53"}
 	dc.Groups = append(dc.Groups, g2)
-	if err := dc.Validate(); err == nil {
-		t.Fatal("same anycast address on two gateways accepted")
+	if err := dc.Validate(); err != nil {
+		t.Fatalf("the same anycast address on two gateways must be allowed: %v", err)
 	}
 	g2.ExtraVIPs = []string{"10.0.0.1"} // = group 1's vip4
 	dc.Groups[1] = g2
@@ -107,6 +107,8 @@ type fakeLo struct {
 }
 
 func hookLo(t *testing.T) *fakeLo {
+	resetAnycast()
+	t.Cleanup(resetAnycast)
 	f := &fakeLo{on: map[string]bool{}}
 	oa, od := anycastAddFn, anycastDelFn
 	anycastAddFn = func(a string) bool {
@@ -417,5 +419,64 @@ func TestAnycastPauseConfig(t *testing.T) {
 	plain.Groups[0].PausedVIPs = []string{}
 	if sharedOf(plain).hash() != h0 {
 		t.Fatal("an empty paused list changes the cluster hash")
+	}
+}
+
+// The same anycast address on two gateways: one listener, on lo while ANY of them can answer, answered from the first
+// gateway that can.
+func TestAnycastSharedByTwoGateways(t *testing.T) {
+	lo := hookLo(t)
+	f1, f2 := newFakeDNS(t), newFakeDNS(t)
+	p1, p2 := NewPool(testDNSCfg(f1.addr)), NewPool(testDNSCfg(f2.addr))
+	p1.ProbeNow(context.Background())
+	p2.ProbeNow(context.Background())
+	port := freeUDPPort(t)
+	const addr = "127.0.0.9"
+	a := newAnycastSet(1, []string{addr}, func() *Pool { return p1 }, func() int { return port })
+	b := newAnycastSet(2, []string{addr}, func() *Pool { return p2 }, func() int { return port })
+	a.step()
+	b.step()
+	if !lo.has(addr) || !a.state()[0].Up || !b.state()[0].Up || a.state()[0].Carried != nil {
+		t.Fatalf("both healthy: %+v %+v", a.state(), b.state())
+	}
+	if anycastPool(addr) != p1 {
+		t.Fatal("the lowest healthy gateway answers")
+	}
+	// gateway 1 loses its DNS: the address stays, gateway 2 answers, and gateway 1 says who keeps it up
+	f1.mode.Store(2)
+	p1.ProbeNow(context.Background())
+	a.step()
+	b.step()
+	if !lo.has(addr) || !a.state()[0].Up || len(a.state()[0].Carried) != 1 || a.state()[0].Carried[0] != 2 || a.state()[0].Reason == "" {
+		t.Fatalf("one gateway down, the other up: %+v", a.state())
+	}
+	if anycastPool(addr) != p2 {
+		t.Fatal("the healthy gateway must answer")
+	}
+	// gateway 2 pauses the address too: now nobody can answer and it is withdrawn
+	b.paused = func() map[string]string { return map[string]string{addr: "node"} }
+	b.step()
+	a.step()
+	if lo.has(addr) || a.state()[0].Up || b.state()[0].Up {
+		t.Fatalf("nobody can answer but it is announced: %+v %+v", a.state(), b.state())
+	}
+	// back
+	b.paused = nil
+	b.step()
+	if !lo.has(addr) {
+		t.Fatal("not announced again")
+	}
+	// the gateway that carries it stops: the address goes with the last one
+	a.cancel, a.done = func() {}, make(chan struct{})
+	close(a.done)
+	a.stop()
+	if !lo.has(addr) {
+		t.Fatal("gateway 1 stopping must not withdraw what gateway 2 still serves")
+	}
+	b.cancel, b.done = func() {}, make(chan struct{})
+	close(b.done)
+	b.stop()
+	if lo.has(addr) {
+		t.Fatal("the last gateway stopped but the address is still announced")
 	}
 }
