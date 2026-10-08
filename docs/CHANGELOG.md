@@ -1,5 +1,16 @@
 # Changelog
 
+## [v238] - 2026-10-07 — Topology: the spare height is shared evenly between the rows
+
+### Changed
+- **The Topology drawing spaces its rows evenly.** In a window taller than the drawing, the spare height used to go 40 % between the circle and the servers, 10 % under the servers and 50 % between the domains, so with two domains per server they ended up far apart (about 220 px) while the other gaps stayed small. The gaps (circle to servers, servers to the first domain, domain to domain) now grow together, smallest first, and come out equal; a gap that is already larger than the rest (a tall column of nodes or anycast pills beside the circle) keeps its size. With no spare height the layout is exactly what it was.
+
+### Verified
+- Live, native amd64 build with PAM, headless Chromium (dark): four servers with two domains each. In a 1000 px window the three gaps measured 165, 166 and 165 px, in a 560 px window 80, 79 and 78 px. `gofmt -l .`, `go build`, `go vet ./...`, `node --check webui/app.js`, cgo-off vet, five cross-compiles. `go test -race -count=1 ./...` passes except `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` ("connection reset by peer"), which fails the same way on the unchanged v237 tree in this sandbox. The test user, group and PAM file were removed afterwards.
+
+### Not verified
+- Windows narrower than the drawing (it is scaled down, the gaps follow), and drawings with a node/pill column taller than the servers' row were not re-measured.
+
 ## [v237] - 2026-10-07 — New default: a server is down only when every test fails
 
 ### Changed

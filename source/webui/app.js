@@ -661,11 +661,21 @@
         const nodeAt = (k) => ({ x: -(R + SIDE_GAP + NW + Math.floor(k / PER) * (NW + CG)), y: nodeTop + (k % PER) * (AH + AG) });
         const rightX = anys.length ? R + SIDE_GAP + aCols * AW + (aCols - 1) * CG : 0, leftX = nodes.length ? R + SIDE_GAP + nCols * NW + (nCols - 1) * CG : 0;
         const sideBottom = Math.max(anys.length ? anyTop + anyH : 0, nodes.length ? nodeTop + nodeH : 0);
-        // extra is spare height to use: two fifths (or four fifths, with one row of domains) go between the circle and the
-        // servers, a tenth (a fifth) between the servers and their first domain, the rest between the domains
-        const dm = Math.max(maxDoms - 1, 0), eDom = dm ? extra * 0.5 / dm : 0, eTop = extra * (dm ? 0.4 : 0.8), eMid = extra - eTop - eDom * dm;
+        // extra is spare height to use.  It goes into the gaps (circle to servers, servers to their first domain, domain to
+        // domain) so that they come out as even as the drawing allows: the smallest gaps grow first, a gap that is already
+        // larger than the rest keeps its size.
+        const dm = Math.max(maxDoms - 1, 0), SY0 = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0);
+        const floors = [SY0 - (CY + R), 34, ...Array(dm).fill(DG - DH)];
+        let gaps = floors;
+        if (extra > 0) {
+          const order = floors.map((f, i) => i).sort((x, y) => floors[y] - floors[x]);   // largest first
+          let left = floors.reduce((a, b) => a + b, 0) + extra, k = floors.length;
+          for (const i of order) { if (floors[i] > left / k) { left -= floors[i]; k--; } else break; }
+          gaps = floors.map((f) => Math.max(f, left / k));
+        }
+        const eTop = gaps[0] - floors[0], eMid = gaps[1] - floors[1], eDom = dm ? gaps[2] - floors[2] : 0;
         const DGE = DG + eDom;   // distance from one domain to the next
-        const SY = Math.max(CY + R + 80, sideBottom ? sideBottom + 84 : 0) + eTop, DY0 = SY + SH + 34 + eMid;   // servers' top, first domain's top
+        const SY = SY0 + eTop, DY0 = SY + SH + 34 + eMid;   // servers' top, first domain's top
         const W = Math.max(Math.max(servers.length, 1) * COLW + 20, 2 * R + 140, 2 * Math.max(rightX, leftX) + 20), H = DY0 + (Math.max(maxDoms, 1) - 1) * DGE + DG + 6;
         const cx = W / 2, rowX = (W - Math.max(servers.length, 1) * COLW) / 2;   // the row of servers is centred under the circle
         // does a line from the circle to a server pass through a node or a pill?
