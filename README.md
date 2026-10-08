@@ -928,7 +928,7 @@ a node holds back its update until every gateway it is serving is also being ser
 by another reachable member (so a node that is still recovering from its own update
 keeps the next one waiting; the Upgrade page says why). `--update-apply` on one node
 refuses in the same situation unless you add `--yes` (the GUI asks). A node that is
-not clustered, is the only member, or serves nothing, is never held back (a lone node restarts briefly: nothing could cover for it). A new binary that does not stay up is
+not clustered, is the only member, or serves nothing, is never held back (a lone node restarts briefly: nothing could cover for it). The same goes for a gateway that no other member can serve because they are all on another subnet (sites that each have their own gateway): waiting for them would be for ever, so that gateway no longer holds the update back. A new binary that does not stay up is
 rolled back automatically (three boot attempts; it is confirmed after 60 s), and the
 failure is shown in the Upgrade tab. The queue and auto-update setting are
 cluster-wide and live on the primary. Run it under a supervisor that restarts

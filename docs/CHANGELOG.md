@@ -1,5 +1,18 @@
 # Changelog
 
+## [v232] - 2026-10-07 — Updates no longer wait for a member that can never cover the gateway
+
+### Fixed
+- **A two-node cluster with one gateway per site never updated.** The rule that keeps every gateway served during an update waited for another member to cover each gateway the node serves. When every other member is on another subnet (the gateway's address does not exist there, so it waits "off-net" and can never serve it), the cover never comes: the node said "gateway 1 would have no other cluster member serving it" for ever and stayed "behind" (v228 fixed only the node with no peers at all). Members now report which gateways they cannot take part in (`offnet` in the gateway report); a gateway whose every other member is reachable and off-net no longer holds the update back. A member that is paused, recovering, down or unreachable still counts as a possible cover, so the wait stays where it protects clients.
+- Tests: four new `TestSafeToTakeDown` cases (the only other member is off-net; one off-net and one recovering still waits; off-net for one gateway but not another still waits; an unreachable member still waits).
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, the safety, update, subnet and off-net tests; `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature`; cgo-off vet; five cross-compiles.
+
+### Not verified
+- On the real two-site cluster. The fix assumes the other node is held off-net for gateway 1 (it is on the other site's subnet); if instead it is paused, excluded from the gateway or still recovering, the hold-back stays by design.
+- Mixed versions: a node still on v231 does not report `offnet`, so until both nodes run v232 the older one keeps being treated as a possible cover. The first update to v232 therefore needs "Update this node now" (or `--update-apply --yes`) on each node once.
+
 ## [v231] - 2026-10-07 — The same anycast address on several gateways
 
 ### Changed

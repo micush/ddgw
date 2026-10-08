@@ -1554,9 +1554,9 @@ func (c *Cluster) shouldWaitForOthers(target string, intent UpdateIntent) bool {
 
 // selfGateways and gatewaysOf express one member's gateway report as a peerGateways.
 func selfGateways(addr string, known bool, gs []GwState) peerGateways {
-	pg := peerGateways{Addr: addr, Known: known, Serving: map[int]bool{}, Fresh: map[int]bool{}}
+	pg := peerGateways{Addr: addr, Known: known, Serving: map[int]bool{}, Fresh: map[int]bool{}, Offnet: map[int]bool{}}
 	for _, g := range gs {
-		pg.Serving[g.GroupID], pg.Fresh[g.GroupID] = g.Serving, g.Fresh
+		pg.Serving[g.GroupID], pg.Fresh[g.GroupID], pg.Offnet[g.GroupID] = g.Serving, g.Fresh, g.Offnet
 	}
 	return pg
 }
@@ -1667,6 +1667,9 @@ type GwState struct {
 	// have not all moved back yet, so it does not count as cover for a neighbour's
 	// restart.  Absent (older nodes) means settled.
 	Fresh bool `json:"fresh,omitempty"`
+	// Offnet: this node cannot take part in the gateway at all (it is not on the gateway's subnet), so it can never cover it
+	// for another node.  Absent on older nodes.
+	Offnet bool `json:"offnet,omitempty"`
 	// Health is the gateway's colour on that node as its own drawing shows it (ok, warn, bad, idle) and
 	// HealthWhy the reason ("running, but some DNS servers are down").  Absent on older nodes.
 	Health    string `json:"health,omitempty"`
@@ -1749,6 +1752,8 @@ type peerGateways struct {
 	Known   bool
 	Serving map[int]bool
 	Fresh   map[int]bool // serving, but not yet for servingSettle
+	Offnet  map[int]bool // cannot take part in the gateway (another subnet): never a cover for it
+	Down    bool         // not reachable now: it may come back, so it is still a possible cover
 }
 
 // safeToTakeDown reports whether this node may go down now: for every gateway
@@ -1759,8 +1764,15 @@ func safeToTakeDown(mine []GwState, peers []peerGateways) (bool, string) {
 		if !g.Serving {
 			continue // already not serving: nothing more to lose
 		}
-		others, fresh := 0, 0
+		others, fresh, capable := 0, 0, 0
 		for _, p := range peers {
+			if p.Down {
+				capable++ // not reachable now, and may be the one that could cover it
+				continue
+			}
+			if !p.Known || !p.Offnet[g.GroupID] {
+				capable++
+			}
 			if !p.Known || (p.Serving[g.GroupID] && !p.Fresh[g.GroupID]) { // an older node cannot say; assume it is fine
 				others++
 			} else if p.Serving[g.GroupID] {
@@ -1769,6 +1781,9 @@ func safeToTakeDown(mine []GwState, peers []peerGateways) (bool, string) {
 		}
 		if others == 0 && fresh > 0 {
 			return false, fmt.Sprintf("gateway %d is only just being served again by the other member — waiting a few seconds for clients to move back", g.GroupID)
+		}
+		if others == 0 && capable == 0 && len(peers) > 0 {
+			continue // every other member is on another subnet and can never serve it: waiting would be for ever
 		}
 		if others == 0 {
 			return false, fmt.Sprintf("gateway %d would have no other cluster member serving it (this is the only member, or the others are paused, down or still recovering) — resume a node that has already updated, or force it with --update-apply --yes", g.GroupID)
@@ -1804,12 +1819,14 @@ func (c *Cluster) peerGateways() []peerGateways {
 	for _, p := range snap.Peers {
 		pi := c.info[p.Addr]
 		if pi == nil || !pi.Reachable {
+			out = append(out, peerGateways{Addr: p.Addr, Down: true})
 			continue
 		}
-		pg := peerGateways{Addr: p.Addr, Known: pi.Msg.GwKnown, Serving: map[int]bool{}, Fresh: map[int]bool{}}
+		pg := peerGateways{Addr: p.Addr, Known: pi.Msg.GwKnown, Serving: map[int]bool{}, Fresh: map[int]bool{}, Offnet: map[int]bool{}}
 		for _, g := range pi.Msg.Gateways {
 			pg.Serving[g.GroupID] = g.Serving
 			pg.Fresh[g.GroupID] = g.Fresh
+			pg.Offnet[g.GroupID] = g.Offnet
 		}
 		out = append(out, pg)
 	}

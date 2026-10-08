@@ -430,7 +430,9 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 		groups := buildCanvas(cfg, snap, sup.poolList())
 		markWarming(groups, sup.warmingGroups())
 		markOffnet(groups, sup.offnetGroups())
+		off := sup.offnetGroups()
 		for i := range gs {
+			_, gs[i].Offnet = off[gs[i].GroupID]
 			for _, g := range groups {
 				if g.GroupID == gs[i].GroupID {
 					gs[i].Health, gs[i].HealthWhy = g.Status, g.Detail

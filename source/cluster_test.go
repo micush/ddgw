@@ -475,6 +475,10 @@ func TestSafeToTakeDown(t *testing.T) {
 		{"an older node cannot say: assumed fine", mine, []peerGateways{{Addr: "b", Known: false}}, true},
 		{"this node serves nothing: nothing to lose", []GwState{{GroupID: 1, Serving: false}}, nil, true},
 		{"no gateways at all", nil, nil, true},
+		{"the only other member is on another subnet and can never cover it", mine, []peerGateways{{Addr: "b", Known: true, Serving: serving(), Offnet: serving(1, 2)}}, true},
+		{"one member is on another subnet, another is just recovering", mine, []peerGateways{{Addr: "b", Known: true, Serving: serving(), Offnet: serving(1, 2)}, {Addr: "c", Known: true, Serving: serving()}}, false},
+		{"another subnet, but one gateway could be covered", mine, []peerGateways{{Addr: "b", Known: true, Serving: serving(), Offnet: serving(1)}}, false},
+		{"the other member is unreachable and may come back", mine, []peerGateways{{Addr: "b", Down: true}}, false},
 		{"the other member only just came back", mine, []peerGateways{{Addr: "b", Known: true, Serving: serving(1, 2), Fresh: serving(1, 2)}}, false},
 		{"one settled member is enough", mine, []peerGateways{{Addr: "b", Known: true, Serving: serving(1, 2), Fresh: serving(1, 2)}, {Addr: "c", Known: true, Serving: serving(1, 2)}}, true},
 	}
