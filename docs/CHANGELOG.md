@@ -1,5 +1,55 @@
 # Changelog
 
+## [v249] - 2026-10-08 — A node that joins the cluster is not added to the gateways
+
+### Changed
+- **Joining no longer changes who answers for a gateway.** Until now a node that joined served every gateway at once, which meant a half-set-up node took client traffic the moment it was in. Now the primary, when it accepts a join, adds the new node's ID to every gateway's shared `excluded_nodes` list **before it answers the joiner**, so the joiner's first sync already carries it and it never starts serving. Put it to work where it should: right-click the gateway ▸ **Add node** ▸ the node (or `--canvas-add node --group N --node NODE`). In the Topology the new node is drawn as removed until then.
+- A gateway created after the join is served by every node, as before. Nodes that are already members, and a member that reconnects with the same node ID, are not touched; so nothing changes on upgrade.
+- Help, the README and the usage text say so.
+- Test: `TestNewNodeIsNotAddedToTheGateways` (the primary's and the joiner's configuration both list the new node in every gateway).
+
+- **Monitor ▸ Anycast no longer lists the anycast addresses of a gateway this node was removed from** (they showed as "withdrawn — gateway paused", though they were never this node's). A gateway that is merely paused on the node is still listed as paused.
+- Test: `TestAllAnycastStatesSkipsAGatewayThisNodeWasRemovedFrom`. Two existing tests that assumed a joined node serves every gateway (`TestUpdateSafeForTheOnlyMember`, `TestRollingUpdateWithPausedNodes`) now add the joined nodes to the gateway first, and also check that a node that has only joined does not hold an update back.
+
+### Not verified
+- On a real cluster. The join itself is the same code path as before; the added step is one shared-settings save on the primary, done before it replies.
+
+### Verified
+- `gofmt -l .`, `node --check`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v248] - 2026-10-08 — Topology: right-click a node ▸ Make controller, Restart, Shut down
+
+### Added
+- **Right-click a node's shape in the Topology** (this node or any reachable one) now also offers **Make controller…**, **Restart…** and **Shut down…**, next to Pause/Resume node and Host statistics. They are the Node page's buttons aimed at the node you clicked: *Make controller* asks that node to take the controller role for all groups (the node that held it steps down afterwards); *Restart* and *Shut down* act on the host, now, after a confirmation that says what happens (and that you lose the page when it is this node). When a gateway would lose its last serving member the daemon refuses, and the dialog then offers "… anyway". Another node is reached through the cluster relay, with the same permissions and logging as the Node page; this node is called directly. A node that does not answer keeps only its Cluster page and removal entries. The help page for Topology lists the new items.
+- Scheduling (in N minutes / at a time) and cancelling stay on the Node page.
+
+### Verified
+- Live, headless Chromium, a real daemon with PAM: the menu on a node shows Host statistics, Make controller…, Pause node…, Restart…, Shut down…, Remove from this gateway…; Restart… shows its confirmation and Cancel sends nothing; Make controller… confirmed sends `POST /api/assert-agc` to this node directly (not through the relay) and shows the answer under the title. `node --check`, `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles.
+
+### Not verified
+- Restart and Shut down on a real host (the confirmation and the request were checked; nothing was powered off), and the relay path to another node in a live cluster (the same relay the Pause item has used since earlier versions).
+
+## [v247] - 2026-10-08 — Stopping the DNS proxy cannot hang; a steadier test suite; what changed since v237
+
+### Fixed
+- **`DNSFrontend.Stop()` no longer waits without limit** for queries still being answered. The sockets are closed and the context cancelled first, so queries end on their own; if one is stuck in an upstream call, Stop gives up after 3 s, logs a warning and leaves it to finish. A gateway restart (`RestartDNS`) holds the engine lock around Stop, so a stuck query could have blocked the engine. Test: `TestFrontendStopDoesNotWaitForeverForAQuery`.
+- **A test that failed now and then:** `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` sends a body over the limit, the server answers 413 and closes, and the client sometimes saw "connection reset" while still sending. That is the refusal seen from the other side; the test helper now accepts it for a body over the limit (a request that should succeed still must). 15 runs in a row pass.
+- README read through: the introduction, Real-MAC mode (the default, when to turn it off), the cluster addressing paragraph, the answer cache's warm start and the cloud note now agree with each other and with the current behaviour.
+
+### Upgrading from v237: everything that changed in v238–v247
+- **Defaults.** A server is marked Down at **100 %** of its queries failing (was 50 %), a new gateway starts with **real MAC addresses on**. Existing gateways keep their setting; a saved configuration is read as before.
+- **Answer cache.** It survives adding, pausing, resuming and removing a server (the pool is rebuilt, the cache kept). A node that starts asks a cluster member for its most recent answers (warm start: up to 20,000 entries / 3 MB, with their ages, never replacing its own).
+- **Cluster.** Nodes are reached by **IP address first**, names last (a name lookup is limited to 2 s) and each node saves its peers' addresses, so pausing the DNS gateway on every node no longer turns the others "not answering" in the Topology (this was the cause of the reports on 8 October: the status calls waited on a name lookup served by the paused gateway). A gateway paused on all nodes reads **paused** on every node that answers. Pausing or resuming restarts engines outside the supervisor lock.
+- **GUI.** Topology rows are spaced evenly and the picture shrinks when a domain is removed. Monitor ▸ Log: Refresh, Download and **tshoot** are on a second line, the capture is always included.
+- **Troubleshooting.** tshoot bundles hold a dump of every goroutine; `kill -USR1 $(pidof ddgw)` writes it to the journal.
+- **Nothing to do on upgrade:** no settings files change format, no setting needs to be changed by hand. A cluster updates through its own update mechanism; the nodes restart one after another as before.
+
+### Not verified
+- On the real cluster: a restart of one node while the gateway is paused on all nodes.
+
+### Verified
+- `gofmt -l .`, `node --check`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
 ## [v246] - 2026-10-08 — New gateways start with "Use real MAC addresses" on
 
 ### Changed

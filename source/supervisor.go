@@ -300,6 +300,9 @@ func (s *Supervisor) AllAnycastStates() []AnycastState {
 	at := map[string]int{} // address -> index in out
 	rank := map[string]int{}
 	for _, g := range s.config().Groups {
+		if g.ExcludedHere {
+			continue // this node was removed from the gateway: its anycast addresses are not this node's, so they are not listed
+		}
 		st := s.AnycastStates(g.GroupID)
 		have := map[string]AnycastState{}
 		for _, a := range st {

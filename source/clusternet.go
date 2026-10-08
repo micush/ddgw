@@ -790,7 +790,13 @@ func (c *Cluster) handleJoin(rw http.ResponseWriter, r *http.Request) {
 	}
 	c.node.UnremovePeer(peer.Addr)
 	c.node.UnremoveFp(peer.Fp) // a token is an administrator's decision to let this identity in
+	newcomer := peer.NodeID != "" && !c.knowsNode(peer.NodeID)
 	c.node.AddPeer(peer)
+	if newcomer && c.node.Snapshot().Role == RolePrimary && c.mg != nil {
+		// A node that joins does not start serving every gateway: it is left out of each until an administrator adds it
+		// (right-click the gateway ▸ Add node).  Done before the answer, so the joiner's first sync already carries it.
+		c.mg.excludeNewNode(peer.NodeID)
+	}
 	if req.MTLS {
 		c.node.NoteMTLS(peer.Fp)
 	}
@@ -1948,4 +1954,38 @@ func learnPeerAddrs(p ClusterPeer, ips []string) (ClusterPeer, bool) {
 	}
 	p.Alts = alts
 	return p, true
+}
+
+// knowsNode says whether a member with this node ID is already in the member list.
+func (c *Cluster) knowsNode(id string) bool {
+	for _, p := range c.node.Snapshot().Peers {
+		if p.NodeID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// excludeNewNode leaves a node that has just joined the cluster out of every gateway (the shared excluded_nodes list), so
+// that joining does not change which nodes answer for a gateway; an administrator adds it where it should serve.
+func (m *Mgmt) excludeNewNode(id string) {
+	dc, _, err := m.LiveConfig()
+	if err != nil || dc == nil {
+		return
+	}
+	changed := false
+	for i := range dc.Groups {
+		if !containsStr(dc.Groups[i].ExcludedNodes, id) {
+			dc.Groups[i].ExcludedNodes = append(dc.Groups[i].ExcludedNodes, id)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	if err := m.PutConfig(dc, "cluster join", "a new node is not added to the gateways"); err != nil {
+		warnf("cluster: could not leave the new node %s out of the gateways: %v", id, err)
+		return
+	}
+	infof("cluster: node %s joined; it serves no gateway until it is added (right-click the gateway ▸ Add node)", id)
 }

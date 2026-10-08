@@ -144,9 +144,21 @@ func (f *DNSFrontend) Stop() {
 	}
 	f.udp, f.tcp = nil, nil
 	f.mu.Unlock()
-	f.wg.Wait()
-	infof("dns: proxy on %s stopped", f.listenAddr())
+	// The sockets are closed and the context cancelled, so in-flight queries end on their own; but one stuck in an
+	// upstream call must not hold up whoever stopped us (a gateway restart holds the engine lock around this).  After
+	// dnsStopWait the stragglers are left to finish by themselves: they only touch their own, closed, sockets.
+	done := make(chan struct{})
+	go func() { f.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		infof("dns: proxy on %s stopped", f.listenAddr())
+	case <-time.After(dnsStopWait):
+		warnf("dns: proxy on %s stopped; some queries were still running after %v and are left to finish on their own", f.listenAddr(), dnsStopWait)
+	}
 }
+
+// dnsStopWait is how long Stop waits for queries that are still being answered (a variable for the test).
+var dnsStopWait = 3 * time.Second
 
 func (f *DNSFrontend) Listening() bool {
 	f.mu.Lock()

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -311,6 +313,12 @@ func rawPeerReq(t *testing.T, secret []byte, to *tnode, claim ClusterPeer, me *t
 	}
 	res, err := pinnedClientAs(to.addr, to.mg.cl.node.Fingerprint(), 5*time.Second, me).Do(req)
 	if err != nil {
+		// A server that refuses a body that is too large may answer and close before the client has finished
+		// sending it; the client then sees a reset instead of the 413. That is the refusal, only seen from the other
+		// side, so a body over the limit that ends this way counts as one.
+		if len(body) > legacyPreAuthBody && (errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || strings.Contains(err.Error(), "connection reset") || strings.Contains(err.Error(), "broken pipe")) {
+			return http.StatusRequestEntityTooLarge, "closed while the body was being sent"
+		}
 		t.Fatal(err)
 	}
 	defer res.Body.Close()

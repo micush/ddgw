@@ -132,7 +132,7 @@ type GroupConfig struct {
 	// stops answering, other nodes carry on.  Local to the node, never replicated.
 	Paused bool `json:"paused,omitempty"`
 	// ExcludedNodes are the cluster nodes (by node ID) that do not serve this gateway: shared, so every node agrees.  A
-	// node not listed serves it, a node that joins later too.  Omitted when empty, so a configuration that never used it
+	// node not listed serves it.  A node that joins the cluster is added to every gateway's list by the primary at that moment.  Omitted when empty, so a configuration that never used it
 	// stays readable by older versions.  ExcludedHere is set by effective() when this node is one of them (never written).
 	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
 	ExcludedHere  bool     `json:"-"`

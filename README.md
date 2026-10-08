@@ -25,10 +25,12 @@ A **gateway** is one shared address (its **VIP**, IPv4, IPv6 or both) served by
 several nodes. The nodes of a gateway find each other over multicast (or, where
 multicast is blocked, a unicast list of every node's address) and elect one
 **controller (AGC)**; the others are **forwarders (AFN)**. The controller answers
-ARP (IPv4) and neighbour solicitations (IPv6) for the VIP with the virtual MAC of
+ARP (IPv4) and neighbour solicitations (IPv6) for the VIP with the MAC of
 a node picked by the gateway's load-balancing method, so clients are spread over
-all nodes. When a node stops or fails, another takes over its virtual MAC.
-Gateways need Linux, macvlan support and root.
+all nodes. That MAC is a virtual one per node, which another node takes over when
+the node stops or fails; or, with **real MAC addresses** on (the default for a gateway you
+create, see [Real-MAC mode](#real-mac-mode-no-virtual-macs)), the node's own MAC.
+Virtual MACs need Linux, macvlan support and root.
 
 Every node answers DNS on the VIP through the same proxy: it probes the upstream
 servers you give the gateway, forwards each query to the fastest healthy one and
@@ -165,7 +167,7 @@ with no servers yet answers SERVFAIL and shows amber.
   TSIG-signed queries, queries with EDNS options other than a cookie (ECS from the client, NSID, ...), updates.
   ANY queries are cached like any other type.
   Adding, pausing, resuming or removing a server rebuilds the pool but keeps the cache: the answers do not depend on which server is asked next. Changing the cache's own settings (`cache_entries`, `cache_max_ttl`, the ECS settings) or switching it off and on starts it empty, which is also how to clear it.
-  **Warm start:** a node that has just started (a restart, or an update) asks a reachable cluster member for each gateway's most recently used answers, up to 20,000 and about 3 MB, with the age they have there so their TTLs go on counting down (`POST /cluster/cache`, signed like every cluster call). It runs in the background a few seconds after start-up, never delays serving, tries again a few times while the cluster comes up and then stops; entries are taken only if the peer's cache settings are the same, never replace or push out an answer this node has, and nothing is replicated afterwards. A node nobody answers starts empty.
+  **Warm start:** a node that has just started (a restart, or an update; a node that joins later is warmed at its next start) asks a reachable cluster member for each gateway's most recently used answers, up to 20,000 and about 3 MB, with the age they have there so their TTLs go on counting down (`POST /cluster/cache`, signed like every cluster call). It runs in the background a few seconds after start-up, never delays serving, tries again a few times while the cluster comes up and then stops; entries are taken only if the peer's cache settings are the same, never replace or push out an answer this node has, and nothing is replicated afterwards. A node nobody answers starts empty.
   A hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries
   (`ddgw --show-dns`: the `answer cache:` line). It does not serve stale answers: with every upstream down a name
   whose TTL ran out gets SERVFAIL.
@@ -216,13 +218,15 @@ every domain that server has to answer.
 
 * **Which nodes serve a gateway** (right-click a node ▸ *Remove from this gateway…*, right-click the gateway ▸ *Add node* ▸ the node; CLI
   `--canvas-del node --group N --node NODE` / `--canvas-add node --group N --node NODE`, NODE being the node's address or
-  host name): every node serves every gateway unless it is removed from it. The removal is **shared** (`excluded_nodes` in the
+  host name): every node that is in the cluster serves every gateway unless it is removed from it, and a node that **joins** is removed from every gateway at once (see below). The removal is **shared** (`excluded_nodes` in the
   gateway's block, a list of node IDs, absent while empty so older versions still read the file): any node can change it,
   every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives
   up the address and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any
   node (`ddgw --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node*
-  on the gateway lists the removed nodes by name. A node that joins the cluster later serves
-  every gateway until it is removed from it. The last node serving a gateway cannot be removed (pause the gateway on all
+  on the gateway lists the removed nodes by name. A node that joins the cluster later is **left out of every
+  gateway when it joins** (the primary adds it to each gateway's `excluded_nodes` before the joiner's first sync), so joining changes
+  nothing about who answers; put it where it should serve with right-click the gateway ▸ *Add node*. Gateways created afterwards are
+  served by every node. The last node serving a gateway cannot be removed (pause the gateway on all
   nodes instead). This is not the same as *Pause ▸ This node*, which is kept on that node alone for maintenance.
 
 * **Four rows per side, or three.** The anycast addresses (right of the circle) and the cluster nodes (left) stand four to a column; the fifth starts a new
@@ -426,7 +430,7 @@ The generated config looks like this:
 
 ### Cloud use (untested)
 
-Clouds block multicast and ignore virtual MACs, so the gateway VIP cannot be reached there. The
+Clouds block multicast and ignore virtual MACs, so the gateway VIP cannot be reached there (real-MAC mode lessens the second problem, not the first). The
 anycast addresses can: they are plain `/32` routes announced over BGP. Possible setup, **not tried
 in any cloud**:
 
@@ -473,8 +477,11 @@ no MAC is ever on two nodes.
 
 Virtual MACs need the network to deliver frames addressed to a MAC that is not the NIC's own. A VMware port group with
 promiscuous mode off drops them, and clouds that allow one MAC per interface do the same. For those, a gateway has a setting,
-**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; on for a gateway created now, off for
-one that already existed, shared by the cluster, and changing it restarts the gateway), and everything above is replaced as follows.
+**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; shared by the cluster,
+and changing it restarts the gateway), and everything above is replaced as follows. It is **on for a gateway you create**
+(first start, Add gateway, `--canvas-add gateway`, `--configure`), because most networks need it; a gateway that already
+existed keeps the setting it had (a file that does not say `real_macs` means off), so an upgrade changes nothing. Off is the
+older way: a virtual MAC per node, which fails over without depending on the neighbors (see the last point below).
 
 - There is no macvlan and no slot MAC. Every node, the controller too, holds the VIP on `lo` and has `arp_ignore=1` /
   `arp_announce=2` set on the real interface (put back when the gateway stops).
@@ -487,7 +494,7 @@ one that already existed, shared by the cluster, and changing it restarts the ga
 - A real MAC cannot be taken over. When a node dies or leaves, the controller announces the VIP at its own MAC with an
   unsolicited ARP (or neighbor advertisement), now and twice more within a second. Neighbors that honor one repoint at once;
   the others keep sending to the dead node until their ARP entry ages out (a Palo Alto's default is 30 minutes), so check
-  how your firewalls treat it before relying on this mode. A planned stop gives the announcement a head start (the leaving
+  how your firewalls treat it, and turn the setting off for a gateway whose neighbors do not honor one. A planned stop gives the announcement a head start (the leaving
   node stays up for a moment after the controller has been told).
 - The vMAC column of Monitor ▸ Gateways shows real MAC addresses (the controller knows all of them, a forwarder only its own).
 
@@ -655,8 +662,10 @@ Nodes are reached by **every address they have**, not by one name: `self`, the
 host name, and all the node's IPv4 and IPv6 addresses (link-local and loopback
 excluded) go into the join code and are shared between members. The joining
 node tries them in order until one answers, and every later request tries the
-address that last worked first, then the rest — so a stale DNS name or a
-missing IPv6 route does not cut a node off. Addresses are re-read at every
+IP address that last worked first, then the rest. **IP addresses are tried
+before names**, a name is looked up for at most 2 seconds, and each node saves the addresses its
+peers report about themselves with the member list, so cluster traffic keeps working while DNS is down
+(the DNS gateway being paused on every node, say), also right after a restart. Addresses are re-read at every
 sync, so a changed IP is picked up on its own.
 
 - One node is the **primary**, the rest **replicas**. A new node is a primary

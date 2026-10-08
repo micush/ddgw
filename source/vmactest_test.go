@@ -148,3 +148,17 @@ func TestAllAnycastStatesSharedAddress(t *testing.T) {
 		t.Fatalf("an address nobody announces: %+v", st)
 	}
 }
+
+// A gateway this node was removed from does not list its anycast addresses: they are not this node's.
+func TestAllAnycastStatesSkipsAGatewayThisNodeWasRemovedFrom(t *testing.T) {
+	resetAnycast()
+	t.Cleanup(resetAnycast)
+	s := &Supervisor{anycast: map[int]*anycastSet{}, dc: &DaemonConfig{Groups: []GroupConfig{
+		{GroupID: 1, Paused: true, ExcludedHere: true, ExtraVIPs: []string{"10.250.250.250", "fddd::250"}},
+		{GroupID: 2, Paused: true, ExtraVIPs: []string{"10.250.251.1"}},
+	}}}
+	got := s.AllAnycastStates()
+	if len(got) != 1 || got[0].Addr != "10.250.251.1" {
+		t.Fatalf("addresses of a gateway this node is not part of are listed: %+v", got)
+	}
+}

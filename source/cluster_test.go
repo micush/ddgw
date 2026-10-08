@@ -595,6 +595,20 @@ func TestRollingUpdateWithPausedNodes(t *testing.T) {
 			n.sync()
 		}
 	}
+	// the nodes that joined are left out of the gateway (see TestNewNodeIsNotAddedToTheGateways); this test is about members
+	// that serve it, so they are added to it
+	for _, n := range ns {
+		if n != active {
+			if _, err := active.mg.CanvasEdit(canvasEdit{Action: "add", Kind: "node", Group: 1, Node: n.addr}, "tester"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for i := 0; i < 2; i++ {
+		for _, n := range ns {
+			n.sync()
+		}
+	}
 	time.Sleep(servingSettle + 200*time.Millisecond) // the serving node's cover is settled
 	next := fmt.Sprintf("%d", mustInt(version())+1)
 	// the first paused node goes at once; the second still takes its turn after it
@@ -877,6 +891,16 @@ func TestUpdateSafeForTheOnlyMember(t *testing.T) {
 		t.Fatal("a power action on the only serving member must stay refused")
 	}
 	a.join2(t, b)
+	a.sync()
+	b.sync()
+	// a node that has just joined is left out of every gateway: it cannot cover it, so it does not hold the update back
+	if ok, why := a.mg.updateSafeToApply(); !ok {
+		t.Fatalf("a member that has only joined (and is left out of the gateway) held the update back: %q", why)
+	}
+	// once it is added to the gateway and serves nothing yet, the serving one must wait
+	if _, err := a.mg.CanvasEdit(canvasEdit{Action: "add", Kind: "node", Group: 1, Node: b.addr}, "tester"); err != nil {
+		t.Fatal(err)
+	}
 	a.sync()
 	b.sync()
 	if ok, why := a.mg.updateSafeToApply(); ok || why == "" {

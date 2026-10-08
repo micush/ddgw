@@ -1229,7 +1229,7 @@
     // Node page makes on the node picked in the Node menu).  Until that node reports back (up to a sync interval) the shape shows
     // "pausing…" / "resuming…" so the click is seen at once.
     const nodeCall = (n, method, path, body) => {
-      const me = selfNode(), to = me && n.addr === me.addr ? null : n.addr;
+      const me = selfNode(), to = n.self || (me && n.addr === me.addr) ? null : n.addr;   // this node: straight, never through the relay
       return api(method, to ? "/api/proxy?node=" + encodeURIComponent(to) + "&path=" + encodeURIComponent(path) : path, body, true);
     };
     function pauseNode(n) {
@@ -1243,6 +1243,40 @@
       };
       if (!want) { go(); return; }
       confirmDialog("Pause " + (n.self ? "this node" : n.name) + "?", "All of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.", "Pause node", go, "btn primary");
+    }
+    // Make a node the gateway controller for all groups (the Node page's button, aimed at the node whose shape was clicked): it takes
+    // the role first, then the node that held it is asked to step down, so clients lose nothing.
+    function makeController(n) {
+      const go = async () => {
+        let said;
+        try {
+          const r = await nodeCall(n, "POST", "/api/assert-agc", {});
+          said = r.ok ? "Asked " + (n.self ? "this node" : n.name) + " to take over: " + (r.messages || []).join(" · ") : (r.error || "Could not make " + n.name + " the gateway controller");
+        } catch (e) { said = "Could not make " + n.name + " the gateway controller: " + (e.message || e); }
+        draw(); refresh();
+        clear(noteEl).append(said);   // after the redraw, which clears the line
+      };
+      confirmDialog("Make " + (n.self ? "this node" : n.name) + " the gateway controller?", "It takes over the controller role for all groups, and the node that answers for the shared address now is asked to step down once it has. Clients should lose nothing.", "Make controller", go, "btn primary");
+    }
+    // Restart or shut down the host of a node, now (the Node page's Host section, aimed at the node whose shape was clicked).  When a
+    // gateway would lose its last serving member the daemon says so, and the admin can go ahead anyway.
+    function powerNode(n, action) {
+      const verb = action === "restart" ? "Restart" : "Shut down", who = n.self ? "this node" : n.name;
+      const run = async (force) => {
+        try {
+          const r = (await nodeCall(n, "POST", "/api/power", force ? { action, when: "now", force: true } : { action, when: "now" })).data;
+          clear(noteEl).append(verb + " of " + who + " " + (r && r.when ? r.when : "requested") + ".");
+        } catch (e) {
+          if (!force && /^not safe to /.test(e.message || "")) {
+            confirmDialog("Go ahead anyway?", String(e.message).replace(/ \(to go ahead anyway.*$/, "") + " Clients of that gateway will be interrupted.", verb + " anyway", () => run(true));
+            return;
+          }
+          clear(noteEl).append("Could not " + verb.toLowerCase() + " " + who + ": " + (e.message || e));
+        }
+      };
+      confirmDialog(verb + " the host of " + who + "?", (action === "restart" ? "The host reboots" : "The host powers off and stays off until it is powered on again") +
+        (n.self ? (action === "restart" ? ", and you lose access to this page until it is back. " : ". You lose access to this page. ") : ". ") +
+        "Its gateways stop serving and the other nodes take over.", verb + " host", () => run(false));
     }
     // Remove a node from the gateway shown (a shared setting, kept in the gateway's own settings): it serves nothing of it, whichever
     // node you look from, and is no longer drawn.  The gateway's right-click ▸ Add node brings it back.  The last node serving it
@@ -1270,8 +1304,8 @@
       return l.length ? [["Add node", null, "", l.map((r) => [r.label, () => quick(() => toggleIn(g, "excluded_nodes", r.id, false))])]] : [];
     };
     const nodeMenu = (n) => (e) => openMenu(e, n.self
-      ? [["Host statistics…", () => selectTab("host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ...memberItem(n)]
-      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ...memberItem(n)]
+      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
+      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
       : [["Cluster page…", () => selectTab("cluster")], ...memberItem(n)]);
     // right-click on a shape: select it, then show what can be done with it
     const rightClick = (kind, addr, di) => (e) => {
