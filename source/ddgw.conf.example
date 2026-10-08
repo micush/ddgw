@@ -21,7 +21,7 @@
   "dns": {
     "servers": ["10.0.10.1", "10.0.10.2", "10.0.20.1:5353"],
     "queries": ["example.com", {"name": "example.com", "type": "AAAA"}],
-    "down_percent": 50,
+    "down_percent": 100,
     "listen_port": 53,
     "probe_interval_ms": 5000,
     "probe_timeout_ms": 1000,

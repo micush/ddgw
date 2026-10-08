@@ -165,7 +165,7 @@ DNS proxy ("dns" block at the top level of the config):
   tls_insecure       true accepts any certificate from tls:// and https:// servers (default false; not safe)
   queries            probe queries: "example.com" or {"name":..., "type":"AAAA"}
   down_percent       a server is down when at least this % of its probe queries fail (default
-                     50); with fewer failing it stays in use and shows as degraded. The old
+                     100); with fewer failing it stays in use and shows as degraded. The old
                      "require" key is read and ignored
   listen_port        port served on the VIP, UDP+TCP (default 53)
   doh_port           serve DNS over HTTPS to clients at /dns-query on this TCP port, e.g. 443 (default 0 = off);
@@ -439,6 +439,11 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 		off := sup.offnetGroups()
 		for i := range gs {
 			_, gs[i].Offnet = off[gs[i].GroupID]
+			for _, g := range cfg.Groups { // removed from the gateway: it can never serve it either
+				if g.GroupID == gs[i].GroupID && containsStr(g.ExcludedNodes, localNodeID()) {
+					gs[i].Offnet = true
+				}
+			}
 			for _, g := range groups {
 				if g.GroupID == gs[i].GroupID {
 					gs[i].Health, gs[i].HealthWhy = g.Status, g.Detail

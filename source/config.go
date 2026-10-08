@@ -389,8 +389,8 @@ type DNSConfig struct {
 	PausedServersHere []string `json:"-"`
 	PausedQueriesHere []string `json:"-"`
 	// DownPercent is the share of a server's probe queries that may fail before the server counts as
-	// down: it is down when at least this percent of them fail (default 50, so 1 of 2 or 2 of 4); with
-	// fewer failing it stays in use and shows as degraded.  100 means down only when every query fails.
+	// down: it is down when at least this percent of them fail (default 100, so only when every query fails; 50 would be 1 of 2 or 2 of 4); with
+	// fewer failing it stays in use and shows as degraded.  A file that already has the key keeps its value.
 	DownPercent int `json:"down_percent"`
 	// Require is the old "all"/"any" switch, replaced by DownPercent.  It is still read (an old file has
 	// it) but ignored, and never written back.
@@ -509,7 +509,7 @@ func defaultDNS() DNSConfig {
 	return DNSConfig{
 		Servers:         []string{},
 		Queries:         []DNSQuery{},
-		DownPercent:     50,
+		DownPercent:     100,
 		ListenPort:      53,
 		ForwardUpdates:  true,
 		Spread:          true,

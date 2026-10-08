@@ -1340,7 +1340,7 @@
 
     // The load-balancing settings a gateway's own pool starts from, so that it follows Settings until it is given its own
     // (the daemon treats a pool at other values as the gateway's own).
-    const LB_DEFAULTS = { spread: true, spread_band: 20, down_percent: 50, fail_threshold: 2, max_attempts: 3, latency_alpha: 0.3 };
+    const LB_DEFAULTS = { spread: true, spread_band: 20, down_percent: 100, fail_threshold: 2, max_attempts: 3, latency_alpha: 0.3 };
     const LB_FOLLOW = "follow Settings", LB_OWN = "own values";
     const lbShared = () => { const d = cv.cfg.dns || {}; return { spread: d.spread !== false, spread_band: d.spread_band, down_percent: d.down_percent, fail_threshold: d.fail_threshold, max_attempts: d.max_attempts, latency_alpha: d.latency_alpha }; };
     const lbText = (l) => "spread " + (l.spread ? "on" : "off") + ", band " + l.spread_band + "%, down at " + l.down_percent + "%, " + l.fail_threshold + " failures, " + l.max_attempts + " servers tried, smoothing " + l.latency_alpha;

@@ -110,9 +110,9 @@ with no servers yet answers SERVFAIL and shows amber.
 
 * **Eligibility** – every `dns.queries` entry is resolved against every server
   each `probe_interval_ms`. A query passes with NOERROR and at least one
-  answer. A server gets traffic until `down_percent` (default 50) or more of its queries fail: with
+  answer. A server gets traffic until `down_percent` (default 100, i.e. every query) or more of its queries fail: with
   fewer failing it stays in use and shows amber (degraded), so one dead domain among three does not take
-  a server out. `down_percent: 100` means down only when every query fails, `1` down on any failure. A
+  a server out. `50` means one of two or two of four failing makes it down, `1` down on any failure. A
   server is dropped after `fail_threshold` consecutive failed rounds (probe or live) and re-admitted by the
   first passing round.
 * **Latency** – an EWMA of response time, fed by probe round trips and by live
@@ -295,7 +295,7 @@ every domain that server has to answer.
   **grey** not known yet (not applied, not probed yet).
 * A domain is a **health test**, not a route: Anyname sends every client query to
   the fastest healthy server; a server counts as healthy while fewer than
-  `down_percent` (50 %) of *its* domains fail.
+  `down_percent` (100 %, every one) of *its* domains fail.
 * Each gateway has its **own pool**; two gateways may use different servers.
   A server can be an IP (`8.8.8.8`, `8.8.8.8:5353`, `[2001:db8::53]`) or a host
   name (resolved each time it is probed).

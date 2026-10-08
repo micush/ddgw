@@ -133,8 +133,8 @@ func TestCanvasShowsDegradedForAFailingDomain(t *testing.T) {
 }
 
 func TestDownPercentConfig(t *testing.T) {
-	if defaultDNS().DownPercent != 50 {
-		t.Fatalf("default %d, want 50", defaultDNS().DownPercent)
+	if defaultDNS().DownPercent != 100 {
+		t.Fatalf("default %d, want 100", defaultDNS().DownPercent)
 	}
 	d := defaultDNS()
 	if err := d.UnmarshalJSON([]byte(`{"servers":["10.0.0.53"],"queries":["example.com"],"down_percent":75}`)); err != nil || d.DownPercent != 75 || d.Validate() != nil {
@@ -152,11 +152,11 @@ func TestDownPercentConfig(t *testing.T) {
 		if err := o.UnmarshalJSON([]byte(`{"servers":["10.0.0.53"],"queries":["example.com"],"require":"` + old + `"}`)); err != nil {
 			t.Fatalf("old require %q refused: %v", old, err)
 		}
-		if o.DownPercent != 50 || o.Validate() != nil {
+		if o.DownPercent != 100 || o.Validate() != nil {
 			t.Fatalf("old file %q: %+v", old, o)
 		}
 		b, _ := json.Marshal(o)
-		if strings.Contains(string(b), "require") || !strings.Contains(string(b), `"down_percent":50`) {
+		if strings.Contains(string(b), "require") || !strings.Contains(string(b), `"down_percent":100`) {
 			t.Fatalf("written back as %s", b)
 		}
 	}

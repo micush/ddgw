@@ -1749,6 +1749,7 @@ func (m *Mgmt) localGateways() []GwState {
 // peerGateways is what one other cluster member reported.
 type peerGateways struct {
 	Addr    string
+	NodeID  string // the member's node ID, when known
 	Known   bool
 	Serving map[int]bool
 	Fresh   map[int]bool // serving, but not yet for servingSettle
@@ -1786,7 +1787,25 @@ func safeToTakeDown(mine []GwState, peers []peerGateways) (bool, string) {
 			continue // every other member is on another subnet and can never serve it: waiting would be for ever
 		}
 		if others == 0 {
-			return false, fmt.Sprintf("gateway %d would have no other cluster member serving it (this is the only member, or the others are paused, down or still recovering) — resume a node that has already updated, or force it with --update-apply --yes", g.GroupID)
+			// say what each other member is doing, so the reason is not a guess
+			var who []string
+			for _, p := range peers {
+				switch {
+				case p.Down:
+					who = append(who, p.Addr+" is not reachable")
+				case p.Offnet[g.GroupID]:
+					who = append(who, p.Addr+" cannot serve it (another subnet, or removed from the gateway)")
+				case p.Serving[g.GroupID]:
+					who = append(who, p.Addr+" has only just started serving it")
+				default:
+					who = append(who, p.Addr+" is not serving it (paused, still recovering, or its DNS servers are down)")
+				}
+			}
+			detail := "this is the only member"
+			if len(who) > 0 {
+				detail = strings.Join(who, "; ")
+			}
+			return false, fmt.Sprintf("gateway %d would have no other cluster member serving it (%s) — resume a node that has already updated, or force it with --update-apply --yes", g.GroupID, detail)
 		}
 	}
 	return true, ""
@@ -1798,7 +1817,22 @@ func (m *Mgmt) updateSafe() (bool, string) {
 	if m.gwFn == nil || !m.cl.Enabled() {
 		return true, ""
 	}
-	return safeToTakeDown(m.localGateways(), m.cl.peerGateways())
+	peers := m.cl.peerGateways()
+	// A member that has been removed from a gateway (a shared setting every node holds) can never serve it, whatever
+	// version it runs and whatever it says: it does not count as a cover for that gateway.
+	if dc, _, err := m.LiveConfig(); err == nil {
+		for i := range peers {
+			for _, g := range dc.Groups {
+				if peers[i].NodeID != "" && containsStr(g.ExcludedNodes, peers[i].NodeID) {
+					if peers[i].Offnet == nil {
+						peers[i].Offnet = map[int]bool{}
+					}
+					peers[i].Offnet[g.GroupID] = true
+				}
+			}
+		}
+	}
+	return safeToTakeDown(m.localGateways(), peers)
 }
 
 // updateSafeToApply is updateSafe for installing an update: a node that knows no other member is never held back, since no
@@ -1819,10 +1853,10 @@ func (c *Cluster) peerGateways() []peerGateways {
 	for _, p := range snap.Peers {
 		pi := c.info[p.Addr]
 		if pi == nil || !pi.Reachable {
-			out = append(out, peerGateways{Addr: p.Addr, Down: true})
+			out = append(out, peerGateways{Addr: p.Addr, NodeID: p.NodeID, Down: true})
 			continue
 		}
-		pg := peerGateways{Addr: p.Addr, Known: pi.Msg.GwKnown, Serving: map[int]bool{}, Fresh: map[int]bool{}, Offnet: map[int]bool{}}
+		pg := peerGateways{Addr: p.Addr, NodeID: p.NodeID, Known: pi.Msg.GwKnown, Serving: map[int]bool{}, Fresh: map[int]bool{}, Offnet: map[int]bool{}}
 		for _, g := range pi.Msg.Gateways {
 			pg.Serving[g.GroupID] = g.Serving
 			pg.Fresh[g.GroupID] = g.Fresh

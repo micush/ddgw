@@ -882,4 +882,11 @@ func TestUpdateSafeForTheOnlyMember(t *testing.T) {
 	if ok, why := a.mg.updateSafeToApply(); ok || why == "" {
 		t.Fatalf("with a second member that serves nothing, the serving one must wait: %v %q", ok, why)
 	}
+	// the other member is removed from the gateway (Topology ▸ node ▸ remove): it can never cover it, so waiting is for ever
+	if _, err := a.mg.CanvasEdit(canvasEdit{Action: "del", Kind: "node", Group: 1, Node: b.addr}, "tester"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, why := a.mg.updateSafeToApply(); !ok {
+		t.Fatalf("a member removed from the gateway must not hold the update back: %q", why)
+	}
 }

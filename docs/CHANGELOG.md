@@ -1,5 +1,40 @@
 # Changelog
 
+## [v237] - 2026-10-07 — New default: a server is down only when every test fails
+
+### Changed
+- **"Down at (% of tests failing)" now defaults to 100** (was 50). With two or more test domains, one bad name can no longer take a healthy server out of the pool; a server is down only when all of its tests fail, after "Failures before down" (default 2, unchanged) rounds in a row. With a single test domain nothing changes (50 and 100 behave the same). Updated: the built-in default, the gateway load-balancing form's starting values, the help text, README, `ddgw.conf.example`, the `--help` text and the default-value test.
+- **Existing installs keep what they have.** A saved configuration already contains `down_percent`, so only a configuration without the key (a new install, or a pool never set) picks up 100. Nothing is rewritten on update.
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, `node --check` on `app.js` and `help.js`, `go test -race -count=1 ./...` (passes); cgo-off vet and test; five cross-compiles.
+
+### Not verified
+- The shipped value was not tried on a real pool with a half-failing server beyond the existing `TestDownPercentOnARealPool` cases.
+
+## [v236] - 2026-10-07 — Version bump to test the update path
+
+### Changed
+- No code change from v235. The release number is raised so the two-site cluster can be updated from v235 through the Upgrade page (upload, auto-update) rather than by running `install.sh` on every node, to see the v235 hold-back rule work.
+
+### Verified
+- Same source as v235 (the full suite, cgo-off vet and five cross-compiles were run for it); `go build` and `go vet` re-run for this archive.
+
+## [v235] - 2026-10-07 — The update hold-back names the reason, and a member removed from a gateway no longer counts as its cover
+
+### Fixed
+- **v232 did not release the update on the two-site cluster** (both nodes on v232, "gateway 1 would have no other cluster member serving it", still behind). v232 relied on the other node reporting that it cannot take part in the gateway (another subnet); I had guessed that was the reason and it was not enough. The node now also works it out for itself from the shared setting every node holds: a member that has been removed from a gateway (Topology ▸ the node ▸ remove, `--canvas-del node`) can never serve it, whatever version it runs, so it is not waited for. A node also reports its own removal. Test: `TestUpdateSafeForTheOnlyMember` now removes the other member from the gateway and expects the update to go ahead.
+
+### Changed
+- **The hold-back says why, per member**, instead of a generic list of guesses: "gateway 1 would have no other cluster member serving it (lptxns02:53854 cannot serve it (another subnet, or removed from the gateway))", or "… is not reachable", "… has only just started serving it", "… is not serving it (paused, still recovering, or its DNS servers are down)".
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, the safety and update tests; `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` (connection reset); cgo-off vet; five cross-compiles.
+
+### Not verified
+- That removal from the gateway is what holds your two nodes. If the reason shown after this update is something else (for example "is not serving it (…)"), that line says what to look at; the troubleshooting bundle (v234) holds the gateway and DNS state of both nodes.
+- Until the nodes run v235 the old message is shown. To get there, press **Update this node now** (or `--update-apply --yes`) on lphxns02 once.
+
 ## [v234] - 2026-10-07 — Troubleshooting bundle
 
 ### Added
