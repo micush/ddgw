@@ -59,6 +59,12 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		}
 	}
 	switch cmd {
+	case "tshoot.node":
+		b, err := m.TshootNode(a.Enabled, actor)
+		return map[string]any{"tgz": b}, err
+	case "tshoot.cluster":
+		b, err := m.TshootCluster(a.Enabled, actor)
+		return map[string]any{"tgz": b}, err
 	case "vmac.test":
 		return m.VmacTest(a.Group)
 	case "canvas.edit":

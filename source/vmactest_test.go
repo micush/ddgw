@@ -121,3 +121,30 @@ func TestMarkVmacIgnoresTheResultOnceRealMACsAreOn(t *testing.T) {
 		t.Fatalf("a stale not-delivered must not keep the gateway amber: %+v", gs[0])
 	}
 }
+
+// An anycast address on two gateways is listed once, as its best gateway has it: a paused gateway listed first must not
+// hide that the other one announces it.
+func TestAllAnycastStatesSharedAddress(t *testing.T) {
+	resetAnycast()
+	t.Cleanup(resetAnycast)
+	s := &Supervisor{anycast: map[int]*anycastSet{}, dc: &DaemonConfig{Groups: []GroupConfig{
+		{GroupID: 1, Paused: true, ExtraVIPs: []string{"10.250.250.250"}},
+		{GroupID: 2, ExtraVIPs: []string{"10.250.250.250", "10.250.250.251"}},
+	}}}
+	a := newAnycastSet(2, []string{"10.250.250.250"}, func() *Pool { return nil }, func() int { return 0 })
+	s.anycast[2] = a
+	anycastReg.Lock()
+	anycastReg.claims["10.250.250.250"] = map[int]*anycastClaim{2: {want: true}}
+	anycastReg.onLo["10.250.250.250"] = true
+	anycastReg.Unlock()
+	got := map[string]AnycastState{}
+	for _, st := range s.AllAnycastStates() {
+		got[st.Addr] = st
+	}
+	if len(got) != 2 || !got["10.250.250.250"].Up || got["10.250.250.250"].Reason == "gateway paused" {
+		t.Fatalf("the announced address is shown as the paused gateway has it: %+v", got)
+	}
+	if st := got["10.250.250.251"]; st.Up || st.Reason == "" {
+		t.Fatalf("an address nobody announces: %+v", st)
+	}
+}

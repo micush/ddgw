@@ -14,7 +14,7 @@
     for (const [k, v] of Object.entries(attrs || {})) {
       if (v === false || v == null) continue;
       if (k === "class") el.className = v;
-      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else if (k.startsWith("on")) { el.addEventListener(k.slice(2), v); (el.__on = el.__on || {})[k.slice(2)] = v; }
       else if (k === "value") el.value = v;
       else if (v === true) el.setAttribute(k, "");
       else el.setAttribute(k, v);
@@ -42,10 +42,21 @@
       if (s.nodeType !== 1) { if (d.nodeValue !== s.nodeValue) d.nodeValue = s.nodeValue; return; }
       for (const at of Array.from(d.attributes)) if (at.name !== "style" && !s.hasAttribute(at.name)) d.removeAttribute(at.name);
       for (const at of Array.from(s.attributes)) if (at.name !== "style" && d.getAttribute(at.name) !== at.value) d.setAttribute(at.name, at.value);
+      // handlers: the new element's replace the old ones (they close over the new data)
+      const dOn = d.__on || {}, sOn = s.__on || {};
+      for (const ev of Object.keys(dOn)) if (dOn[ev] !== sOn[ev]) d.removeEventListener(ev, dOn[ev]);
+      for (const ev of Object.keys(sOn)) if (dOn[ev] !== sOn[ev]) d.addEventListener(ev, sOn[ev]);
+      d.__on = sOn;
+      // form state is a property, not an attribute; what the person is typing into is left alone
+      if (d.nodeName === "INPUT" && d !== document.activeElement) { if (d.type === "checkbox" || d.type === "radio") d.checked = s.checked; else if (d.value !== s.value) d.value = s.value; }
+      if (d.nodeName === "INPUT" || d.nodeName === "BUTTON") d.disabled = s.disabled;
       morph(d, s);
     });
     while (dst.childNodes.length > from.length) dst.removeChild(dst.lastChild);
   }
+  // fill(el, ...kids): what `clear(el).append(...kids)` does, but el keeps the elements it already has (see morph), so the
+  // scroll boxes inside it are not destroyed and re-created by every poll.
+  const fill = (el, ...kids) => { morph(el, h("div", {}, ...kids)); return el; };
   // Width (in chart units) the y-axis labels need: the chart's left margin grows with the longest label so big
   // numbers are never cut off.  ~6.6 units a character at the 11px axis font, plus the gap and a little edge room.
   const axisMargin = (labels, min) => Math.max(min, Math.ceil(Math.max(0, ...labels.map((t) => String(t).length)) * 6.6) + 14);
@@ -56,7 +67,7 @@
   // Everything follows the node picked in the top bar (relayed through the node
   // you are logged in to) except the login itself.  The picker's own list of
   // nodes is asked of the login node explicitly (api(..., true)).
-  const LOCAL_API = /^\/api\/(login|logout|session|proxy)(\/|\?|$)/;
+  const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download)(\/|\?|$)/;
   // The Node menu's "Cluster" entry: Monitor ▸ Statistics and Monitor ▸ Host show every node's numbers added together
   // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
   // anything else a page asks goes to this node as before.
@@ -2299,8 +2310,9 @@
       try { await api("POST", path, body || {}); say(status, "ok", okText); await VIEWS.cluster.poll(); } catch (e) { fail(status)(e); }
     }
 
-    function draw(v) {
-      clear(dyn);
+    function draw(v) { const real = dyn; dyn = h("div", {}); try { build(v); } finally { morph(real, dyn); dyn = real; } }
+    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
+    function build(v) {
       if (v.conflict) dyn.append(h("div", { class: "notice bad", role: "alert" }, "Conflict: " + v.conflict));
       for (const w of v.warnings) dyn.append(h("div", { class: "notice warn" }, w));
       if (v.last_sync_error) dyn.append(h("div", { class: "notice warn" }, "Last sync failed: " + v.last_sync_error));
@@ -2377,12 +2389,13 @@
       }
     }
 
-    function draw(v) {
-      clear(dyn);
+    function draw(v) { const real = dyn; dyn = h("div", {}); try { build(v); } finally { morph(real, dyn); dyn = real; } }
+    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
+    function build(v) {
       if (v.notice) dyn.append(h("div", { class: "notice warn", role: "alert" }, v.notice));
       if (!v.toolchain) dyn.append(h("div", { class: "notice warn" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/ddgw/go."));
       const newer = v.source_version && Number(v.source_version) > Number(v.running);
-      clear(stats).append(
+      fill(stats, 
         stat("Running", "v" + v.running), stat("Staged source", v.source_version ? "v" + v.source_version : "none"),
         stat("Auto-update", v.intent.auto_all ? "ON" : "off"),
         stat("This node", v.busy ? (v.phase || "working…") : newer ? "update available" : "up to date", true));
@@ -2697,7 +2710,7 @@
       drawChart(d);
       clear(pies).append(donut("Query types" + kindLabel(), d.types, TYPE_CLS, 8), donut("Transport" + kindLabel(), d.protos, PROTO_CLS, 2));
       const sumOf = (l) => l.reduce((a, e) => a + e.count, 0);
-      clear(tops).append(
+      fill(tops, 
         topTable("Top clients" + kindLabel(), d.clients, pickDomain ? sumOf(d.clients) : shareBase(d), clientsMore, () => { clientsMore = !clientsMore; draw(last); }, true,
           { picked: pickClient, onPick: pickC, note: pickDomain ? "Clients that asked for " + pickDomain : "", onClear: () => pickD("") }),
         topTable("Top domains" + kindLabel(), d.domains, pickClient ? sumOf(d.domains) : shareBase(d), domainsMore, () => { domainsMore = !domainsMore; draw(last); }, false,
@@ -2710,7 +2723,7 @@
     // the recent dynamic DNS updates (always the latest ones, whatever the range)
     function drawUpdates(list) {
       const at = (u) => { const d = new Date(u.at * 1000); return [h("div", { class: "small" }, d.toLocaleTimeString()), h("div", { class: "muted small" }, d.toLocaleDateString())]; };
-      clear(upds).append(h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Recent dynamic updates"), h("span", { class: "grow" }),
+      fill(upds, h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Recent dynamic updates"), h("span", { class: "grow" }),
         h("span", { class: "muted small" }, list.length ? "the last " + list.length + " of this node, newest first" : "")),
         h("div", { class: "body flush" }, list.length
           ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, ["When", "Client", "Zone", "Changes", "Primary", "Result"].map((c) => h("th", {}, c)))),
@@ -2885,7 +2898,7 @@
       const fsRows = (n.fs || []).map((f) => h("tr", {}, h("td", { class: "mono" }, f.mount), h("td", {}, f.device + " · " + f.type), h("td", { class: "num" }, bytes(f.used) + " of " + bytes(f.total)), h("td", { class: "num" }, pc(f.pct))));
       const ifRows = (n.ifaces || []).map((i) => h("tr", { class: i.counted ? null : "muted" }, h("td", { class: "mono" }, i.name), h("td", { title: i.counted ? null : "Not in the totals" }, i.up ? "up" : "down", i.counted ? "" : " *"),
         h("td", { class: "num" }, i.speed ? i.speed + " Mb/s" : "–"), h("td", { class: "num" }, bits(i.rx_bps)), h("td", { class: "num" }, bits(i.tx_bps)), h("td", { class: "num" }, i.util_pct >= 0 ? pc(i.util_pct) : "–")));
-      clear(tables).append(
+      fill(tables, 
         h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Filesystems")), h("div", { class: "body flush" }, fsRows.length
           ? h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Mount"), h("th", {}, "Device"), h("th", { class: "num" }, "Used"), h("th", { class: "num" }, "Use"))), h("tbody", {}, fsRows))
           : h("div", { class: "empty" }, "No disk filesystems found."))),
@@ -2950,7 +2963,7 @@
 
   // ── Log, Monitor  (CLI: --log) ───────────────────────────────────────────────
   VIEWS.log = (() => {
-    let status, level, span, count, search, live, info, box, first, timer, seq = 0, shown = [];
+    let status, level, span, count, search, live, info, box, first, timer, tsBtn, tsCap, tsHold = 0, seq = 0, shown = [];
     const sel = (label, opts, val, onchange) => {
       const el = h("select", { "aria-label": label, onchange }, opts.map(([v, t]) => h("option", { value: v }, t)));
       el.value = val;
@@ -2990,10 +3003,20 @@
       try {
         const r = (await api("GET", "/api/log?" + q.toString())).data;
         if (my !== seq) return; // a newer request is on its way
-        clear(status);
+        if (Date.now() > tsHold) clear(status);   // not while the troubleshooting bundle is saying something
         draw(r);
         first = false;
       } catch (e) { fail(status)(e); }
+    }
+    // the troubleshooting bundle: every node's logs, configuration and state in one .tgz, asked of the node signed in to
+    async function tshoot() {
+      tsBtn.disabled = true; tsHold = Infinity;
+      say(status, "info", "Collecting from every node… this takes up to a minute.");
+      try {
+        await apiDownload("/api/tshoot/download?capture=" + (tsCap.checked ? "1" : "0"), "ddgw-tshoot.tgz");
+        say(status, "info", "Downloaded. Passwords, the gateway key, tokens and join codes are removed; README.txt in it lists what it holds.");
+      } catch (e) { fail(status)(e); }
+      tsBtn.disabled = false; tsHold = Date.now() + 20000;
     }
     function download() {
       const text = shown.map((l) => l.raw).join("\n") + "\n";
@@ -3011,13 +3034,16 @@
         search = h("input", { type: "search", placeholder: "Filter words…", "aria-label": "Filter text", spellcheck: "false", class: "grow",
           oninput: () => { clearTimeout(timer); timer = setTimeout(load, 300); } });
         live = h("input", { type: "checkbox", checked: true });
+        tsCap = h("input", { type: "checkbox" });
+        tsBtn = h("button", { class: "btn", type: "button", onclick: tshoot }, "Troubleshooting bundle");
         info = h("div", { class: "hint nomargin" });
         box = h("div", { class: "logbox", tabindex: "0", role: "log", "aria-label": "Log lines" });
         main.append(status, section("Log",
           h("div", { class: "toolbar tight logbar" }, search, level, span, count,
             h("label", { class: "opt" }, live, " Live"),
             h("button", { class: "btn", type: "button", onclick: load }, "Refresh"),
-            h("button", { class: "btn", type: "button", onclick: download }, "Download")),
+            h("button", { class: "btn", type: "button", onclick: download }, "Download"),
+            tsBtn, h("label", { class: "opt" }, tsCap, " with capture")),
           box, info));
       },
       async poll() {
@@ -3172,9 +3198,10 @@
     const stateKind = (st) => (st === "Established" ? "ok" : st === "Active" || st === "Connect" || st === "OpenSent" || st === "OpenConfirm" ? "warn" : "bad");
     const bfdKind = (st) => (st === "up" ? "ok" : st === "init" ? "warn" : st === "down" ? "bad" : "");
 
-    function draw(st) {
+    function draw(st) { const real = box; box = h("div", {}); try { build(st); } finally { morph(real, box); box = real; } }
+    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
+    function build(st) {
       const c = st.config;
-      clear(box);
       if (!c.asn) {
         box.append(section("BGP", h("div", { class: "notice info", role: "status" },
           "BGP is off on this node. Set a local AS number under Configure → Anycast and the anycast addresses of the gateways are announced to your neighbors.")));
@@ -3352,9 +3379,10 @@
       catch (e) { fail(status)(e); }
     }
 
-    function draw(st) {
+    function draw(st) { const real = box; box = h("div", {}); try { build(st); } finally { morph(real, box); box = real; } }
+    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
+    function build(st) {
       const c = st.config;
-      clear(box);
       if (!c.asn) {
         box.append(section("BGP", h("div", { class: "notice info", role: "status" },
           "BGP is off on this node. Set a local AS number under Configure → Anycast first.")));
@@ -3433,8 +3461,9 @@
       }
     }
 
-    function draw() {
-      clear(box);
+    function draw() { const real = box; box = h("div", {}); try { build(); } finally { morph(real, box); box = real; } }
+    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
+    function build() {
       if (!users.length) {
         box.append(h("div", { class: "empty" }, "No account is in the " + group + " group, so nobody can sign in. Add one above."));
         return;

@@ -519,6 +519,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
+| `--tshoot` `[--all-nodes] [--tshoot-capture] [--tshoot-file F]` | Log page ▸ Troubleshooting bundle |
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
@@ -813,6 +814,16 @@ answering on a server, so one failing domain shows even while the server stays u
 Node menu the page shows any member's log. `--log` without `--log-lines` prints the whole
 matching log.
 
+**Troubleshooting bundle** (Monitor ▸ Log, or `ddgw --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed
+to find out why something does not work, from every node: the log (newest 20000 lines), configuration and its versions,
+cluster, gateway, DNS, BGP, anycast, virtual-MAC and update state, host numbers, addresses, links, routes, rules, neighbors,
+ARP, sockets, the ARP/routing sysctl settings, firewall rules, FRR's BGP/BFD output, service status, the journal and kernel
+log tail. `with capture` / `--tshoot-capture` adds 8 s of ARP and neighbor-discovery traffic per gateway interface.
+Passwords, the gateway key, tokens, join codes and private keys are removed (each node's `README.txt` says how many) and
+other programs' command lines are not included. Read-only; a node that cannot be reached has a note in the bundle.
+
+    ddgw --tshoot --all-nodes                # ddgw-tshoot-HOST-TIME.tgz, every node
+    ddgw --tshoot --tshoot-file /tmp/t.tgz   # this node only
     ddgw --log --log-min warn --log-since 6h
     ddgw --log --log-grep "server 192.0.2.53" --log-lines 200
 

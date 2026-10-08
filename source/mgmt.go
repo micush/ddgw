@@ -44,6 +44,7 @@ type Mgmt struct {
 	gwIPsFn   func() []string       // the addresses this node uses in the gateway protocol, one per family of each group
 	pausedFn  func() bool           // whether this whole node is paused (Operate ▸ Node)
 	anycastFn func() []AnycastState // the anycast addresses and whether each is announced now
+	tshootFn  func() map[string]any // what only the status server knows, for the troubleshooting bundle (see tshoot.go)
 	servMu    sync.Mutex
 	servSince map[int]time.Time // when each gateway started being served continuously
 	bgp       *BGPManager       // keeps FRR in line with the BGP settings

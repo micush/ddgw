@@ -1,5 +1,35 @@
 # Changelog
 
+## [v234] - 2026-10-07 — Troubleshooting bundle
+
+### Added
+- **Monitor ▸ Log ▸ Troubleshooting bundle** (and `ddgw --tshoot [--all-nodes] [--tshoot-capture] [--tshoot-file F]`): one .tgz with a folder per node holding what is needed to find out why something does not work: the log (newest 20000 lines), the configuration and its saved versions, cluster, gateway, DNS-pool, BGP, anycast, virtual-MAC-test and update state, host numbers for the last hour, `ip addr/link/route (all tables)/rule/neigh`, `/proc/net` ARP and routes, sockets, the ARP/routing sysctl settings, nftables and iptables, FRR's BGP and BFD output and configuration, service status, the Anyname journal, the kernel log tail and system information. `with capture` adds 8 s of ARP and neighbor-discovery capture per gateway interface.
+- The node you are signed in to asks every other node itself (the node picker does not matter), all at once; a node that cannot be reached, or that is on a version without the bundle, has a `NOT-COLLECTED.txt` and a line in the top `README.txt`. One node's part is kept under 3 MB (the cluster channel's limit) by cutting the oldest log lines. Read-only; each use is logged with the user's name.
+- **Secrets are removed before anything is written**: every JSON value whose key is a password, the gateway key, a token, a join code, a private key, a cookie or similar, and the same words in free text (FRR's `password …`, `secret`, `md5`, `community`). Each node's `README.txt` says how many were removed. Other programs' command lines are not collected (the process list has names only). Packet captures and query statistics are not included unless asked for / at all.
+- Tests: redaction of JSON and text, tar round trip (including a path that tries to leave the node's folder), one node's bundle, and a two-node cluster bundle including an unreachable node.
+
+### Verified
+- Live, real PAM (scratch user, group and PAM file, removed afterwards), one real daemon: `--tshoot` wrote a 17 KB bundle with 32 files and no leftover test password; the GUI button downloaded `ddgw-tshoot-<host>-<time>.tgz` in headless Chromium and showed its note; no page errors.
+- `gofmt -l .`, `go build`, `go vet ./...`, `node --check`, `go test -race -count=1 ./...` (all passed this time), cgo-off vet, five cross-compiles.
+
+### Not verified
+- A real FRR (vtysh is not installed in the sandbox, so those files say so), nftables rules, and a real cluster of two machines (the cluster path is tested with two in-process nodes).
+- The capture option live.
+
+## [v233] - 2026-10-07 — Scroll bars stay put on every polling page; a shared anycast address is no longer shown as "gateway paused"
+
+### Fixed
+- **The scroll bar on Monitor ▸ Anycast ▸ Neighbors blinked and a bar you had moved snapped back after a second.** v213 fixed only Gateways, Cluster-members and DNS; every other page that refreshes itself still emptied its container and built all of it again, destroying the scroll box under the pointer. Now fixed in the one place all of them share: the redraw helper (`morph`) also carries over event handlers, form state (checked, value, disabled; a field being typed in is left alone), and `fill()` replaces `clear(x).append(…)`. Converted: Monitor ▸ Anycast, Operate ▸ Anycast, Cluster, Upgrade (tiles, Nodes and History), Users, Statistics (top lists, dynamic updates) and Host (tables). The Log and Capture pages append lines and were never rebuilt; the Topology drawing keeps its own box (v136).
+- **Monitor ▸ Anycast showed an anycast address as "withdrawn — gateway paused" while the gateway serving it was running.** Since v231 one address can be on several gateways, but the list showed it once, as the first gateway had it, and the first gateway was paused on this node. It now shows the address as its best gateway has it (announced, else running and why not, else not running, else paused). Test: `TestAllAnycastStatesSharedAddress`.
+
+### Verified
+- Live, real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium at 520 px so the tables scroll: after moving each page's scroll box and waiting past two polls, the same element was still there and still scrolled, on Monitor ▸ Anycast, Operate ▸ Anycast, Cluster, Upgrade and Host (Users has nothing to scroll at that width; Statistics had no table to move); no page errors; the Operate neighbor's right-click menu and the Upgrade buttons still work after the polls.
+- `gofmt -l .`, `go build`, `go vet ./...`, `node --check`; `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature`; cgo-off vet; five cross-compiles.
+
+### Not verified
+- A real overlay-scroll-bar desktop (the flashing is most visible there); the fix is that the scroll boxes are no longer rebuilt, which the element-identity check shows.
+- The Statistics and Host pages with their tables wider than the window.
+
 ## [v232] - 2026-10-07 — Updates no longer wait for a member that can never cover the gateway
 
 ### Fixed

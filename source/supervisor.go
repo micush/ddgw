@@ -297,7 +297,8 @@ func (s *Supervisor) allCaches() []*respCache {
 
 func (s *Supervisor) AllAnycastStates() []AnycastState {
 	var out []AnycastState
-	seen := map[string]bool{}
+	at := map[string]int{} // address -> index in out
+	rank := map[string]int{}
 	for _, g := range s.config().Groups {
 		st := s.AnycastStates(g.GroupID)
 		have := map[string]AnycastState{}
@@ -305,10 +306,6 @@ func (s *Supervisor) AllAnycastStates() []AnycastState {
 			have[a.Addr] = a
 		}
 		for _, addr := range g.ExtraVIPs {
-			if seen[addr] {
-				continue
-			}
-			seen[addr] = true
 			a, ok := have[addr]
 			if !ok {
 				why := "gateway not running on this node"
@@ -318,6 +315,26 @@ func (s *Supervisor) AllAnycastStates() []AnycastState {
 				a = AnycastState{Addr: addr, Reason: why}
 			}
 			a.Paused = g.pausedAnycast()[addr]
+			// one address may be carried by several gateways: it is shown once, as its best gateway has it (announced, else
+			// one that is running and says why not, else one that is not running, else one that is paused)
+			r := 1
+			switch {
+			case a.Up:
+				r = 4
+			case a.Paused == "" && !g.Paused && ok:
+				r = 3
+			case a.Paused == "" && !g.Paused:
+				r = 2
+			}
+			if i, dup := at[addr]; dup {
+				if r > rank[addr] {
+					out[i], rank[addr] = a, r
+				} else if a.Paused == "" && out[i].Paused != "" && r == rank[addr] {
+					out[i].Paused = ""
+				}
+				continue
+			}
+			at[addr], rank[addr] = len(out), r
 			out = append(out, a)
 		}
 	}

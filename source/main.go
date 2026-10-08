@@ -70,6 +70,12 @@ the web GUI):
                                         [--fail-threshold N] [--max-attempts N] [--latency-alpha A]
                                           (this gateway's own load balancing; --lb settings goes back to
                                            following Settings, which is the default)
+                   --tshoot [--all-nodes] [--tshoot-capture] [--tshoot-file F.tgz]
+                                         (a troubleshooting bundle for support: logs, configuration, gateway, DNS, BGP and
+                                         anycast state, addresses, routes, neighbors, firewall, FRR, service status, host
+                                         numbers — of this node, or of every node with --all-nodes; --tshoot-capture adds
+                                         8 s of ARP / neighbor-discovery traffic per gateway interface. Passwords, the
+                                         gateway key, tokens and join codes are removed.)
                    --test-vmac [--group N]   (can clients' replies reach this node through virtual MACs? sends an ARP/NS
                                          probe from a throwaway virtual MAC and listens for the answer; changes nothing.
                                          When it says "not delivered": --canvas-set gateway --group N --real-macs on)
@@ -443,6 +449,9 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	}
 	mg.pausedFn = func() bool { return sup.config().NodePaused }
 	mg.anycastFn = sup.AllAnycastStates
+	mg.tshootFn = func() map[string]any {
+		return map[string]any{"canvas": st.canvasGroups(), "dns-pools": st.dnsStatus(), "gateway-snapshot": st.snapshot()}
+	}
 	if err := st.Start(); err != nil {
 		warnf("status socket unavailable (%s): %v — --show-* commands will not work", sockPath, err)
 	}

@@ -496,6 +496,7 @@ func (w *WebServer) registerCapture(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/clustercapture/start", w.authed(w.op("capture.cluster.start", nil)))
 	mux.HandleFunc("GET /api/clustercapture/status", w.authed(w.op("capture.cluster.status", nil)))
 	mux.HandleFunc("GET /api/clustercapture/download", w.authed(w.handleClusterCaptureDownload))
+	w.registerTshoot(mux)
 }
 
 // handleCaptureDownload sends the buffer of this node's Capture page as a .tgz holding one .pcap.  Reached through another

@@ -471,6 +471,8 @@ const DDGW_HELP = {
         "**Time range** and **lines** bound the answer; the status line under the list says when older lines were cut.",
         "**Live** refreshes every few seconds and follows the newest line while you are at the bottom; scroll up to read and it stops following. **Download** saves what is shown as a text file.",
       ]],
+      ["h", "Troubleshooting bundle"],
+      "**Troubleshooting bundle** downloads one .tgz with everything that helps to find out why something does not work, from **every node** of the cluster (the node you are signed in to asks the others, whichever node the Node menu has picked): each node's log (the newest 20000 lines), configuration and its saved versions, cluster view, gateway, DNS-pool, BGP, anycast, virtual-MAC-test and update state, host numbers for the last hour, the addresses, links, routes (every table), rules, neighbors, ARP, listening sockets, the sysctl settings that matter to ARP and routing, the firewall rules, FRR's BGP and BFD output and configuration, service status, the system journal of Anyname, the kernel log tail and the system's version and load. **with capture** adds 8 seconds of ARP and neighbor-discovery traffic on each gateway interface. Passwords, the gateway key, tokens, join codes and private keys are removed before anything is written, command lines of other programs are not included, and each node's README.txt lists the files and says what could not be collected. A node that cannot be reached has a note instead of a folder. Nothing is changed on any node.",
       ["h", "What is logged"],
       "Server up and down changes, domains that start or stop answering on a server (so a single failing domain shows even while the server stays up), gateway start-up and hand-over, a node's CPU, memory or fullest disk going over 85% (a warning, naming what is over; this node and every cluster member) and the line when it is back at 85% or below, configuration changes (each one says what was enabled, disabled, paused or resumed), updates (including auto-update turned on or off), BGP and web sign-in events.",
       ["h", "Fields"],
@@ -481,7 +483,7 @@ const DDGW_HELP = {
         ["Lines", "The most lines shown: 200, 1000 (default) or 5000, newest kept."],
         ["Live", "Ticked (the default): the list refreshes every few seconds and follows the newest line while you are at the bottom."],
       ]],
-      ["cli", "ddgw --log\nddgw --log --log-min warn --log-since 6h\nddgw --log --log-grep \"server 192.0.2.53\" --log-lines 200\n(without --log-lines the whole matching log is printed; redirect it to a file to keep it)"],
+      ["cli", "ddgw --tshoot --all-nodes   (the troubleshooting bundle of every node, written to ddgw-tshoot-HOST-TIME.tgz; without --all-nodes just this node; --tshoot-capture adds 8 s of ARP / neighbor-discovery traffic; --tshoot-file F.tgz names the file)\nddgw --log\nddgw --log --log-min warn --log-since 6h\nddgw --log --log-grep \"server 192.0.2.53\" --log-lines 200\n(without --log-lines the whole matching log is printed; redirect it to a file to keep it)"],
     ],
   },
   node: {
