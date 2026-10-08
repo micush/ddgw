@@ -747,7 +747,7 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 					return "", fmt.Errorf("gateway %d already exists", id)
 				}
 			}
-			g := defaultGroup()
+			g := newGatewayGroup()
 			g.GroupID = id
 			g.VIP4, g.VIP6 = "", ""
 			if e.Label != "-" {

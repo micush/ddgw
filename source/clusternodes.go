@@ -210,9 +210,29 @@ func (s *StatusServer) markNodes(groups []CanvasGateway) {
 	}
 	for i := range groups {
 		groups[i].Nodes = s.mg.cl.canvasNodesEx(groups[i].GroupID, groups[i].Status, groups[i].Detail, groups[i].NodePaused, groups[i].ExcludedNodes)
+		if groups[i].PausedScope == "all" {
+			labelPausedAll(groups[i].Nodes)
+		}
 		if len(groups[i].Nodes) > 0 {
 			groups[i].ClusterStatus, groups[i].ClusterDetail = clusterGateway(groups[i].Nodes)
 		}
+	}
+}
+
+// labelPausedAll words the nodes of a gateway that is paused on every node (a shared setting): a node that answers and
+// does not serve it is "paused", as this node's own shape says, not the "not serving" it reads when only that node lacks it.
+// A node that does not answer stays "not answering", and a removed one "removed".
+func labelPausedAll(nodes []CanvasNode) {
+	const old, now = "This gateway is paused or not set up on that node", "Paused on all nodes — none of them serves it until it is resumed"
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Self || n.Excluded || !n.Reachable || n.Paused || n.Gw != "paused" {
+			continue
+		}
+		if n.Label == "not serving" { // not when the label is a host-load warning, which says something else
+			n.Label = "paused"
+		}
+		n.Detail = strings.Replace(n.Detail, old, now, 1)
 	}
 }
 

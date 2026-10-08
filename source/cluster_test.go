@@ -890,3 +890,26 @@ func TestUpdateSafeForTheOnlyMember(t *testing.T) {
 		t.Fatalf("a member removed from the gateway must not hold the update back: %q", why)
 	}
 }
+
+// A gateway paused on every node reads "paused" on every node that answers, not "not serving".
+func TestLabelPausedAll(t *testing.T) {
+	nodes := []CanvasNode{
+		{Self: true, Reachable: true, Status: "paused", Label: "paused", Gw: "paused"},
+		{Reachable: true, Status: "paused", Label: "not serving", Gw: "paused", Detail: "This gateway is paused or not set up on that node"},
+		{Reachable: true, Status: "warn", Label: "not serving", Gw: "notserving", Detail: "That node is up but is not serving this gateway (yet)"},
+		{Reachable: false, Status: "bad", Label: "not answering", Gw: "down"},
+		{Reachable: true, Excluded: true, Status: "paused", Label: "removed", Gw: "removed"},
+		{Reachable: true, Status: "paused", Label: "paused", Gw: "paused", Paused: true, Detail: "This node is paused"},
+		{Reachable: true, Status: "warn", Label: "disk 91%", Gw: "paused", Detail: "Over 85%: disk 91%. This gateway is paused or not set up on that node"},
+	}
+	labelPausedAll(nodes)
+	if nodes[1].Label != "paused" || nodes[1].Status != "paused" || !strings.Contains(nodes[1].Detail, "all nodes") {
+		t.Fatalf("a node that answers: %+v", nodes[1])
+	}
+	if nodes[0].Label != "paused" || nodes[2].Label != "not serving" || nodes[3].Label != "not answering" || nodes[4].Label != "removed" || nodes[5].Detail != "This node is paused" {
+		t.Fatalf("the others must keep their words: %+v", nodes)
+	}
+	if nodes[6].Label != "disk 91%" || !strings.Contains(nodes[6].Detail, "Over 85%") || !strings.Contains(nodes[6].Detail, "all nodes") {
+		t.Fatalf("a node that is also over the load limit keeps its warning: %+v", nodes[6])
+	}
+}

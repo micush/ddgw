@@ -529,6 +529,9 @@ func (s *Supervisor) refreshPool(nu *DaemonConfig, preprobe bool) map[int]bool {
 			continue
 		}
 		p := NewPool(c)
+		if cur := oldPools[k]; cur != nil && cur.cache != nil && p.cache != nil && cacheCarries(oldCfg[k], c) {
+			p.cache = cur.cache // servers changed, not the cache: what it holds is still right (cachewarm.go)
+		}
 		if preprobe {
 			most := 1
 			for _, sv := range c.Servers {
@@ -597,6 +600,11 @@ func (s *Supervisor) Reload(nu *DaemonConfig) {
 		newGroups[nu.Groups[i].GroupID] = &nu.Groups[i]
 	}
 
+	type restartJob struct {
+		gc      GroupConfig
+		engines []*Engine
+	}
+	var restarts []restartJob
 	var stopped []*Engine
 	s.mu.Lock()
 	for gid := range oldGroups {
@@ -619,11 +627,10 @@ func (s *Supervisor) Reload(nu *DaemonConfig) {
 			s.startGroupWhenReadyLocked(*gc)
 		case restartDiffers(oldGC, gc):
 			infof("Group %d core config changed — restarting engines", gid)
-			// Stop before start: the new engine recreates the same macvlan names.
-			for _, e := range s.stopGroupLocked(gid) {
-				e.Stop()
-			}
-			s.startGroupWhenReadyLocked(*gc)
+			// Stop before start (the new engine recreates the same macvlan names), but not while holding s.mu: Stop
+			// says goodbye to the group, tears down interfaces and runs commands, and every status request needs
+			// s.mu, so a slow or stuck stop used to make the whole node stop answering the cluster.
+			restarts = append(restarts, restartJob{*gc, s.stopGroupLocked(gid)})
 		default:
 			if !sameList(oldGC.ExtraVIPs, gc.ExtraVIPs) {
 				// anycast addresses are independent of the election: change them
@@ -658,13 +665,24 @@ func (s *Supervisor) Reload(nu *DaemonConfig) {
 	s.dc = nu
 	s.mu.Unlock()
 
-	// Stop outside the lock; Stop tears down interfaces and can be slow.
+	// Stop outside the lock; Stop tears down interfaces and can be slow.  Gateways that restart are stopped with the
+	// removed ones, all at once, and started again when every stop is done.
+	for _, r := range restarts {
+		stopped = append(stopped, r.engines...)
+	}
 	var wg sync.WaitGroup
 	for _, e := range stopped {
 		wg.Add(1)
 		go func() { defer wg.Done(); e.Stop() }()
 	}
 	wg.Wait()
+	if len(restarts) > 0 {
+		s.mu.Lock()
+		for _, r := range restarts {
+			s.startGroupWhenReadyLocked(r.gc) // reloadMu is held, so no other Reload has changed the group since
+		}
+		s.mu.Unlock()
+	}
 }
 
 func liveDiffers(a, b *GroupConfig) bool {

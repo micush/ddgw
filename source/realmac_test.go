@@ -369,3 +369,18 @@ func TestGatewayViewShowsTheRealMAC(t *testing.T) {
 		t.Fatalf("default: %q", m.VMAC)
 	}
 }
+
+func TestNewGatewaysStartWithRealMACs(t *testing.T) {
+	if !newGatewayGroup().RealMACs || !newDaemonConfig().Groups[0].RealMACs {
+		t.Fatal("a gateway created now must start with real MAC addresses")
+	}
+	// a group in a file that does not say it keeps the old way
+	var g GroupConfig
+	if err := json.Unmarshal([]byte(`{"group_id":1,"interface":"eth0","vip4":"10.0.0.1/24"}`), &g); err != nil || g.RealMACs {
+		t.Fatalf("an existing group changed: %v %v", err, g.RealMACs)
+	}
+	var dc DaemonConfig
+	if err := json.Unmarshal([]byte(`{"groups":[{"group_id":1,"interface":"eth0","vip4":"10.0.0.1/24"}]}`), &dc); err != nil || dc.Groups[0].RealMACs {
+		t.Fatalf("an existing config changed: %v", err)
+	}
+}

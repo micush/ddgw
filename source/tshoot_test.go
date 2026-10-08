@@ -70,10 +70,13 @@ func TestTshootNodeBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"README.txt", "ddgw/config.json", "ddgw/cluster.json", "system/system.txt", "net/ip-addr.txt", "ddgw/virtual-mac-tests.json"} {
+	for _, want := range []string{"README.txt", "ddgw/config.json", "ddgw/cluster.json", "system/system.txt", "net/ip-addr.txt", "ddgw/virtual-mac-tests.json", "ddgw/goroutines.txt"} {
 		if _, ok := files[want]; !ok {
 			t.Errorf("%s is missing; have %d files", want, len(files))
 		}
+	}
+	if g := string(files["ddgw/goroutines.txt"]); !strings.Contains(g, "goroutine ") || !strings.Contains(g, "TestTshootNodeBundle") {
+		t.Fatalf("the goroutine dump is missing or empty: %.200s", g)
 	}
 	if c := string(files["ddgw/config.json"]); strings.Contains(c, `"key": "dgw"`) {
 		t.Errorf("the gateway key is in the bundle: %s", c)

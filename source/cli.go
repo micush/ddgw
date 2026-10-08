@@ -132,7 +132,7 @@ func (f *cliFlags) run(sock string) bool {
 	case *f.canvas:
 		showCanvas(sock)
 	case *f.tshoot:
-		runTshoot(sock, *f.allNodes, *f.tshootCapture, *f.tshootFile)
+		runTshoot(sock, *f.allNodes, true, *f.tshootFile) // --tshoot-capture is still accepted; the capture is always taken now
 	case *f.vmacTest:
 		showVmacTest(sock, *f.group)
 	case *f.canvasAdd != "" || *f.canvasDel != "" || *f.canvasSet != "" || *f.canvasPause != "" || *f.canvasResume != "" || *f.canvasMove != "":

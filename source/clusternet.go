@@ -241,6 +241,7 @@ func (c *Cluster) applyListener() {
 	mux.HandleFunc("GET /cluster/source", c.peerAuth(c.handleSource))
 	mux.HandleFunc("POST /cluster/proxy", c.peerAuth(c.handleProxy))
 	mux.HandleFunc("POST /cluster/hist", c.peerAuth(c.handleHist))
+	mux.HandleFunc("POST /cluster/cache", c.peerAuth(c.handleCache))
 	mux.HandleFunc("POST /cluster/users", c.peerAuth(c.handleUsers))
 	srv := &http.Server{
 		ErrorLog: log.New(io.Discard, "", 0), Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
@@ -533,15 +534,22 @@ func (c *Cluster) addrsFor(peer ClusterPeer) []string {
 	c.mu.Lock()
 	good := c.goodAddr[peer.Addr]
 	c.mu.Unlock()
-	out := make([]string, 0, len(all))
+	// Addresses first, names last: a name needs DNS, which may be this very cluster's gateway (paused or
+	// restarting), while an address needs nothing. Within each group the last one that worked comes first.
+	var ips, names []string
 	seen := map[string]bool{}
 	for _, a := range append([]string{good}, all...) {
-		if a != "" && !seen[a] {
-			seen[a] = true
-			out = append(out, a)
+		if a == "" || seen[a] {
+			continue
+		}
+		seen[a] = true
+		if h, _, err := net.SplitHostPort(a); err == nil && net.ParseIP(h) != nil {
+			ips = append(ips, a)
+		} else {
+			names = append(names, a)
 		}
 	}
-	return out
+	return append(ips, names...)
 }
 
 func (c *Cluster) noteGoodAddr(peer ClusterPeer, addr string) {
@@ -1272,6 +1280,15 @@ func (c *Cluster) SyncOnce(ctx context.Context) error {
 			continue
 		}
 		m := pi.Msg
+		// Remember the peer's own addresses (saved with the member list), so that after a restart the cluster
+		// can reach it without asking DNS, which may be the very service that is down.
+		for _, p := range snap.Peers {
+			if p.Addr == addr {
+				if np, ok := learnPeerAddrs(p, addrList(m.Addrs)); ok {
+					c.node.AddPeer(np)
+				}
+			}
+		}
 		if m.Epoch > c.node.Snapshot().Epoch {
 			if s, err := c.node.AdoptAnnounce(m.Epoch, m.PrimaryAddr); err == nil {
 				infof("cluster: learned from %s that %s is primary at epoch %d (this node is now %s)", addr, s.PrimaryAddr, s.Epoch, s.Role)
@@ -1888,4 +1905,47 @@ func (c *Cluster) handleUsers(rw http.ResponseWriter, r *http.Request, caller Cl
 	}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Write([]byte(`{}`))
+}
+
+// learnPeerAddrs returns p with its alternative addresses brought up to date with the IP addresses the peer
+// reported about itself (ips, without port): the IP alternatives are replaced by them, names are kept. ok is
+// false when nothing changes. At most 12 alternatives are kept, as in refreshAlts.
+func learnPeerAddrs(p ClusterPeer, ips []string) (ClusterPeer, bool) {
+	_, port, err := net.SplitHostPort(p.Addr)
+	if err != nil || len(ips) == 0 {
+		return p, false
+	}
+	var alts []string
+	for _, a := range p.Alts {
+		if h, _, err := net.SplitHostPort(a); err == nil && net.ParseIP(h) == nil {
+			alts = append(alts, a)
+		}
+	}
+	var have []string
+	for _, ip := range ips {
+		if net.ParseIP(ip) == nil {
+			continue
+		}
+		a := net.JoinHostPort(ip, port)
+		if a != p.Addr && !containsStr(alts, a) {
+			have = append(have, a)
+		}
+	}
+	alts = append(have, alts...)
+	if len(alts) > 12 {
+		alts = alts[:12]
+	}
+	if len(alts) == len(p.Alts) {
+		same := true
+		for i := range alts {
+			if alts[i] != p.Alts[i] {
+				same = false
+			}
+		}
+		if same {
+			return p, false
+		}
+	}
+	p.Alts = alts
+	return p, true
 }

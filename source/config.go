@@ -138,6 +138,16 @@ type GroupConfig struct {
 	ExcludedHere  bool     `json:"-"`
 }
 
+// newGatewayGroup is the starting point of a gateway that is created now (first start, Add gateway, --canvas-add,
+// --configure): the same as defaultGroup but with real MAC addresses on, which is what most networks need (a VMware
+// port group, a cloud, a switch with port security).  defaultGroup itself stays off: a group read from a file that does
+// not say real_macs is off, as it always was, so an upgrade changes no running gateway.
+func newGatewayGroup() GroupConfig {
+	g := defaultGroup()
+	g.RealMACs = true
+	return g
+}
+
 func defaultGroup() GroupConfig {
 	return GroupConfig{
 		GroupID:   1,
@@ -824,7 +834,7 @@ func (dc *DaemonConfig) effective() *DaemonConfig {
 }
 
 func newDaemonConfig() *DaemonConfig {
-	return &DaemonConfig{LogLevel: "info", Groups: []GroupConfig{defaultGroup()},
+	return &DaemonConfig{LogLevel: "info", Groups: []GroupConfig{newGatewayGroup()},
 		DNS: defaultDNS(), Web: defaultWeb(), Cluster: defaultCluster()}
 }
 
@@ -842,7 +852,7 @@ func (dc *DaemonConfig) UnmarshalJSON(b []byte) error {
 	}
 	_ = json.Unmarshal(b, &probe)
 	if a.Groups == nil && (len(probe.Groups) == 0 || string(probe.Groups) == "null") {
-		a.Groups = []GroupConfig{defaultGroup()}
+		a.Groups = []GroupConfig{newGatewayGroup()}
 	}
 	if a.Groups == nil {
 		a.Groups = []GroupConfig{}

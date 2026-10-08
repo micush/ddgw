@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Real-MAC mode (gateway setting real_macs; the default is off, the virtual-MAC way).
+// Real-MAC mode (gateway setting real_macs; on for a gateway created now, off for one read from a file that does not say, the virtual-MAC way).
 //
 // Without virtual MACs there is no macvlan and nothing to take over: every node holds the VIP on lo (as a forwarder
 // always did), the controller answers ARP and neighbor solicitations for it, and the answer names the REAL MAC address of

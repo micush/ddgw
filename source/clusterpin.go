@@ -44,8 +44,7 @@ func learnPinnedCert(ctx context.Context, addr, fp string) (*x509.Certificate, e
 	if v, ok := pinnedCerts.Load(fp); ok {
 		return v.(*x509.Certificate), nil
 	}
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	conn, err := dialPeerTCP(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +68,55 @@ func learnPinnedCert(ctx context.Context, addr, fp string) (*x509.Certificate, e
 	return certs[0], nil
 }
 
+// peerLookupTimeout bounds a name lookup for a peer. Nodes are usually reached by name, and the name is often
+// served by this very daemon's DNS gateway: with that gateway paused or restarting on every node the lookup
+// has nobody to ask, and waiting for it would make every peer look "not answering" for as long as the gateway
+// is down, though the peers themselves are fine.
+const peerLookupTimeout = 2 * time.Second
+
+var (
+	lookupPeerHost = net.DefaultResolver.LookupHost // replaced in tests
+	peerHostAddrs  sync.Map                         // host -> []string, the addresses it last resolved to
+)
+
+// dialPeerTCP connects to addr (host:port). A name is resolved within peerLookupTimeout; if that fails the
+// addresses it last resolved to are used, so a cluster keeps talking to its members while name service is down.
+func dialPeerTCP(ctx context.Context, addr string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	var d net.Dialer
+	if net.ParseIP(host) != nil {
+		return d.DialContext(ctx, "tcp", addr)
+	}
+	lctx, cancel := context.WithTimeout(ctx, peerLookupTimeout)
+	ips, lerr := lookupPeerHost(lctx, host)
+	cancel()
+	if lerr == nil && len(ips) > 0 {
+		peerHostAddrs.Store(host, ips)
+	} else if v, ok := peerHostAddrs.Load(host); ok {
+		ips = v.([]string)
+	} else {
+		if lerr == nil {
+			lerr = errors.New("no address for " + host)
+		}
+		return nil, lerr
+	}
+	var last error
+	for _, ip := range ips {
+		c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, port))
+		if err == nil {
+			return c, nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, last
+}
+
 // dialPinned opens a TLS connection to addr that is verified against the
 // certificate pinned by fp.
 func dialPinned(ctx context.Context, addr, fp string) (net.Conn, error) {
@@ -87,8 +135,7 @@ func dialPinnedAs(ctx context.Context, addr, fp string, me *tls.Certificate) (ne
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(cert)
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	conn, err := dialPeerTCP(ctx, addr)
 	if err != nil {
 		return nil, err
 	}

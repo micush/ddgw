@@ -1,5 +1,123 @@
 # Changelog
 
+## [v246] - 2026-10-08 — New gateways start with "Use real MAC addresses" on
+
+### Changed
+- A gateway created now starts with real MAC addresses on: the first gateway of a fresh install, **Add gateway** in the GUI, `--canvas-add gateway`, and `--configure` (its question defaults to yes). Most networks need it (a VMware port group that is not promiscuous, a cloud with one MAC per interface, a switch with port security), and the setting is still shared by the cluster and can be switched off per gateway.
+- **Gateways that already exist are not touched.** A gateway in a saved configuration or in the cluster's shared settings that does not say `real_macs` still reads as off, so an upgrade restarts nothing and moves no MAC. Switch an existing gateway over in its Edit form, or with `--canvas-set gateway --group N --real-macs on`.
+- Help, the field's hint and the README say so.
+- Test: `TestNewGatewaysStartWithRealMACs` (new gateways on, groups read from a file that does not say stay off).
+
+### Not verified
+- Real-MAC mode itself is unchanged and was not re-run on hardware here; its tests (`realmac_test.go`) pass.
+
+### Verified
+- `gofmt -l .`, `node --check`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v245] - 2026-10-08 — Each node remembers its peers' IP addresses
+
+### Changed
+- The member list a node saves (`cluster.json` state) already carried each peer's alternative addresses, but they came from the join and were only ever replaced by gossip. Now every successful status poll compares the addresses a peer reports about itself (IPv4, IPv6 global and unique local) with the saved ones and, when they differ, saves the new ones: the IP alternatives are replaced, host-name alternatives are kept. After a restart with DNS down (the gateway paused on every node) a node therefore still has each peer's addresses, and v244 tries them before any name. No new files or settings.
+- Test: `TestLearnPeerAddrs`.
+
+### Not verified
+- On the real cluster. `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` fails now and then in this sandbox ("connection reset by peer": the server answers 413 and closes while the test is still writing a large body); it does so on unchanged trees too, and passed on rerun.
+
+### Verified
+- `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v244] - 2026-10-08 — Nodes talk to each other by IP address first, by name last
+
+### Changed
+- A call to a cluster peer now tries its IP addresses (IPv4, IPv6, as the peer reports them) before any host name; the address that worked last leads within its group, and a name that worked never jumps ahead of the addresses. Names are the fallback, so cluster traffic (status polls, settings sync, updates, relays, tshoot) no longer depends on DNS, which is often this cluster's own gateway. v243's 2 s lookup limit and last-known-address fallback stay for the case where only a name is known.
+- A stale address (a node that changed its IP) costs one failed try, at most 6 s, before the next address; the peer's pinned certificate is still checked on every connection, so a wrong host is never accepted.
+- Test: `TestAddrsForTriesIPsBeforeNames`.
+
+### Not verified
+- On the real four-node cluster; a pause of the gateway on all nodes there is the test.
+
+### Verified
+- `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v243] - 2026-10-08 — Pausing the DNS gateway on every node no longer makes the nodes "not answering"
+
+### Fixed
+- **Root cause of "not answering … context deadline exceeded" after pausing a gateway on all nodes.** Found in the goroutine dump and tshoot from the v242 test: ns2, ns3 and ns4 were healthy and idle (no stuck goroutine, cluster port accepting), and the daemon on ns1 was waiting inside the name lookup for `ns2`, `ns3`, `ns4`. Peers are reached by name, and the host's resolver is this very DNS gateway; paused on every node, nobody answers the lookup, so every cluster call from ns1 timed out before it connected. Nothing was hung; the v240/v241 "hang" on ns2 fits this too.
+- A peer name is now looked up for at most 2 s, and if that fails the address it last resolved to is used. Cluster calls, status polls, updates and relays all go through the one dial function. Peers reached by IP are unchanged.
+- Test: `TestPeerDialUsesLastKnownAddressWhenLookupHangs`.
+
+### Notes
+- Each peer is known by its main address (the name typed at join, e.g. `ns2:53854`) and by alternatives (host name, IPv4, IPv6) that it reports; a call tries the one that worked last, then the others. The IP alternatives already existed, but the name came first and its lookup used up the whole call time, so they were never reached. Now the lookup gives up after 2 s.
+- The v242 change (engines stopped outside the supervisor lock) was a guess at this symptom; the dumps show the lock was not the problem. It is harmless and stays.
+- A node that was restarted while name service was already down has no remembered address yet, so it still waits for the name until one lookup succeeds (a peer can be given by IP in the join to avoid that).
+
+### Not verified
+- On the real four-node cluster. Here: the dial function with a hanging resolver in a test.
+
+### Verified
+- `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v242] - 2026-10-08 — Pausing or resuming a gateway no longer holds the supervisor lock while engines shut down
+
+### Fixed
+- **Likely cause of nodes turning "not answering" (context deadline exceeded) after pausing a gateway on all nodes.** Pause and resume restart the gateway's engines. `Supervisor.Reload` stopped the old engines (resign packets, the 400 ms leave grace, address and sysctl clean-up with `ip` commands) while holding the supervisor's main lock, and the cluster status handler needs that lock. A slow or stuck stop therefore made the node stop answering cluster calls. The engines are now stopped after the lock is released, in parallel, and the restarted group is started afterwards.
+- Test: `TestRestartStopsEnginesOutsideTheLock` (fails on v241, passes now): while a restart is stopping engines, `engineList()` must still return promptly.
+
+### Not verified
+- That this is the cause. No goroutine dump from a stuck node has been seen; the lock hold fits the symptom and is fixed either way. If ns2/ns3/ns4 still hang: before rebooting, take a tshoot from a healthy node and on the stuck one run `kill -USR1 $(pidof ddgw)` then `journalctl -u ddgw -n 3000 --no-pager`.
+- No live clustered pause/resume loop was run for this release.
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles.
+
+## [v241] - 2026-10-08 — A gateway paused on every node reads "paused" on every node that answers
+
+### Fixed
+- **Topology: with a gateway paused on all nodes, only the node you looked from read "paused"; the others read "not serving"** (grey and dashed, but with the wrong word and the tooltip "paused or not set up on that node"). The picture knows the pause is shared (it says "Paused on all nodes" on the gateway itself), so a node that answers and does not serve the gateway now reads **paused** with the same tooltip. A node that does not answer stays "not answering", a removed one "removed", a node paused as a whole keeps its own words, and a host-load warning (disk, memory, CPU) is kept in front of the text. A gateway paused on one node only still reads "not serving" on that node, as before.
+- Test: `TestLabelPausedAll`. Live, two real clustered daemons (native amd64, stub upstream): after `--canvas-pause gateway --group 1 --scope all` both nodes' lines read "Paused on all nodes — none of them serves it until it is resumed".
+
+### Not verified
+- The earlier screenshot where ns2, ns3 and ns4 all read "not answering" right after pausing: the second try worked, so it may have been the nodes restarting for an update, or the hang seen on ns2 earlier. If it returns, the v240 goroutine dump (`kill -USR1`) on one of the stuck nodes shows what they are waiting on.
+- Not touched: why ns2 hung on 8 October.
+
+### Verified
+- `gofmt -l .`, `go build`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles.
+
+## [v240] - 2026-10-08 — Log page: Refresh, Download and tshoot on their own line; the capture is always taken; a goroutine dump for a daemon that is stuck
+
+### Changed
+- **Monitor ▸ Log:** Refresh and Download moved to a second line with the button, which is now called **tshoot**. The "with capture" tick box is gone: the 8 s ARP and neighbor-discovery capture is always part of the bundle (`GET /api/tshoot/download` takes it unless `capture=0` is passed; `ddgw --tshoot` always takes it, and `--tshoot-capture` is still accepted and does nothing).
+
+### Added
+- **A dump of every goroutine** in each node's bundle (`ddgw/goroutines.txt`), and `kill -USR1 $(pidof ddgw)` writes the same dump to standard error (`journalctl -u ddgw`) with a line in the log. It is for the case in the 8 October bundle: a node whose gateway engine still runs but whose cluster port stopped answering. Which lock or call everything is waiting on is in the dump; nothing in it is request or configuration data.
+
+### Investigated (no fix)
+- The report "no reply from the VIP after pausing and resuming the gateway": in the bundle ns1, ns3 and ns4 paused and resumed correctly, and ns1's VIP listeners came back (DNS proxy on the VIP, anycast addresses announced). **ns2 stopped answering cluster calls at 14:54:42 UTC, never saw the pause or the resume (still on settings revision 289, the others on 291), kept its gateway engine running, and was elected controller by the others after the resume.** The VIP is answered through the controller, so a controller that is stuck leaves it dead for everyone. What made ns2 stop is not in the bundle (a node that does not answer cannot be collected); a single-node pause and resume with a filled cache, an anycast address and cluster mode on could not be made to fail here.
+- Rebooting ns2 alone cleared it, which confirms ns2 was the stuck node and the others were fine.
+- Next time: take the bundle, then on the stuck node `kill -USR1 $(pidof ddgw)` and send `journalctl -u ddgw -n 2000`, or run `ddgw --tshoot` on it.
+
+### Verified
+- `TestTshootNodeBundle` now also expects `ddgw/goroutines.txt` with the test's own stack in it. Live, headless Chromium (dark and light), a real daemon with PAM: the Log page shows the filter row (search, level, range, lines, Live) and a second row with Refresh, Download and tshoot, no tick box; clicking tshoot downloaded a bundle that holds `capture/lo-arp-nd.pcap` and `ddgw/goroutines.txt`; `kill -USR1` printed 17 goroutines and the daemon kept running. `gofmt -l .`, `go build`, `go vet ./...`, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles.
+
+### Not verified
+- What stopped ns2. The cause could be in v239 (the cache carry-over or warm start) or older; nothing in the bundle points at either, and I did not find a lock path that could do it by reading the code.
+
+## [v239] - 2026-10-08 — The answer cache survives a server change, and a restarted node fills it from a peer
+
+### Changed
+- **Adding, pausing, resuming or removing a server no longer empties the answer cache.** Any of those rebuilt the pool and the new pool started with an empty cache, although the cached answers do not depend on which server is asked next. The rebuilt pool now takes over the old cache when the cache settings are the same (`cache`, `cache_entries`, `cache_max_ttl` and the client-subnet settings). Changing one of those, or switching the cache off and on, still starts it empty, and that is now the documented way to clear it. Hit and miss counters carry over with it.
+  - Trade-off: a server removed because it gave wrong answers leaves those answers in the cache until their TTL ends (at most `cache_max_ttl`, 3600 s by default). Switch the cache off and on to drop them at once.
+
+### Added
+- **Warm start from a peer.** A node that has just started (a restart, or the re-exec after an update) asks reachable cluster members for each gateway's most recently used cache entries, with the age they have there so their TTLs keep counting down, and loads the first useful answer. New signed cluster call `POST /cluster/cache` (older nodes answer 404, which is treated as "no answer"). Limits: 20,000 entries and 3 MB of messages per gateway, entries with under 5 s left are skipped, an answer is used only if the peer's cache settings match, and an entry this node already has is never replaced or pushed out (taken-over entries also sit at the cold end of the LRU order). It runs in the background at 4 s, then 12 s, 27 s and 57 s after start-up while no peer has anything to give, never delays a gateway starting to serve, and logs one line per gateway ("cache filled from … N of M entries in T ms"). Nothing is replicated afterwards.
+
+### Verified
+- New tests: `TestCacheSurvivesAPoolRebuild` (server added, removed; size, TTL limit, ECS prefix, ECS off, and cache off/on each start empty), `TestCacheExportAndLoad` (counts, byte cap, ages, TTL countdown after the transfer, existing entries kept, full shard, cold-end placement, rubbish refused), `TestWarmStartFromAPeer` (two real cluster nodes over the signed channel, mismatching settings, no cache). `gofmt -l .`, `go build`, `go vet ./...`, `node --check` on the web files, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles. One cgo-off test run failed once in the full suite and passed in the two runs after it; the failing test was not captured, and the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` (connection reset) is the likely one.
+- Live, two real daemons (native amd64 with PAM, a stub DNS upstream, a gateway on `lo`): 40 names queried through node A (40 entries, then 40 hits); node B joined, restarted and logged "cache filled from … 40 of 40 entries in 3 ms" about 6 s after start with 40 entries in its cache. Adding a second server to A's pool rebuilt the pool ("shared pool started — 2 server(s)") and the cache kept its 40 entries and counters; the repeated queries after it were hits (80 hits in all). A node that joins a cluster while running is not warmed (it only happens after a start); restarting it is what does it. The test users, group, PAM file and daemons were removed afterwards.
+
+### Not verified
+- Warm-start timing on a real network and with a cache near 20,000 entries (the sandbox has loopback only); the estimate is 50 to 200 ms for 10,000 entries.
+
 ## [v238] - 2026-10-07 — Topology: the spare height is shared evenly between the rows
 
 ### Changed

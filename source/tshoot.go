@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"sync"
@@ -290,6 +291,7 @@ func (m *Mgmt) TshootNode(capture bool, actor string) ([]byte, error) {
 	do(func() {
 		b.putText("system/services.txt", "# systemctl status ddgw frr\n"+tshootRun("systemctl", "status", "ddgw", "frr", "--no-pager", "-l"))
 	})
+	do(func() { b.putText("ddgw/goroutines.txt", goroutineDump()) })
 	do(func() {
 		b.putText("system/journal-ddgw.txt", tshootRun("journalctl", "-u", "ddgw", "-n", "1500", "--no-pager"))
 	})
@@ -576,7 +578,7 @@ func (w *WebServer) registerTshoot(mux *http.ServeMux) {
 }
 
 func (w *WebServer) handleTshootDownload(rw http.ResponseWriter, r *http.Request, s *session) {
-	capture := r.URL.Query().Get("capture") == "1"
+	capture := r.URL.Query().Get("capture") != "0" // the capture is always part of it unless a caller asks otherwise
 	var b []byte
 	var err error
 	if r.URL.Query().Get("all") == "0" {
@@ -601,4 +603,15 @@ func tshootTop() string {
 		l = l[:31]
 	}
 	return strings.Join(l, "\n") + "\n"
+}
+
+// goroutineDump is every goroutine's stack in this process: what to read when the daemon is up but something in it is
+// stuck (a cluster port that does not answer, a gateway that does not start).  Function names and addresses only; no
+// request or configuration data is in it.
+func goroutineDump() string {
+	var sb strings.Builder
+	if pr := pprof.Lookup("goroutine"); pr != nil {
+		pr.WriteTo(&sb, 2)
+	}
+	return sb.String()
 }

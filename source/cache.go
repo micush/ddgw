@@ -13,7 +13,8 @@ import (
 
 // The response cache.  A pool answers a repeated query from memory instead of asking an upstream server
 // again, for as long as the records' TTLs allow (RFC 1035 and RFC 2308 for negative answers).  It lives in the
-// pool, so a changed pool (servers added, paused or removed) starts with an empty cache.
+// pool; a pool that is rebuilt (servers added, paused or removed) takes the old pool's cache along as long as the cache
+// settings are the same (see cacheCarries), and a node that has just started may fill it from another node (cachewarm.go).
 //
 // What is cached: an answer to a plain query (opcode QUERY, one question, class IN or any) that came back
 // NOERROR (with data or without: "no data") or NXDOMAIN, not truncated.  A negative answer needs the zone's SOA in
@@ -335,19 +336,36 @@ func (sh *cacheShard) drop(e *cacheEntry) {
 
 // put stores a response to a query whose key is key, when it is one worth keeping.
 func (c *respCache) put(key string, resp []byte) {
+	c.store(key, resp, 0, false)
+}
+
+// store keeps a response that is age old already (a warm start hands over entries from another node with the age they
+// had there, so their TTLs go on counting down).  An entry that is taken over (fromPeer) never replaces one this node
+// has, never pushes one out, and goes to the cold end of the LRU order, so a warm start cannot displace what clients
+// here are asking for.  It reports whether the entry was kept.
+func (c *respCache) store(key string, resp []byte, age time.Duration, fromPeer bool) bool {
 	msg, ttls, life, ok := c.prepare(resp)
-	if !ok {
-		return
+	if !ok || age < 0 || age >= life {
+		return false
 	}
 	sh := c.shardFor(key)
 	qEnd, _ := questionEnd(msg)
-	e := &cacheEntry{key: key, msg: msg, ttls: ttls, at: c.now(), life: life, sh: sh, qEnd: qEnd,
+	e := &cacheEntry{key: key, msg: msg, ttls: ttls, at: c.now().Add(-age), life: life, sh: sh, qEnd: qEnd,
 		size: len(msg) + len(key) + cacheEntryOverhead}
 	if e.size > sh.maxBytes { // one answer that is more than the whole budget of its shard is not kept
-		return
+		return false
 	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
+	if fromPeer {
+		if old := sh.m[key]; old != nil || len(sh.m) >= sh.max || sh.bytes+e.size > sh.maxBytes {
+			return false
+		}
+		e.elem = sh.lru.PushBack(e)
+		sh.m[key] = e
+		sh.bytes += e.size
+		return true
+	}
 	if old := sh.m[key]; old != nil {
 		sh.drop(old)
 	}
@@ -358,6 +376,7 @@ func (c *respCache) put(key string, resp []byte) {
 		sh.drop(sh.lru.Back().Value.(*cacheEntry))
 		c.Evicted.Add(1)
 	}
+	return true
 }
 
 // prepare checks a response and makes the copy to keep: TTLs capped, options dropped.  ok is false for

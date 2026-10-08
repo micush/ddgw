@@ -164,7 +164,8 @@ with no servers yet answers SERVFAIL and shows amber.
   and is dropped from the stored answer. Never cached: SERVFAIL, REFUSED, truncated answers, zone transfers,
   TSIG-signed queries, queries with EDNS options other than a cookie (ECS from the client, NSID, ...), updates.
   ANY queries are cached like any other type.
-  The cache belongs to the pool, so adding, pausing or removing a server (which makes a new pool) empties it.
+  Adding, pausing, resuming or removing a server rebuilds the pool but keeps the cache: the answers do not depend on which server is asked next. Changing the cache's own settings (`cache_entries`, `cache_max_ttl`, the ECS settings) or switching it off and on starts it empty, which is also how to clear it.
+  **Warm start:** a node that has just started (a restart, or an update) asks a reachable cluster member for each gateway's most recently used answers, up to 20,000 and about 3 MB, with the age they have there so their TTLs go on counting down (`POST /cluster/cache`, signed like every cluster call). It runs in the background a few seconds after start-up, never delays serving, tries again a few times while the cluster comes up and then stops; entries are taken only if the peer's cache settings are the same, never replace or push out an answer this node has, and nothing is replicated afterwards. A node nobody answers starts empty.
   A hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries
   (`ddgw --show-dns`: the `answer cache:` line). It does not serve stale answers: with every upstream down a name
   whose TTL ran out gets SERVFAIL.
@@ -472,8 +473,8 @@ no MAC is ever on two nodes.
 
 Virtual MACs need the network to deliver frames addressed to a MAC that is not the NIC's own. A VMware port group with
 promiscuous mode off drops them, and clouds that allow one MAC per interface do the same. For those, a gateway has a setting,
-**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; off by default, shared by
-the cluster, and changing it restarts the gateway), and everything above is replaced as follows.
+**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; on for a gateway created now, off for
+one that already existed, shared by the cluster, and changing it restarts the gateway), and everything above is replaced as follows.
 
 - There is no macvlan and no slot MAC. Every node, the controller too, holds the VIP on `lo` and has `arp_ignore=1` /
   `arp_announce=2` set on the real interface (put back when the gateway stops).
@@ -519,7 +520,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
-| `--tshoot` `[--all-nodes] [--tshoot-capture] [--tshoot-file F]` | Log page ▸ Troubleshooting bundle |
+| `--tshoot` `[--all-nodes] [--tshoot-file F]` | Log page ▸ tshoot |
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
@@ -814,11 +815,11 @@ answering on a server, so one failing domain shows even while the server stays u
 Node menu the page shows any member's log. `--log` without `--log-lines` prints the whole
 matching log.
 
-**Troubleshooting bundle** (Monitor ▸ Log, or `ddgw --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed
+**tshoot** (Monitor ▸ Log ▸ tshoot, or `ddgw --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed
 to find out why something does not work, from every node: the log (newest 20000 lines), configuration and its versions,
 cluster, gateway, DNS, BGP, anycast, virtual-MAC and update state, host numbers, addresses, links, routes, rules, neighbors,
 ARP, sockets, the ARP/routing sysctl settings, firewall rules, FRR's BGP/BFD output, service status, the journal and kernel
-log tail. `with capture` / `--tshoot-capture` adds 8 s of ARP and neighbor-discovery traffic per gateway interface.
+log tail, 8 s of ARP and neighbor-discovery traffic per gateway interface (always; `--tshoot-capture` is still accepted and does nothing) and a dump of every goroutine of the daemon (`ddgw/goroutines.txt`: what it is busy with, for a node that is up but stuck). `kill -USR1 $(pidof ddgw)` writes the same dump to standard error (`journalctl -u ddgw`), for a daemon whose pages and cluster port do not answer.
 Passwords, the gateway key, tokens, join codes and private keys are removed (each node's `README.txt` says how many) and
 other programs' command lines are not included. Read-only; a node that cannot be reached has a note in the bundle.
 

@@ -1339,7 +1339,7 @@
         }
         const id = Number(v.id);
         if (!(id >= 1 && id <= 255) || groups().some((x) => x.group_id === id)) return "Pick an unused group number between 1 and 255.";
-        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, dns: { servers: [], server_queries: {}, ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
+        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, real_macs: true, dns: { servers: [], server_queries: {}, ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
         setGid(id); cv.sel = { kind: "gw" };
         return null;
       }, g ? "Save" : "Add gateway");
@@ -1751,7 +1751,7 @@
     { shared: true, k: "max_afns", l: "Max forwarders", t: "int", min: 1, max: 255 },
     { shared: true, k: "key", l: "HMAC shared key", t: "text" },
     { k: "preempt", l: "Preemption", t: "bool" },
-    { shared: true, k: "real_macs", l: "Use real MAC addresses (no virtual MACs)", t: "bool", hint: "Off is the normal way. On, for where virtual MACs cannot work (a VMware port group that is not promiscuous, a cloud with one MAC per interface): the VIP is on every node's lo and the controller answers ARP with the real MAC of the node it picks. Failover then depends on the neighbors honoring an unsolicited ARP. Restarts the gateway; set it on every node's cluster together." },
+    { shared: true, k: "real_macs", l: "Use real MAC addresses (no virtual MACs)", t: "bool", hint: "On for a gateway you add now (most networks need it: a VMware port group that is not promiscuous, a cloud with one MAC per interface, a switch with port security); gateways that already existed keep their setting. Off is the older way with a virtual MAC per node. On: the VIP is on every node's lo and the controller answers ARP with the real MAC of the node it picks. Failover then depends on the neighbors honoring an unsolicited ARP. Restarts the gateway; set it on every node's cluster together." },
     { shared: true, k: "neighbors", l: "Neighbors (unicast mode)", t: "list", wide: true, hint: "Every node, one IP per line. Empty: multicast." },
   ];
   const DNS_FIELDS = [
@@ -2973,7 +2973,7 @@
 
   // ── Log, Monitor  (CLI: --log) ───────────────────────────────────────────────
   VIEWS.log = (() => {
-    let status, level, span, count, search, live, info, box, first, timer, tsBtn, tsCap, tsHold = 0, seq = 0, shown = [];
+    let status, level, span, count, search, live, info, box, first, timer, tsBtn, tsHold = 0, seq = 0, shown = [];
     const sel = (label, opts, val, onchange) => {
       const el = h("select", { "aria-label": label, onchange }, opts.map(([v, t]) => h("option", { value: v }, t)));
       el.value = val;
@@ -3023,7 +3023,7 @@
       tsBtn.disabled = true; tsHold = Infinity;
       say(status, "info", "Collecting from every node… this takes up to a minute.");
       try {
-        await apiDownload("/api/tshoot/download?capture=" + (tsCap.checked ? "1" : "0"), "ddgw-tshoot.tgz");
+        await apiDownload("/api/tshoot/download?capture=1", "ddgw-tshoot.tgz");
         say(status, "info", "Downloaded. Passwords, the gateway key, tokens and join codes are removed; README.txt in it lists what it holds.");
       } catch (e) { fail(status)(e); }
       tsBtn.disabled = false; tsHold = Date.now() + 20000;
@@ -3044,16 +3044,16 @@
         search = h("input", { type: "search", placeholder: "Filter words…", "aria-label": "Filter text", spellcheck: "false", class: "grow",
           oninput: () => { clearTimeout(timer); timer = setTimeout(load, 300); } });
         live = h("input", { type: "checkbox", checked: true });
-        tsCap = h("input", { type: "checkbox" });
-        tsBtn = h("button", { class: "btn", type: "button", onclick: tshoot }, "Troubleshooting bundle");
+        tsBtn = h("button", { class: "btn", type: "button", onclick: tshoot }, "tshoot");
         info = h("div", { class: "hint nomargin" });
         box = h("div", { class: "logbox", tabindex: "0", role: "log", "aria-label": "Log lines" });
         main.append(status, section("Log",
           h("div", { class: "toolbar tight logbar" }, search, level, span, count,
-            h("label", { class: "opt" }, live, " Live"),
+            h("label", { class: "opt" }, live, " Live")),
+          h("div", { class: "toolbar tight" },
             h("button", { class: "btn", type: "button", onclick: load }, "Refresh"),
             h("button", { class: "btn", type: "button", onclick: download }, "Download"),
-            tsBtn, h("label", { class: "opt" }, tsCap, " with capture")),
+            tsBtn),
           box, info));
       },
       async poll() {

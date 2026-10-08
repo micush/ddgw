@@ -311,7 +311,7 @@ func (s *Server) sample(rtt time.Duration, alpha float64) {
 type Pool struct {
 	cfg        DNSConfig
 	servers    []*Server
-	cache      *respCache               // nil when the cache is switched off; a new pool starts with an empty one
+	cache      *respCache               // nil when the cache is switched off; a rebuilt pool inherits the old one (cacheCarries)
 	onFallback atomic.Bool              // the pool is answering from its fallback servers (for logging the change)
 	rr         atomic.Uint64            // turn counter for spreading queries over the servers in the latency band
 	rank       atomic.Pointer[rankSnap] // the ranking the forwarding path uses (see rankedSnap)

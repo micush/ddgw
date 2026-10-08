@@ -70,12 +70,13 @@ the web GUI):
                                         [--fail-threshold N] [--max-attempts N] [--latency-alpha A]
                                           (this gateway's own load balancing; --lb settings goes back to
                                            following Settings, which is the default)
-                   --tshoot [--all-nodes] [--tshoot-capture] [--tshoot-file F.tgz]
+                   --tshoot [--all-nodes] [--tshoot-file F.tgz]
                                          (a troubleshooting bundle for support: logs, configuration, gateway, DNS, BGP and
                                          anycast state, addresses, routes, neighbors, firewall, FRR, service status, host
-                                         numbers — of this node, or of every node with --all-nodes; --tshoot-capture adds
-                                         8 s of ARP / neighbor-discovery traffic per gateway interface. Passwords, the
-                                         gateway key, tokens and join codes are removed.)
+                                         numbers, 8 s of ARP / neighbor-discovery traffic per gateway interface, a goroutine dump — of
+                                         this node, or of every node with --all-nodes. Passwords, the gateway key, tokens
+                                         and join codes are removed. kill -USR1 on a daemon that is up but not answering
+                                         writes the goroutine dump to the journal.)
                    --test-vmac [--group N]   (can clients' replies reach this node through virtual MACs? sends an ARP/NS
                                          probe from a throwaway virtual MAC and listens for the answer; changes nothing.
                                          When it says "not delivered": --canvas-set gateway --group N --real-macs on)
@@ -385,6 +386,22 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// kill -USR1 writes every goroutine's stack to the log (the journal): the way to see what a daemon that is up but not
+	// answering is stuck on, when its own pages and the troubleshooting bundle cannot be reached
+	usr1 := make(chan os.Signal, 1)
+	signal.Notify(usr1, syscall.SIGUSR1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-usr1:
+				warnf("SIGUSR1: every goroutine's stack is written to standard error (journalctl -u ddgw)")
+				fmt.Fprintf(os.Stderr, "--- goroutine dump (SIGUSR1) %s ---\n%s--- end of goroutine dump ---\n", time.Now().Format(time.RFC3339), goroutineDump())
+			}
+		}
+	}()
+
 	// the path of the running binary, taken before any update can replace it
 	exe, _ := os.Executable()
 	exe = strings.TrimSuffix(exe, " (deleted)")
@@ -454,6 +471,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	}
 	mg.pausedFn = func() bool { return sup.config().NodePaused }
 	mg.anycastFn = sup.AllAnycastStates
+	mg.poolOf = sup.poolFor
 	mg.tshootFn = func() map[string]any {
 		return map[string]any{"canvas": st.canvasGroups(), "dns-pools": st.dnsStatus(), "gateway-snapshot": st.snapshot()}
 	}
@@ -487,6 +505,15 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	mg.OnConfigLoaded(dc) // first history entry, cluster listener
 	defer mg.cl.Stop()
 	go mg.cl.Run(ctx)
+	go mg.warmCaches(ctx, func() []int {
+		var gids []int
+		for _, g := range sup.config().Groups {
+			if !g.Paused {
+				gids = append(gids, g.GroupID)
+			}
+		}
+		return gids
+	})
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -794,7 +821,7 @@ func interactiveConfigure(path string) error {
 	fmt.Printf("\nCurrently %d group(s) configured.\n", len(dc.Groups))
 	n := p.askInt("How many groups?", len(dc.Groups))
 	for len(dc.Groups) < n {
-		g := defaultGroup()
+		g := newGatewayGroup()
 		g.GroupID = len(dc.Groups) + 1
 		dc.Groups = append(dc.Groups, g)
 	}
