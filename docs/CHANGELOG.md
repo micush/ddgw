@@ -1,12 +1,77 @@
 # Changelog
 
+## [v265] - 2026-10-09 — The changelog, examples and tests carry no site names or addresses
+
+### Changed
+- Host names, domain names and addresses taken from a real site's reports are replaced by neutral ones in the changelog, the README, the help, the command-line usage and the tests (documentation-style addresses, `example.com`, `node2`). The v261 and v263 entries also said the two slow servers could not resolve external names; they can (their probes of an external name pass), they just time out on a few names, and the cause is unknown.
+- No behaviour change.
+
+### Verified
+- gofmt, `go vet`, `node --check`, the whole suite with `-race`.
+
+## [v264] - 2026-10-09 — A server's Loss graph counts probes only; failed queries get their own graph
+
+### Changed
+- **Topology ▸ server ▸ Statistics**: the *Loss* graph (live queries and probes added together) is now **Failed probes**, the share of the server's own test queries that failed, which is what decides whether it is up. A new **Failed queries** graph shows the share of client queries sent to it that failed (timeouts, SERVFAIL, REFUSED). A healthy server that times out on a few names no longer shows up as lossy.
+- `--server-stats ADDR` shows both (columns `loss %` for probes and `query %`, and both totals); the JSON has `loss` (probes) and `query_loss` (queries). Gateway and domain graphs are unchanged. The two graphs are described in help and the README.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`. Not looked at in a browser.
+
+## [v263] - 2026-10-09 — Only the probes mark a server DOWN, not client queries
+
+### Cause (v262 bundle)
+- v261 cut the timeouts to about one a minute per name and server, but the servers still flapped DOWN: two timeouts in a row on different names were enough. In the bundle two of a gateway's four servers timed out on a small set of names asked by three clients, while the other two answered them and every probe passed; the gateways at other sites, which those clients use when this gateway is not announcing the address, have servers that answer them.
+
+### Changed
+- **A client query that times out on a server no longer marks it DOWN.** Only the server's own probe rounds (its test queries) do, as the request was. A failed query is still counted (the server's failures, history, last error), the same query is retried on the next server as before, and the name is tried last on that server for a minute (v261).
+- A server that really dies is therefore marked DOWN by the next probe round (5 s by default, `fail_threshold` rounds in a row) rather than by the first failed queries; until then each query that lands on it waits its timeout and is retried elsewhere.
+- Tests: `TestForwardFailuresNeverMarkAServerDown` (timeouts counted, server stays up, the probe takes a dead one down); two older tests now expect the probe, not the query, to demote.
+
+### Not changed
+- The two servers still time out on those names (the cause is on those servers and unknown; asking each of them for one of the names with `dig` and comparing the times shows it); removing them from the gateway's server list removes the timeouts. The first lookup of each such name per minute still waits one timeout.
+
+### Verified
+- gofmt, `go vet`, builds, the whole suite with `-race`.
+
+## [v262] - 2026-10-09 — Sort list can be switched off
+
+### Added
+- **Sort list enabled** tick box (Configure ▸ DNS proxy ▸ Sort List; `sortlist_on` in the `dns` block, shared by every gateway). Off keeps the list and leaves answers in the order the servers gave. On is the default, so a config with a sort list and no `sortlist_on` keeps sorting. The description is in help.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`. Not looked at in a browser.
+
+## [v261] - 2026-10-09 — A server that times out on a name is tried last for that name
+
+### Cause found (v260 bundle)
+- It is not a loop. All 81 forwarding failures were timeouts of two servers on a small set of external names, asked by three clients, over UDP and TCP alike; the other two servers answered them. Those clients use the anycast address, which is why it starts when that address is announced at this gateway. The slow servers pass the health probes (so they do resolve external names) but time out on these particular names, so each such query waited out the 1.5 s query timeout on one of them before another server answered, and two in a row marked it DOWN until the next probe.
+
+### Changed
+- A server that times out on a name (and type) is asked that name last for the next minute, after the others; it stays in service for every other name. A client's second and later lookups of such a name no longer wait for the timeout, and the server stops flapping DOWN on them. The first lookup still pays one timeout.
+- Not changed: the servers themselves. Why they time out on these names is unknown (they answer other external names); adding one of these names to a server's test queries (Topology ▸ server) would mark it down for good when it fails.
+
+### Verified
+- gofmt, `go vet`, the whole suite with `-race`.
+
+## [v260] - 2026-10-09 — The troubleshooting bundle says who asked for what when a server fails
+
+### Added
+- **Bundle: `ddgw/dns-forward-failures.json`** lists the last 200 forwarding failures (time, client, name, type, server, transport, error), and **`ddgw/dns-queries-last-10-min.json`** the top clients, domains, types and transports of the last ten minutes. A server is marked DOWN by forwarding failures, and the log line cannot say which queries caused them.
+
+### Notes
+- The v259 bundle showed no "is sending queries" warning, so the queries that time out do not come from a server's own address; the loop theory of v259 is not confirmed. What the bundle does show: since the restart one server failed 9 of 63 queries and another 1 of 3, while the two others failed none of 1957, and no client got SERVFAIL (the next server answered). The new files show which client and names those queries are.
+
+### Verified
+- gofmt, `go vet`, the whole suite with `-race`.
+
 ## [v259] - 2026-10-09 — Queries are never sent back to the server they came from; sort list takes plain networks
 
 ### Fixed
-- **Forwarding loop through an upstream server.** In a troubleshooting bundle, switching on the 10.253.253.253 anycast address made the servers 10.129.0.196 and 10.128.0.200 flap DOWN with UDP and TCP timeouts within seconds, and switching it off stopped it at once, while the probes (cached names) kept passing. That is the signature of a loop: a server whose forwarder is the gateway or an anycast address sends the gateway the very query the gateway just sent it. A query that arrives from one of the pool's own servers is now never forwarded to that server; the others answer it, so the original query completes. A query from this machine itself (loopback or one of its own addresses) is never taken for that, so a local program or a DNS server on the same host is not affected. The log says once a minute which server does it and what to fix. The bundle cannot show which server has the anycast address as its forwarder; check the forwarders of aphxipm02 and ptx (and lphxns01/02).
+- **Forwarding loop through an upstream server.** In a troubleshooting bundle, switching on an anycast address made two of the gateway's servers flap DOWN with UDP and TCP timeouts within seconds, and switching it off stopped it at once, while the probes (cached names) kept passing. That is the signature of a loop: a server whose forwarder is the gateway or an anycast address sends the gateway the very query the gateway just sent it. A query that arrives from one of the pool's own servers is now never forwarded to that server; the others answer it, so the original query completes. A query from this machine itself (loopback or one of its own addresses) is never taken for that, so a local program or a DNS server on the same host is not affected. The log says once a minute which server does it and what to fix. (The next bundle showed this was not the cause; see v260 and v261.)
 
 ### Changed
-- **Sort list**: an entry that is just a network (`10.129.0.0/16`) is accepted and is for every client; all such entries together give the order, and the one the client is in comes first. The bundle's config had four plain networks, which the stricter format did not describe.
+- **Sort list**: an entry that is just a network (`10.1.0.0/16`) is accepted and is for every client; all such entries together give the order, and the one the client is in comes first. A config in the field had plain networks, which the stricter format did not describe.
 - Tests: the asker dropped from the candidates (also as an IPv4-mapped address), plain-network sorting.
 
 ### Verified
@@ -311,14 +376,14 @@
 - **v232 did not release the update on the two-site cluster** (both nodes on v232, "gateway 1 would have no other cluster member serving it", still behind). v232 relied on the other node reporting that it cannot take part in the gateway (another subnet); I had guessed that was the reason and it was not enough. The node now also works it out for itself from the shared setting every node holds: a member that has been removed from a gateway (Topology ▸ the node ▸ remove, `--canvas-del node`) can never serve it, whatever version it runs, so it is not waited for. A node also reports its own removal. Test: `TestUpdateSafeForTheOnlyMember` now removes the other member from the gateway and expects the update to go ahead.
 
 ### Changed
-- **The hold-back says why, per member**, instead of a generic list of guesses: "gateway 1 would have no other cluster member serving it (lptxns02:53854 cannot serve it (another subnet, or removed from the gateway))", or "… is not reachable", "… has only just started serving it", "… is not serving it (paused, still recovering, or its DNS servers are down)".
+- **The hold-back says why, per member**, instead of a generic list of guesses: "gateway 1 would have no other cluster member serving it (node2:53854 cannot serve it (another subnet, or removed from the gateway))", or "… is not reachable", "… has only just started serving it", "… is not serving it (paused, still recovering, or its DNS servers are down)".
 
 ### Verified
 - `gofmt -l .`, `go build`, `go vet ./...`, the safety and update tests; `go test -race -count=1 ./...` passes except the known flaky `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` (connection reset); cgo-off vet; five cross-compiles.
 
 ### Not verified
 - That removal from the gateway is what holds your two nodes. If the reason shown after this update is something else (for example "is not serving it (…)"), that line says what to look at; the troubleshooting bundle (v234) holds the gateway and DNS state of both nodes.
-- Until the nodes run v235 the old message is shown. To get there, press **Update this node now** (or `--update-apply --yes`) on lphxns02 once.
+- Until the nodes run v235 the old message is shown. To get there, press **Update this node now** (or `--update-apply --yes`) on the node once.
 
 ## [v234] - 2026-10-07 — Troubleshooting bundle
 
@@ -491,7 +556,7 @@
 ## [v222] - 2026-10-06 — The gateway you picked stays picked when you change nodes
 
 ### Fixed
-- **Switching the Node menu made the Topology page jump to the first gateway.** Changing nodes reset the sidebar's topology state, so the gateway you had selected (ptxsitedns, say) was forgotten and the first one (phxsitedns) was shown. The sidebar list is the signed-in node's, whichever node you drive, so the selection and list are now kept; only a pending action is cleared and the list is refreshed. Change: `webui/app.js` (`setTarget`).
+- **Switching the Node menu made the Topology page jump to the first gateway.** Changing nodes reset the sidebar's topology state, so the gateway you had selected was forgotten and the first one was shown. The sidebar list is the signed-in node's, whichever node you drive, so the selection and list are now kept; only a pending action is cleared and the list is refreshed. Change: `webui/app.js` (`setTarget`).
 
 ### Verified
 - `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `app.js` and `help.js`.
@@ -645,7 +710,7 @@
 
 ### Verified
 - gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check` on `app.js` and `help.js`.
-- Live with real PAM (scratch user, group and PAM file, removed afterwards), two clustered daemons, headless Chromium (dark), with node names as long as `lawsusw2ns01.net.axway.corp` and IPv6 link-local addresses: in a 900 px window each of the three tables was scrolled sideways (150 px), left alone for 8.5 s (several refreshes), and each time the scroll box was **the same element** (tagged before), at the same position, and had received **no scroll event**, while the data in the table still changed (the age went from 102 to 106). The tables fit their cards, with no bar, at 1920, 1500 and 1366 px.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), two clustered daemons, headless Chromium (dark), with very long node names and IPv6 link-local addresses: in a 900 px window each of the three tables was scrolled sideways (150 px), left alone for 8.5 s (several refreshes), and each time the scroll box was **the same element** (tagged before), at the same position, and had received **no scroll event**, while the data in the table still changed (the age went from 102 to 106). The tables fit their cards, with no bar, at 1920, 1500 and 1366 px.
 
 ### Not verified
 - At 1280 px the Gateways table with IPv6 rows and names that long is still 61 px too wide, and at 1100 px all three need a bar (it then scrolls, and keeps its position). Firefox and a desktop with overlay scroll bars (the flashing is most visible there) were not tried; the fix does not touch the scroll box on a refresh, so no bar should be shown or moved, but I could not see that.
@@ -657,7 +722,7 @@
 ### Added
 - **Monitor ▸ Capture** (`--capture`, `--capture-interfaces`): a packet capture, modelled on the one in gravinet. It listens on a raw socket on one interface (no libpcap; it only listens, nothing is sent), keeps the newest 5000 packets or 32 MB, lists them live with one-line summaries, and saves the buffer as a standard `.pcap`. The Node menu picks the node: through the cluster relay any member can be captured on from any node's GUI (`/api/capture` can now be relayed; a download through another node is the newest part that fits about 5 MB). A node has one capture of its own on its Capture page, and starting another replaces it.
 - **Capture on every node** (the Node menu's **Cluster (N)** entry, now also on the Capture page; `--all-nodes`): the same capture on all nodes at the same moment for 5, 10, 30 or 60 seconds (the API takes 1 to 60), each into a private buffer (so no node's own Capture page is disturbed; about 4 MB each, the newest packets), bundled into one `.tgz`: a `.pcap` per node (this node's ends in `-this-node`), `summary.txt`, and `errors.txt` for nodes that could not capture, with the reason; a node on a version without capture is said to need updating, and the others still make the bundle. One such capture runs at a time; the page lists each node's result, packets and size.
-- **Summaries that help with the virtual MACs and DNS:** TCP flags; DNS names, types and answers (`DNS A? example.com`, `DNS NXDOMAIN 0 ans`), over UDP and TCP; ARP and IPv6 neighbor discovery with the target and the MAC announced and the Ethernet addresses the frame was sent from and to (`ARP, 10.129.0.205 is-at 00:1a:7c:01:02:00 (eth 02:… > …)`): whether the MAC in an ARP reply is the one on the frame shows at once.
+- **Summaries that help with the virtual MACs and DNS:** TCP flags; DNS names, types and answers (`DNS A? example.com`, `DNS NXDOMAIN 0 ans`), over UDP and TCP; ARP and IPv6 neighbor discovery with the target and the MAC announced and the Ethernet addresses the frame was sent from and to (`ARP, 192.0.2.5 is-at 00:1a:7c:01:02:00 (eth 02:… > …)`): whether the MAC in an ARP reply is the one on the frame shows at once.
 - **A filter** (not in gravinet): a small tcpdump-like language evaluated in the daemon before a packet is kept: `host`, `src host`, `dst host`, `net`, `port`, `src port`, `dst port`, `portrange`, `tcp`, `udp`, `icmp`, `icmp6`, `arp`, `ip`, `ip6`, `dns`, `ether host|src|dst MAC`, with `and`, `or`, `not` and brackets, a protocol before host/net/port narrowing it. Errors are reported when the capture starts. It runs in the daemon and not in the kernel, so a busy interface still delivers every packet to it.
 - On the loopback each packet is kept once (it is delivered twice, sent and received; tcpdump keeps one).
 - Every start is logged with the user's name, the interface and the filter. Operations `capture.*`; web `GET /api/capture/interfaces`, `POST /api/capture/start|stop|clear|run`, `GET /api/capture/packets|pcap`, and the not-relayable `POST /api/clustercapture/start`, `GET /api/clustercapture/status|download`.
@@ -681,11 +746,11 @@
 ## [v211] - 2026-10-05 — DNS page: long server names are cut short
 
 ### Fixed
-- **Monitor ▸ DNS: a long server name ran into the Server IP column.** The table has fixed column widths, and a name such as `lawsusw2ns02.net.axway.corp` has nowhere to break, so it was drawn over the next column. The Server name column is now wider (13 rem, and the table 5 rem wider), and a name that still does not fit is cut with an ellipsis at the end, so the host part, which tells the servers apart, stays in view. The whole name is the cell's tooltip.
+- **Monitor ▸ DNS: a long server name ran into the Server IP column.** The table has fixed column widths, and a long fully qualified name has nowhere to break, so it was drawn over the next column. The Server name column is now wider (13 rem, and the table 5 rem wider), and a name that still does not fit is cut with an ellipsis at the end, so the host part, which tells the servers apart, stays in view. The whole name is the cell's tooltip.
 
 ### Verified
 - gofmt (clean), `go vet ./...`, `go test -race -count=1 ./...` (passes), `CGO_ENABLED=0 go vet ./...` and `CGO_ENABLED=0 go test -count=1 ./...` (pass), `GOOS=linux go build` for amd64, arm64, arm, 386 and riscv64 (cgo off, so these build the PAM stub), `node --check webui/app.js`.
-- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium (dark) with eight servers named as in the report (`aphxipm02.phx.axway.int`, `lawsusw2ns01.net.axway.corp`, …): in a 1500 px and in a 700 px window no name reaches the Server IP column; the long ones are cut with an ellipsis and carry the full name as a tooltip.
+- Live with real PAM (scratch user, group and PAM file, removed afterwards), headless Chromium (dark) with eight servers with long fully qualified names: in a 1500 px and in a 700 px window no name reaches the Server IP column; the long ones are cut with an ellipsis and carry the full name as a tooltip.
 
 ### Not verified
 - The light theme. The Node name columns of Monitor ▸ Gateways and Monitor ▸ Cluster were not changed: those tables size their columns to the content, so a long name widens the column instead of overlapping.
@@ -793,7 +858,7 @@
   - until the old controller stops saying it is the controller, this node does not give way to it (a controller outranking it would otherwise take the role straight back) and asks again with each of its hellos, for three hold times at least three seconds, so a lost request does not undo it;
   - the other nodes follow the new controller's hellos; those that still have the old controller's last hello with the flag set ignore the new one until the old controller's next hello says it is no longer one (a hello interval).
   The role stays with this node afterwards, until something that changes the group changes it (a restart, the controller leaving, a node with preemption that outranks it). Priority and preemption in Settings are still the way to prefer a node permanently.
-- **The button said nothing.** The page now shows what the daemon did, for each group and address family, for example `group 1 v4: asserting AGC (was AFN, asked 10.129.0.204 to step down)`; `already AGC — no change` on the controller itself. The same text is printed by `--assert-agc`.
+- **The button said nothing.** The page now shows what the daemon did, for each group and address family, for example `group 1 v4: asserting AGC (was AFN, asked 192.0.2.4 to step down)`; `already AGC — no change` on the controller itself. The same text is printed by `--assert-agc`.
 
 ### Added
 - `assert_agc_test.go`: an in-memory mesh of three engines (the controller with the greatest address, a forwarder, and the node that asks, with the smallest) delivering each other's packets. Tests: the request from a node that ranks lower, shown failing before the fix (the controller stayed ACTIVE) and passing after, and stable through six more rounds of hellos; a lost request; the request on the controller itself changes nothing.
@@ -2381,7 +2446,7 @@ Found from a production cluster that worked with one or two nodes and broke when
 
 ## [v100] - 2026-10-02 — Fallback servers that refuse ECS queries now answer
 
-Reported: with every server paused or down, `dig axway.com @<gateway>` returned REFUSED (flags qr rd ra, EDNS udp 512 — the signature of Google 8.8.8.8, the fallback), although `dig @8.8.8.8` from the same node worked.
+Reported: with every server paused or down, `dig example.com @<gateway>` returned REFUSED (flags qr rd ra, EDNS udp 512 — the signature of Google 8.8.8.8, the fallback), although `dig @8.8.8.8` from the same node worked.
 
 ### Fixed
 - **REFUSED from a server because of the client subnet (ECS).** The gateway attaches ECS (the client's /24) to forwarded queries; the clients here are private 192.168.x addresses, which Google answers with REFUSED. Only FORMERR was retried without ECS, so the REFUSED went straight to the client. Now a FORMERR *or* REFUSED answer to a query carrying ECS is retried once without it; if that gets a different answer, the server is remembered (`noECS`, until restart or reload) and not sent ECS any more, with one warning in the log (`… not sending it ECS any more`). A server that refuses the plain query too is treated as before.
@@ -2390,7 +2455,7 @@ Reported: with every server paused or down, `dig axway.com @<gateway>` returned 
 ### Verified
 - gofmt, build, vet, `go test -race -count=1`, CGO-off vet/test, five linux cross-compiles, `node --check`.
 ### Not verified
-- Against real Google: the sandbox has no outbound DNS. The cause is inferred from the reply signature; if it still REFUSES, send `dig @8.8.8.8 axway.com +subnet=192.168.5.0/24` and `ddgw --show-dns`.
+- Against real Google: the sandbox has no outbound DNS. The cause is inferred from the reply signature; if it still REFUSES, send `dig @8.8.8.8 example.com +subnet=192.168.5.0/24` and `ddgw --show-dns`.
 
 ## [v99] - 2026-10-02 — IPv4 gateway address no longer lost when a node becomes the controller
 
@@ -2420,7 +2485,7 @@ Asked for: fallback servers should not be probed; they are a last resort and cou
 - Live: every normal server paused, a stub fallback that logs every name: the fallback saw only the client's query (no probes), `dig` was answered, the DNS page/`--show-dns` list it as up.
 
 ### Not verified
-- The REFUSED you saw for `axway.com` through the gateway: with a fallback that no longer depends on probes this should not recur with public resolvers, but I could not reproduce your setup, so it is not confirmed.
+- The REFUSED you saw for a name through the gateway: with a fallback that no longer depends on probes this should not recur with public resolvers, but I could not reproduce your setup, so it is not confirmed.
 
 ## [v97] - 2026-10-02 — DNS proxy intro in its card, compact Updates headers
 

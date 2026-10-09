@@ -224,6 +224,11 @@ func (m *Mgmt) TshootNode(capture bool, actor string) ([]byte, error) {
 		b.putJSON("ddgw/config.json", dc)
 	})
 	do(func() { b.putJSON("ddgw/config-versions.json", m.VersionsList()) })
+	do(func() { b.putJSON("ddgw/dns-forward-failures.json", recentFwdFailures()) })
+	do(func() { // who asked for what in the last ten minutes (top clients and domains, types, transports)
+		now := time.Now()
+		b.putJSON("ddgw/dns-queries-last-10-min.json", qstats.Query(now.Add(-10*time.Minute), now, QFilter{}))
+	})
 	do(func() {
 		if m.cl != nil && m.cl.Enabled() {
 			b.putJSON("ddgw/cluster.json", m.cl.View())

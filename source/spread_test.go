@@ -166,6 +166,7 @@ func TestSpreadFailsOverInsideBand(t *testing.T) {
 			t.Fatalf("query %d: no answer", i)
 		}
 	}
+	p.ProbeNow(context.Background()) // only the probe takes it out
 	if r := rankedAddrs(p); len(r) != 1 || r[0] != b.addr {
 		t.Fatalf("the dead server is still eligible: %v", r)
 	}

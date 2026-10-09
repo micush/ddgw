@@ -19,6 +19,7 @@ type fakeDNS struct {
 	delay atomic.Int64 // ns
 	mode  atomic.Int32 // 0 ok, 1 NXDOMAIN, 2 drop, 3 SERVFAIL
 	hits  atomic.Int64
+	only  atomic.Bool // answer only the probe names (a.example, b.example): a server that cannot resolve anything else
 	pc    net.PacketConn
 	tl    net.Listener
 }
@@ -37,6 +38,11 @@ func (f *fakeDNS) answer(q []byte) []byte {
 	f.hits.Add(1)
 	if d := f.delay.Load(); d > 0 {
 		time.Sleep(time.Duration(d))
+	}
+	if f.only.Load() {
+		if n, _, _ := questionOf(q); n != "a.example" && n != "b.example" {
+			return nil
+		}
 	}
 	switch f.mode.Load() {
 	case 1:
@@ -217,7 +223,11 @@ func TestForwardFailoverAndMarkDown(t *testing.T) {
 	if h, _ := parseHeader(resp); h.ancount != 1 {
 		t.Fatal("no answer from fallback")
 	}
-	// fail_threshold=1: the live failure demotes it immediately.
+	// the failed query does not demote it; the next probe does (fail_threshold=1)
+	if r := rankedAddrs(p); len(r) != 2 {
+		t.Fatalf("a failed query took the server out of service: %v", r)
+	}
+	p.ProbeNow(context.Background())
 	if r := rankedAddrs(p); len(r) != 1 || r[0] != slow.addr {
 		t.Fatalf("dead server still ranked: %v", r)
 	}

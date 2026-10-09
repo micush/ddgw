@@ -16,7 +16,7 @@ import (
 // e.g. "10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8".  The first entry whose client network contains the asking client is
 // used; addresses inside the client network itself come first, then the A and AAAA records of the answer are put in the order of the preferred networks (an address in the first
 // network first, then the second, ...); addresses in none of them keep their order after those.  The sort is stable.
-// The client network may be "any".  An entry that is just a network ("10.129.0.0/16") is for every client: all such
+// The client network may be "any".  An entry that is just a network ("10.20.0.0/16") is for every client: all such
 // entries together are listed in the order given, and the one the client is in comes first.  Answers from the cache are sorted per client as they are sent, so the cache
 // itself is not touched.
 

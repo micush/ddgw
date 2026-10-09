@@ -1167,7 +1167,8 @@
             tsChart("Failed probes", dd, [{ label: "Failed probes", cls: "t6", values: r.loss, text: (i) => r.loss[i].toFixed(2) + "% of the probes" }], { floor: 1, axis: pctAxis })];
         } else {
           charts = [lat("Latency"),
-            tsChart("Loss", dd, [{ label: "Lost attempts", cls: "t6", values: r.loss, text: (i) => r.loss[i].toFixed(2) + "% of " + (r.queries[i] < 0 ? "probes" : r.queries[i] + " queries and probes") }], { floor: 1, axis: pctAxis })];
+            tsChart("Failed probes", dd, [{ label: "Failed probes", cls: "t6", values: r.loss, text: (i) => r.loss[i].toFixed(2) + "% of the probes" }], { floor: 1, axis: pctAxis }),
+            tsChart("Failed queries", dd, [{ label: "Failed queries", cls: "t6", values: r.query_loss || [], text: (i) => r.query_loss[i].toFixed(2) + "% of " + r.queries[i] + " queries" }], { floor: 1, axis: pctAxis })];
         }
         sum.hidden = true;   // the graphs say it all; the line is only for "loading", "nothing recorded" and errors
         clear(body).append(...charts);
@@ -1808,6 +1809,7 @@
     { shared: true, k: "doh_port", l: "DNS over HTTPS port", t: "int", min: 0, max: 65535 },
     { shared: true, k: "forward_updates", l: "Forward dynamic DNS updates to the zone's primary server", t: "bool" },
     { section: "Sort List" },
+    { shared: true, k: "sortlist_on", l: "Sort list enabled", t: "bool" },
     { shared: true, k: "sortlist", l: "Sort list", t: "list", wide: true },
     { section: "Client Rate Limiting", note: "Applies to every gateway that uses these settings, over UDP, TCP, DoT and DoH, before the cache. This node itself is always allowed and never limited. Counters are per node." },
     { shared: true, k: "allowed_clients", l: "Allowed clients", t: "list", wide: true, hint: "Networks that may use the proxy, one per line: 10.0.0.0/8, 192.168.1.5, 2001:db8::/32. Empty = everyone. Anyone else is answered REFUSED (dynamic updates too)." },
@@ -3191,7 +3193,7 @@
         cursor = 0; shown = 0; last = null; running = false; job = null; ifs = null;
         status = h("div", { "aria-live": "polite" });
         iface = ifaceSelect();
-        filter = h("input", { type: "text", class: "grow", placeholder: "Filter, e.g. host 10.129.0.205 and port 53", "aria-label": "Capture filter", spellcheck: "false", autocomplete: "off", maxlength: "300",
+        filter = h("input", { type: "text", class: "grow", placeholder: "Filter, e.g. host 10.20.0.205 and port 53", "aria-label": "Capture filter", spellcheck: "false", autocomplete: "off", maxlength: "300",
           onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); (cluster() ? goAll : start)(); } } });
         if (cluster()) {
           durSel = h("select", { "aria-label": "How long" }, [["5", "5 seconds"], ["10", "10 seconds"], ["30", "30 seconds"], ["60", "60 seconds"]].map(([v, t]) => h("option", { value: v }, t)));

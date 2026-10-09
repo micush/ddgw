@@ -87,16 +87,16 @@ func TestCapSummaries(t *testing.T) {
 		frame []byte
 		want  string
 	}{
-		"dns query":       {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.129.0.205", 17, udp(53124, 53, q))), "UDP 192.0.2.1.53124 > 10.129.0.205.53, length"},
-		"dns query text":  {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.129.0.205", 17, udp(53124, 53, q))), "DNS A? example.com"},
-		"dns reply":       {eth(macB, macA, 0x0800, ip4("10.129.0.205", "192.0.2.1", 17, udp(53, 53124, dnsReply(q, 3, 0)))), "DNS NXDOMAIN 0 ans A example.com"},
-		"dns reply ok":    {eth(macB, macA, 0x0800, ip4("10.129.0.205", "192.0.2.1", 17, udp(53, 53124, dnsReply(q, 0, 2)))), "DNS NOERROR 2 ans"},
-		"dns over tcp":    {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.129.0.205", 6, tcp(40000, 53, 0x18, append([]byte{0, byte(len(q))}, q...)))), "DNS A? example.com"},
+		"dns query":       {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.20.0.205", 17, udp(53124, 53, q))), "UDP 192.0.2.1.53124 > 10.20.0.205.53, length"},
+		"dns query text":  {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.20.0.205", 17, udp(53124, 53, q))), "DNS A? example.com"},
+		"dns reply":       {eth(macB, macA, 0x0800, ip4("10.20.0.205", "192.0.2.1", 17, udp(53, 53124, dnsReply(q, 3, 0)))), "DNS NXDOMAIN 0 ans A example.com"},
+		"dns reply ok":    {eth(macB, macA, 0x0800, ip4("10.20.0.205", "192.0.2.1", 17, udp(53, 53124, dnsReply(q, 0, 2)))), "DNS NOERROR 2 ans"},
+		"dns over tcp":    {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.20.0.205", 6, tcp(40000, 53, 0x18, append([]byte{0, byte(len(q))}, q...)))), "DNS A? example.com"},
 		"tcp syn":         {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.0.0.2", 6, tcp(1234, 443, 0x02, nil))), "TCP 192.0.2.1.1234 > 10.0.0.2.443 [S]"},
 		"tcp synack":      {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.0.0.2", 6, tcp(1234, 443, 0x12, nil))), "[S.]"},
 		"icmp echo":       {eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.0.0.2", 1, []byte{8, 0, 0, 0})), "ICMP 192.0.2.1 > 10.0.0.2: echo request"},
-		"arp request":     {eth([]byte{255, 255, 255, 255, 255, 255}, macB, 0x0806, arpPkt(1, macB, "10.129.0.1", make([]byte, 6), "10.129.0.205")), "ARP, who-has 10.129.0.205 tell 10.129.0.1 (eth 02:00:00:aa:bb:cc > ff:ff:ff:ff:ff:ff)"},
-		"arp reply":       {eth(macB, []byte{0x02, 9, 9, 9, 9, 9}, 0x0806, arpPkt(2, macA, "10.129.0.205", macB, "10.129.0.1")), "ARP, 10.129.0.205 is-at 00:1a:7c:01:02:00 (eth 02:09:09:09:09:09 > 02:00:00:aa:bb:cc)"},
+		"arp request":     {eth([]byte{255, 255, 255, 255, 255, 255}, macB, 0x0806, arpPkt(1, macB, "10.20.0.1", make([]byte, 6), "10.20.0.205")), "ARP, who-has 10.20.0.205 tell 10.20.0.1 (eth 02:00:00:aa:bb:cc > ff:ff:ff:ff:ff:ff)"},
+		"arp reply":       {eth(macB, []byte{0x02, 9, 9, 9, 9, 9}, 0x0806, arpPkt(2, macA, "10.20.0.205", macB, "10.20.0.1")), "ARP, 10.20.0.205 is-at 00:1a:7c:01:02:00 (eth 02:09:09:09:09:09 > 02:00:00:aa:bb:cc)"},
 		"ipv6 udp":        {eth(macA, macB, 0x86dd, ip6("2001:db8::1", "2001:db8::2", 17, udp(1000, 53, q))), "UDP 2001:db8::1.1000 > 2001:db8::2.53"},
 		"vlan":            {eth(macA, macB, 0x8100, append([]byte{0, 5, 8, 0}, ip4("192.0.2.1", "10.0.0.2", 17, udp(1, 2, nil))...)), "UDP 192.0.2.1.1 > 10.0.0.2.2"},
 		"other ethertype": {eth(macA, macB, 0x88cc, []byte{1, 2, 3}), "ethertype 0x88cc"},
@@ -123,18 +123,18 @@ func TestCapSummaries(t *testing.T) {
 
 func TestCapFilter(t *testing.T) {
 	q := dnsQuery("example.com", 1)
-	dq := eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.129.0.205", 17, udp(53124, 53, q))) // client > VIP, DNS
-	dr := eth(macB, macA, 0x0800, ip4("10.129.0.205", "192.0.2.1", 17, udp(53, 53124, q))) // VIP > client
+	dq := eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.20.0.205", 17, udp(53124, 53, q))) // client > VIP, DNS
+	dr := eth(macB, macA, 0x0800, ip4("10.20.0.205", "192.0.2.1", 17, udp(53, 53124, q))) // VIP > client
 	web := eth(macA, macB, 0x0800, ip4("192.0.2.9", "10.0.0.2", 6, tcp(40000, 443, 0x02, nil)))
 	v6 := eth(macA, macB, 0x86dd, ip6("2001:db8::1", "2001:db8::2", 6, tcp(40000, 53, 0x02, nil)))
-	arpq := eth([]byte{255, 255, 255, 255, 255, 255}, macB, 0x0806, arpPkt(1, macB, "10.129.0.1", make([]byte, 6), "10.129.0.205"))
+	arpq := eth([]byte{255, 255, 255, 255, 255, 255}, macB, 0x0806, arpPkt(1, macB, "10.20.0.1", make([]byte, 6), "10.20.0.205"))
 	ping := eth(macA, macB, 0x0800, ip4("192.0.2.1", "10.0.0.2", 1, []byte{8, 0, 0, 0}))
 	frames := map[string][]byte{"dq": dq, "dr": dr, "web": web, "v6": v6, "arp": arpq, "ping": ping}
 	for filter, want := range map[string]string{
 		"":                                     "dq dr web v6 arp ping",
-		"host 10.129.0.205":                    "dq dr arp", // the ARP's target address counts, as in tcpdump
-		"src host 10.129.0.205":                "dr",
-		"dst host 10.129.0.205":                "dq arp",
+		"host 10.20.0.205":                    "dq dr arp", // the ARP's target address counts, as in tcpdump
+		"src host 10.20.0.205":                "dr",
+		"dst host 10.20.0.205":                "dq arp",
 		"net 192.0.2.0/24":                     "dq dr web ping",
 		"src net 192.0.2.0/24 and not port 53": "web ping",
 		"port 53":                              "dq dr v6",
@@ -151,7 +151,7 @@ func TestCapFilter(t *testing.T) {
 		"ip host 2001:db8::1":                  "",
 		"arp":                                  "arp",
 		"icmp":                                 "ping",
-		"host 10.129.0.205 and not arp":        "dq dr",
+		"host 10.20.0.205 and not arp":        "dq dr",
 		"(tcp or icmp) and host 192.0.2.9":     "web",
 		"tcp || icmp":                          "web v6 ping",
 		"! udp && ! arp":                       "web v6 ping",
@@ -735,14 +735,14 @@ func TestSharedAddrsComeFromTheGateways(t *testing.T) {
 	e := newWebEnv(t)
 	dc, _, _ := e.mg.LiveConfig()
 	g := defaultGroup()
-	g.GroupID, g.VIP4, g.VIP6, g.ExtraVIPs = 1, "10.129.0.205/28", "2620:ad:8081:c0cf:10:129:0:205/64", []string{"192.168.168.168", "fd00::53/128"}
+	g.GroupID, g.VIP4, g.VIP6, g.ExtraVIPs = 1, "10.20.0.205/28", "2620:ad:8081:c0cf:10:129:0:205/64", []string{"192.168.168.168", "fd00::53/128"}
 	dc.Groups = []GroupConfig{g}
 	if err := e.mg.PutConfig(dc, "t", ""); err != nil {
 		t.Skipf("cannot set the test config: %v", err)
 	}
 	c := &Cluster{mg: e.mg}
 	sh := c.sharedAddrs()
-	for _, want := range []string{"10.129.0.205", "2620:ad:8081:c0cf:10:129:0:205", "192.168.168.168", "fd00::53"} {
+	for _, want := range []string{"10.20.0.205", "2620:ad:8081:c0cf:10:129:0:205", "192.168.168.168", "fd00::53"} {
 		if !sh[want] {
 			t.Errorf("%s is not among the shared addresses %v", want, sh)
 		}

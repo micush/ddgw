@@ -51,8 +51,12 @@ func TestServerHistoryRecordsAndSummarises(t *testing.T) {
 	if r.AvgMS != 2 || r.MaxMS != 3 {
 		t.Fatalf("latency avg %v max %v, want 2 and 3", r.AvgMS, r.MaxMS)
 	}
-	if want := 2.0 * 100 / 106; r.LossPct < want-0.01 || r.LossPct > want+0.01 {
+	// a server's loss is its probes' (1 of 5); its failed queries are reported apart (1 of 101)
+	if want := 20.0; r.LossPct < want-0.01 || r.LossPct > want+0.01 {
 		t.Fatalf("loss %v, want %v", r.LossPct, want)
+	}
+	if want := 100.0 / 101; r.QueryLossPct < want-0.01 || r.QueryLossPct > want+0.01 {
+		t.Fatalf("query loss %v, want %v", r.QueryLossPct, want)
 	}
 	if r.Step != 60 || len(r.Latency) != len(r.Loss) || len(r.Latency) != len(r.Queries) {
 		t.Fatalf("shape: step %d lens %d %d %d", r.Step, len(r.Latency), len(r.Loss), len(r.Queries))

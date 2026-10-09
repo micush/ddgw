@@ -425,6 +425,8 @@ type DNSConfig struct {
 	// SortList orders the A and AAAA records of an answer per client network: "10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"
 	// (see sortlist.go). Empty means answers keep the order the servers gave.
 	SortList []string `json:"sortlist,omitempty"`
+	// SortListOn switches the sort list on (the default) or off without deleting it.
+	SortListOn bool `json:"sortlist_on"`
 	// ClientRate limits each client (an IPv4 address or an IPv6 /64) to this many queries a second; 0 (the default)
 	// is no limit. ClientBurst is how many it may send at once (0 = twice the rate, at least 10). ClientAction is what
 	// a client over its rate gets: "drop" (the default, kept as empty in the file), "truncate" (UDP: a short answer
@@ -525,6 +527,7 @@ func defaultDNS() DNSConfig {
 		DownPercent:     100,
 		ListenPort:      53,
 		ForwardUpdates:  true,
+		SortListOn:      true,
 		Spread:          true,
 		SpreadBand:      20,
 		Cache:           true,
@@ -899,6 +902,7 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	if len(c.ClientExempt) == 0 {
 		c.ClientExempt = nil
 	}
+	c.SortListOn = shared.SortListOn
 	c.SortList = append([]string(nil), shared.SortList...)
 	if len(c.SortList) == 0 {
 		c.SortList = nil

@@ -331,12 +331,16 @@ type Pool struct {
 	Denied   atomic.Uint64 // refused: the client is not in allowed_clients
 	Limited  atomic.Uint64 // turned away: the client was over client_rate
 
+	avoid nameAvoid     // servers that timed out on a name lately (slowname.go)
 	sorts []sortRule    // the dns block's sortlist, parsed (sortlist.go)
 	lim   *clientLimits // nil when no client list or rate is configured (clientlimit.go)
 }
 
 func NewPool(cfg DNSConfig) *Pool {
-	p := &Pool{cfg: cfg, lim: newClientLimits(cfg), sorts: buildSortRules(cfg.SortList)}
+	p := &Pool{cfg: cfg, lim: newClientLimits(cfg), sorts: nil}
+	if cfg.SortListOn {
+		p.sorts = buildSortRules(cfg.SortList)
+	}
 	if cfg.Cache {
 		p.cache = newRespCache(cfg.CacheEntries, cfg.CacheMaxTTL)
 	}
@@ -708,19 +712,16 @@ func spreadOrder(ranked []*Server, lat []float64, band int, turn uint64) []*Serv
 }
 
 // noteForwardFailure counts a failed live exchange toward health.
+// noteForwardFailure records a query that a server did not answer. It never takes the server out of service: a
+// timeout on one name says little about the server (it may just not answer that name), so only the server's own
+// probes (probeServer) mark it DOWN. The failure shows in the server's counts, history and last error.
 func (p *Pool) noteForwardFailure(s *Server, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failCount++
-	s.fails++
 	s.failing.Store(true)
 	s.hist.addFail()
 	s.lastErr = "forward: " + err.Error()
-	if s.healthy && !s.Fallback && s.fails >= p.cfg.FailThreshold {
-		s.healthy = false
-		p.rankGen.Add(1)
-		warnf("dns: server %s is DOWN (forwarding failures): %v", s.Addr, err)
-	}
 }
 
 // Forward relays a client query to the fastest eligible server, falling back
@@ -749,6 +750,11 @@ func (p *Pool) forward(ctx context.Context, query []byte, tcp bool, client netip
 	}
 	ranked := p.Candidates()
 	ranked = dropAsker(ranked, client)
+	var qi qinfo
+	parseQuestion(query, &qi)
+	if qi.ok && count {
+		ranked = p.avoid.order(ranked, qi.name(), qi.qtype)
+	}
 	if len(ranked) == 0 {
 		return nil, errNoServers
 	}
@@ -792,6 +798,12 @@ func (p *Pool) forward(ctx context.Context, query []byte, tcp bool, client netip
 				break
 			}
 			p.noteForwardFailure(s, err)
+			if count && ctx.Err() == nil {
+				noteFwdFailure(query, client, s.Addr, tcp, err)
+				if qi.ok {
+					p.avoid.mark(s.Addr, qi.name(), qi.qtype)
+				}
+			}
 			continue
 		}
 		// every live answer is counted, but the server's lock (shared by every query it serves) is taken only to

@@ -264,32 +264,34 @@ func (h *srvHistory) restore(r pRec) int {
 // ServerStatsResult is what the Topology page and --server-stats show: equal-length series over buckets of Step seconds
 // starting at Start; a value below 0 is "no data in that bucket".
 type ServerStatsResult struct {
-	Addr    string    `json:"addr"`
-	Known   bool      `json:"known"` // the daemon has recorded something for this server
-	From    int64     `json:"from"`
-	To      int64     `json:"to"`
-	Start   int64     `json:"start"`
-	Step    int       `json:"step"`
-	Latency []float64 `json:"latency"`     // average ms
-	LatMax  []float64 `json:"latency_max"` // worst ms
-	Loss    []float64 `json:"loss"`        // % of attempts (live and probe) that failed
-	Queries []float64 `json:"queries"`     // live queries answered or failed
-	QPS     []float64 `json:"qps"`         // gateways: queries per second
-	HitQPS  []float64 `json:"hit_qps"`     // gateways: of which answered from the cache
-	Avail   []float64 `json:"avail"`       // gateways: % of the availability samples that found it working
+	Addr      string    `json:"addr"`
+	Known     bool      `json:"known"` // the daemon has recorded something for this server
+	From      int64     `json:"from"`
+	To        int64     `json:"to"`
+	Start     int64     `json:"start"`
+	Step      int       `json:"step"`
+	Latency   []float64 `json:"latency"`              // average ms
+	LatMax    []float64 `json:"latency_max"`          // worst ms
+	Loss      []float64 `json:"loss"`                 // servers: % of the probe queries that failed; gateways: of the client queries; domains: of the probes
+	QueryLoss []float64 `json:"query_loss,omitempty"` // servers: % of the client queries sent to it that failed (timeouts, SERVFAIL, REFUSED)
+	Queries   []float64 `json:"queries"`              // live queries answered or failed
+	QPS       []float64 `json:"qps"`                  // gateways: queries per second
+	HitQPS    []float64 `json:"hit_qps"`              // gateways: of which answered from the cache
+	Avail     []float64 `json:"avail"`                // gateways: % of the availability samples that found it working
 	// over the whole range
-	Answered  uint64  `json:"answered"`
-	Failed    uint64  `json:"failed"`
-	ProbesOK  uint64  `json:"probes_ok"`
-	ProbesBad uint64  `json:"probes_failed"`
-	AvgMS     float64 `json:"avg_ms"`
-	MaxMS     float64 `json:"max_ms"`
-	LossPct   float64 `json:"loss_pct"`
-	Hits      uint64  `json:"hits"`      // gateways: answered from the cache
-	AvailPct  float64 `json:"avail_pct"` // gateways: availability over the range, -1 when never sampled
-	Kind      string  `json:"kind"`      // server | gateway | domain
-	Nodes     int     `json:"nodes"`     // how many nodes' history this is (a gateway's is every reachable node's)
-	NodesOff  int     `json:"nodes_off"` // cluster nodes that could not be asked
+	Answered     uint64  `json:"answered"`
+	Failed       uint64  `json:"failed"`
+	ProbesOK     uint64  `json:"probes_ok"`
+	ProbesBad    uint64  `json:"probes_failed"`
+	AvgMS        float64 `json:"avg_ms"`
+	MaxMS        float64 `json:"max_ms"`
+	LossPct      float64 `json:"loss_pct"`
+	QueryLossPct float64 `json:"query_loss_pct,omitempty"` // servers: over the whole range, as QueryLoss
+	Hits         uint64  `json:"hits"`                     // gateways: answered from the cache
+	AvailPct     float64 `json:"avail_pct"`                // gateways: availability over the range, -1 when never sampled
+	Kind         string  `json:"kind"`                     // server | gateway | domain
+	Nodes        int     `json:"nodes"`                    // how many nodes' history this is (a gateway's is every reachable node's)
+	NodesOff     int     `json:"nodes_off"`                // cluster nodes that could not be asked
 }
 
 // srvAcc is the sum of what one history key recorded over a bucket (or a whole range).
@@ -404,11 +406,27 @@ func (r srvRaw) Stats() ServerStatsResult {
 		Latency: make([]float64, n), LatMax: make([]float64, n), Loss: make([]float64, n), Queries: make([]float64, n),
 		QPS: make([]float64, n), HitQPS: make([]float64, n), Avail: make([]float64, n), AvailPct: -1, Kind: kindOf(r.Key), Nodes: 1}
 	var total srvAcc
+	srv := out.Kind == "server"
 	loss := func(a srvAcc) float64 {
+		if srv { // a server's loss is its probes': client queries that time out on it say little about its health
+			if t := a.PrOK + a.PrFail; t > 0 {
+				return float64(a.PrFail) * 100 / float64(t)
+			}
+			return -1
+		}
 		if t := a.OK + a.Fail + a.PrOK + a.PrFail; t > 0 {
 			return float64(a.Fail+a.PrFail) * 100 / float64(t)
 		}
 		return -1
+	}
+	queryLoss := func(a srvAcc) float64 {
+		if t := a.OK + a.Fail; t > 0 {
+			return float64(a.Fail) * 100 / float64(t)
+		}
+		return -1
+	}
+	if srv {
+		out.QueryLoss = make([]float64, n)
 	}
 	for i, b := range r.B {
 		total.add(b)
@@ -428,6 +446,12 @@ func (r srvRaw) Stats() ServerStatsResult {
 		if out.Loss[i] >= 0 {
 			out.Loss[i] = round2(out.Loss[i])
 		}
+		if srv {
+			out.QueryLoss[i] = queryLoss(b)
+			if out.QueryLoss[i] >= 0 {
+				out.QueryLoss[i] = round2(out.QueryLoss[i])
+			}
+		}
 	}
 	out.Answered, out.Failed, out.ProbesOK, out.ProbesBad = total.OK, total.Fail, total.PrOK, total.PrFail
 	if total.LatN > 0 {
@@ -436,6 +460,11 @@ func (r srvRaw) Stats() ServerStatsResult {
 	}
 	if l := loss(total); l >= 0 {
 		out.LossPct = round2(l)
+	}
+	if srv {
+		if l := queryLoss(total); l >= 0 {
+			out.QueryLossPct = round2(l)
+		}
 	}
 	out.Hits = total.Hit
 	if total.Up+total.Down > 0 {

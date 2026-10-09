@@ -129,17 +129,17 @@ func TestCanvasEditAddsAndRemovesNodes(t *testing.T) {
 
 func TestPickNodeByAddressHostOrID(t *testing.T) {
 	peers := []PeerView{
-		{Addr: "10.0.0.1:53854", NodeID: "aa", Hostname: "lphxsitedns01.example.net"},
-		{Addr: "10.0.0.2:53854", NodeID: "bb", Hostname: "lphxsitedns02"},
-		{Addr: "10.0.1.2:53854", NodeID: "cc", Hostname: "lphxsitedns02.other.net"},
+		{Addr: "10.0.0.1:53854", NodeID: "aa", Hostname: "lsitedns01.example.net"},
+		{Addr: "10.0.0.2:53854", NodeID: "bb", Hostname: "lsitedns02"},
+		{Addr: "10.0.1.2:53854", NodeID: "cc", Hostname: "lsitedns02.other.net"},
 		{Addr: "10.0.2.1:53854", NodeID: ""},
 	}
-	for name, want := range map[string]string{"10.0.0.1:53854": "aa", "10.0.0.1": "aa", "lphxsitedns01": "aa", "LPHXSITEDNS01.example.net": "aa", "bb": "bb", "10.0.1.2": "cc"} {
+	for name, want := range map[string]string{"10.0.0.1:53854": "aa", "10.0.0.1": "aa", "lsitedns01": "aa", "LSITEDNS01.example.net": "aa", "bb": "bb", "10.0.1.2": "cc"} {
 		if id, err := pickNode(peers, nil, name); err != nil || id != want {
 			t.Errorf("%q: %q %v, want %q", name, id, err, want)
 		}
 	}
-	if _, err := pickNode(peers, nil, "lphxsitedns02"); err == nil || !strings.Contains(err.Error(), "more than one") {
+	if _, err := pickNode(peers, nil, "lsitedns02"); err == nil || !strings.Contains(err.Error(), "more than one") {
 		t.Errorf("an ambiguous host name: %v", err)
 	}
 	if _, err := pickNode(peers, nil, "nobody"); err == nil {

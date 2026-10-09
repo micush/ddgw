@@ -180,10 +180,11 @@ DNS proxy ("dns" block at the top level of the config):
   client_action      what a client over its rate gets: drop (default; nothing is sent), truncate (UDP: a short answer
                      with the TC bit, so a real client retries over TCP) or refused. Over TCP/DoT/DoH: always REFUSED
   client_exempt      networks never rate limited (still subject to allowed_clients)
+  sortlist_on        true (default) uses sortlist; false keeps the list but does not sort
   sortlist           per-client-network order of the A/AAAA records in answers, one entry each:
                      "client-network: preferred-network, ...", e.g. ["10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"];
                      "any" matches every client; unmatched addresses keep their order after the preferred ones.
-                     A plain network ("10.129.0.0/16") is for every client; the one the client is in comes first
+                     A plain network ("10.20.0.0/16") is for every client; the one the client is in comes first
   ecs                true (default) passes the client's network to the servers (EDNS Client
                      Subnet, RFC 7871); ecs_prefix4 (24) / ecs_prefix6 (56) bits only; a server that
                      refuses it (FORMERR/REFUSED) is asked again without and then left alone

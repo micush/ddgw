@@ -1087,8 +1087,8 @@ func runServerStats(sock string, f *cliFlags) {
 		fmt.Printf("  %-11s %9s %9s %8s\n", "time", "avg ms", "worst ms", "fail %")
 	default:
 		fmt.Printf("  live queries answered %d, failed %d; probe queries passed %d, failed %d\n", r.Answered, r.Failed, r.ProbesOK, r.ProbesBad)
-		fmt.Printf("  latency average %.2f ms, worst %.2f ms; loss %.2f%% of attempts\n\n", r.AvgMS, r.MaxMS, r.LossPct)
-		fmt.Printf("  %-11s %9s %9s %8s %9s\n", "time", "avg ms", "worst ms", "loss %", "queries")
+		fmt.Printf("  latency average %.2f ms, worst %.2f ms; probes failed %.2f%%; client queries failed %.2f%%\n\n", r.AvgMS, r.MaxMS, r.LossPct, r.QueryLossPct)
+		fmt.Printf("  %-11s %9s %9s %8s %9s %9s\n", "time", "avg ms", "worst ms", "loss %", "query %", "queries")
 	}
 	num := func(v float64, f string) string {
 		if v < 0 {
@@ -1098,7 +1098,7 @@ func runServerStats(sock string, f *cliFlags) {
 	}
 	rows := 0
 	for i := len(r.Latency) - 1; i >= 0 && rows < 40; i-- {
-		if r.Latency[i] < 0 && r.Loss[i] < 0 && r.Avail[i] < 0 {
+		if r.Latency[i] < 0 && r.Loss[i] < 0 && r.Avail[i] < 0 && !(i < len(r.QueryLoss) && r.QueryLoss[i] >= 0) {
 			continue
 		}
 		t := time.Unix(r.Start+int64(i)*int64(r.Step), 0).Format("15:04")
@@ -1111,7 +1111,7 @@ func runServerStats(sock string, f *cliFlags) {
 		case r.Kind == "domain":
 			fmt.Printf("  %-11s %9s %9s %8s\n", t, num(r.Latency[i], "%.2f"), num(r.LatMax[i], "%.2f"), num(r.Loss[i], "%.2f"))
 		default:
-			fmt.Printf("  %-11s %9s %9s %8s %9s\n", t, num(r.Latency[i], "%.2f"), num(r.LatMax[i], "%.2f"), num(r.Loss[i], "%.2f"), num(r.Queries[i], "%.0f"))
+			fmt.Printf("  %-11s %9s %9s %8s %9s %9s\n", t, num(r.Latency[i], "%.2f"), num(r.LatMax[i], "%.2f"), num(r.Loss[i], "%.2f"), num(r.QueryLoss[i], "%.2f"), num(r.Queries[i], "%.0f"))
 		}
 		rows++
 	}
