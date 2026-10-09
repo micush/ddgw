@@ -432,6 +432,8 @@ type DNSConfig struct {
 	Policy []PolicyRule `json:"policy,omitempty"`
 	// PolicyOn switches the policy rows on (the default) or off without deleting them.
 	PolicyOn bool `json:"policy_on"`
+	// PolicyLog writes a log line for each query a policy row applies to (default true; at most 100 a second).
+	PolicyLog bool `json:"policy_log"`
 	// ClientRate limits each client (an IPv4 address or an IPv6 /64) to this many queries a second; 0 (the default)
 	// is no limit. ClientBurst is how many it may send at once (0 = twice the rate, at least 10). ClientAction is what
 	// a client over its rate gets: "drop" (the default, kept as empty in the file), "truncate" (UDP: a short answer
@@ -534,6 +536,7 @@ func defaultDNS() DNSConfig {
 		ForwardUpdates:  true,
 		SortListOn:      true,
 		PolicyOn:        true,
+		PolicyLog:       true,
 		Spread:          true,
 		SpreadBand:      20,
 		Cache:           true,
@@ -913,7 +916,7 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	if len(c.ClientExempt) == 0 {
 		c.ClientExempt = nil
 	}
-	c.PolicyOn = shared.PolicyOn
+	c.PolicyOn, c.PolicyLog = shared.PolicyOn, shared.PolicyLog
 	c.Policy = clonePolicy(shared.Policy)
 	c.SortListOn = shared.SortListOn
 	c.SortList = append([]string(nil), shared.SortList...)
@@ -1281,6 +1284,23 @@ func (d *DNSConfig) queryPausedScope(server string, q DNSQuery) string {
 	return ""
 }
 
+// pausedQueryCount is how many of the server's probe domains are paused, and how many it has.
+func (d *DNSConfig) pausedQueryCount(server string) (paused, total int) {
+	qs := d.queriesFor(server)
+	for _, q := range qs {
+		if d.queryPausedScope(server, q) != "" {
+			paused++
+		}
+	}
+	return paused, len(qs)
+}
+
+// allQueriesPaused says the server has probe domains and every one is paused: it cannot be verified, so it counts as down.
+func (d *DNSConfig) allQueriesPaused(server string) bool {
+	p, n := d.pausedQueryCount(server)
+	return n > 0 && p == n
+}
+
 // validQueryKeys lists the paused-list keys of every probe domain this block has.
 func (d *DNSConfig) validQueryKeys() map[string]bool {
 	m := map[string]bool{}
@@ -1315,8 +1335,16 @@ func (d DNSConfig) live() DNSConfig {
 		}
 		d.Servers = up
 	}
-	// paused probe domains are not asked; a server never loses its last one this way (it could not be verified at all)
+	// paused probe domains are not asked; a server with every one of them paused cannot be verified, so it counts as
+	// down and is left out of the pool like a paused server
 	if len(d.PausedQueries) != 0 || len(d.PausedQueriesHere) != 0 {
+		var up []string
+		for _, s := range d.Servers {
+			if !d.allQueriesPaused(s) {
+				up = append(up, s)
+			}
+		}
+		d.Servers = up
 		sq := make(map[string][]DNSQuery, len(d.ServerQueries)+len(d.Servers))
 		for k, v := range d.ServerQueries {
 			sq[k] = v

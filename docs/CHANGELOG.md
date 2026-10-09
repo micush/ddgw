@@ -1,5 +1,84 @@
 # Changelog
 
+## [v282] - 2026-10-09 — Paused probe domains: amber with one left, down with none
+
+### Changed
+- A server with all but one of its probe domains paused is **amber** (warn) on the Topology page, saying that only one domain is being checked.
+- A server with **every** probe domain paused is **red** and marked down: it is left out of the pool like a paused server (no queries, no probes) until a domain is resumed. Before, the pool quietly went on probing it with all its domains, so it looked fine.
+- The last active domain of a server can now be paused (it was refused with "pause the server instead"); that is how a server is brought to the down state this way.
+- The rest of the gateway's state follows as it does for any down server (the fallback servers are used when no server is left).
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. New tests: the pool leaves the server out and keeps the others' domains; the canvas shows ok, warn (one domain left) and bad (none) from a real probed pool.
+
+### Not verified
+The drawing in a browser.
+
+## [v281] - 2026-10-09 — Policy: `?` in a source name
+
+### Added
+- `?` in a source name pattern stands for exactly one character (never a dot): `*host?.sub?.xyzzy.com` matches `myhost1.sub2.xyzzy.com`, not `host.sub2.xyzzy.com` or `host12.sub2.xyzzy.com`. It combines with `*` and is indexed like the v280 patterns.
+- Tests: `?` cases in the pattern table; `?` rows in the index-versus-scan test.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`.
+
+### Not verified
+Through a running daemon and the GUI.
+
+## [v280] - 2026-10-09 — Policy: `*` inside a source name
+
+### Added
+- A source name may hold `*` inside its labels: `*host*.sub*.xyzzy.com`, `ad-*.example.com`, `host*`. A `*` is any run of characters within one label (never a dot), so the pattern has as many labels as the name; a leading `*.` as a whole label still means any labels in front, or none. A pattern is only a source name: as a destination it is refused, and a `*.name` destination needs a plain `*.name` source.
+- Patterns are found through the index by the literal labels at their end (`xyzzy.com`), so a table of them costs about what exact rows cost; a pattern with no literal end (`host*`) is tried for every name.
+- Tests: the pattern matcher on a table of cases, the refusals, and the index-versus-scan test now includes patterns.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`.
+
+### Not verified
+Through a running daemon and the GUI.
+
+## [v279] - 2026-10-09 — Help: one page for each DNS proxy tab
+
+### Changed
+- The DNS proxy page's help is six pages now, one per tab (Servers, Health & balancing, Listeners, Resolution, Cache & ECS, Clients). Opening Help shows the page of the tab you are on, and switching tabs with Help open switches the page. Each page opens with a short description of the tab and then its fields; the fields were moved from the one long Configure page, which now points to the six. No text of the fields was changed.
+
+### Verified
+`node --check` on app.js and help.js; the help data loads and has the six pages; every DNS proxy field of the old page is on exactly one of them (checked by the script that moved them).
+
+### Not verified
+The panel following the tabs in a browser.
+
+## [v278] - 2026-10-09 — Policy: local answers in the destination name, paging and a filter
+
+### Added
+- **Local answers in *Destination name*.** With the servers blank, the destination name can be the answer: `10.5.5.5` (or `10.5.5.5, 2001:db8::5`) makes the name those addresses, and the record syntax of v277 (`A …; TTL 300`, `CNAME …`, `TXT "…"`) works there too. Servers together with a local answer are refused. The servers-cell form of v277 still works; the GUI shows either in the Destination name column and saves the text as `dest`, which the daemon stores in its normal form.
+- **Paging and a filter** on the policy table: 25 to 500 rows per page (50 by default), first/previous/next/last and a page number, and a *Filter rows* box that keeps the rows with that text in any cell. Rows are numbered by their place in the whole table (the number in the policy log lines). Add and Paste clear the filter so the new row shows. Right-click ▸ Move to top / Move to bottom added; Move up / Move down follow the filtered view; dragging works within a page.
+
+### Changed
+- The table is built from a list of rows and draws one page, so 10000 rows no longer mean 10000 sets of inputs.
+
+### Verified
+Not verified in a browser: the table was checked with `node --check` only; try it with a long table, a filter, paging, drag and right-click. Go: gofmt, vet, tests (new: local answers in the destination name, refusal with servers, a hostname destination still a rename), race run, cgo-off and arm64 builds.
+
+### Not verified
+The GUI behaviour above, in any real browser.
+
+## [v277] - 2026-10-09 — Policy: local records, a log of matches, 10000 rows
+
+### Added
+- **Local records.** The *Destination servers* cell can hold the answer itself: `A 10.5.5.5, 10.5.5.6`, `AAAA 2001:db8::5`, `TXT "some text"`, several kinds separated by `;`, `TTL 300` (seconds, default 60) and `CNAME host.example.com`. A type the row has no records of gets "no data", ANY gets everything, the answer is marked authoritative. A CNAME row answers CNAME queries with the CNAME and any other type with the CNAME followed by what the gateway's own servers answer for the target (a CNAME cannot be combined with other records). Records take no destination name. The GUI sends such a cell whole instead of splitting it into servers.
+- **Log of matches.** Each query a policy row applied to (a `pool` exception too) writes `dns: policy row 3: 10.1.1.1 asked www.example.com A: answered null` (or `sent to …`, `asked as …`, `answered A …`), at most 100 a second, the rest counted in one line. Switched by *Log policy matches* (`policy_log`, on by default).
+- **10000 rows** (was 1000). Rows are found through an index by the name they name, then taken in table order for the first whose client matches, so a long table costs about what a short one does; a test checks the index against a plain scan of 3000 random rows.
+- Tests: the record syntax and its refusals, the answers through the frontend (A with TTL, AAAA no data, TXT, CNAME and the chase, no server reached), the index against a scan, the log lines and the switch.
+
+### Changed
+- The record-copying part of the renaming code is one function now, shared with the CNAME answer.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser; a table of 10000 rows in the GUI (50000 inputs) is not tried and may be slow to draw.
+
 ## [v276] - 2026-10-09 — Policy table: reorder rows
 
 ### Added

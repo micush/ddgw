@@ -374,7 +374,9 @@
     b.title = open ? "Close help (Esc)" : "Help for this page";
   }
   function fillHelp() {
-    const [t, kids] = helpBody(state.tab.startsWith("cfg_") ? "config" : state.tab);
+    // the DNS proxy page has a help page for each of its tabs
+    const topic = state.tab === "cfg_dns" && DDGW_HELP["config_dns" + state.dnsTab] ? "config_dns" + state.dnsTab : state.tab.startsWith("cfg_") ? "config" : state.tab;
+    const [t, kids] = helpBody(topic);
     document.getElementById("help-title").textContent = t;
     const body = clear(document.getElementById("help-body"));
     body.append(...kids);
@@ -1813,6 +1815,7 @@
     { shared: true, k: "sortlist", l: "Sort list", t: "list", wide: true },
     { section: "Policy-Based Resolution" },
     { shared: true, k: "policy_on", l: "Policy-Based Resolution enabled", t: "bool" },
+    { shared: true, k: "policy_log", l: "Log policy matches", t: "bool" },
     { shared: true, k: "policy", l: "Policy rows", t: "policy", wide: true },
     { section: "Client Rate Limiting", note: "Applies to every gateway that uses these settings, over UDP, TCP, DoT and DoH, before the cache. This node itself is always allowed and never limited. Counters are per node." },
     { shared: true, k: "allowed_clients", l: "Allowed clients", t: "list", wide: true, hint: "Networks that may use the proxy, one per line: 10.0.0.0/8, 192.168.1.5, 2001:db8::/32. Empty = everyone. Anyone else is answered REFUSED (dynamic updates too)." },
@@ -1854,43 +1857,103 @@
   const sharedTag = (f) => (f.shared && state.clustered
     ? h("span", { class: "pill info tiny", title: "Replicated from the cluster's primary. Changes made here are accepted by the primary first." }, "shared") : null);
 
-  // Policy-Based Resolution: a table of rows (source client, destination name, destination servers) edited like a
-  // spreadsheet.  Every cell is an input; right-click a row for Edit, Copy, Paste, Add and Delete.  The rows are read
-  // from the top and the first match wins, so their order is kept.
+  // Policy-Based Resolution: a table of rows (source client, source name, destination servers, destination name) edited
+  // like a spreadsheet.  The rows live in a list and the table shows one page of it, optionally narrowed by a filter, so
+  // thousands of rows stay quick.  The rows are read from the top and the first match wins, so their order is kept and
+  // numbered.  Right-click a row for Edit, Copy, Paste, Add, Move and Delete; drag the handle to reorder on a page.
   let policyClip = null;
+  const POLICY_LOCAL = /^(A|AAAA|CNAME|TXT|TTL)\s/i;
   function policyTable(rows) {
+    const NAMES = ["Source client", "Source name", "Destination servers", "Destination name"];
+    // a local answer is shown in the destination name column, wherever it was written
+    const data = rows.map((r) => {
+      const sv = r.servers || [];
+      return sv.length === 1 && POLICY_LOCAL.test(sv[0]) ? { v: [r.client, r.name, "", sv[0]] } : { v: [r.client, r.name, sv.join(", "), r.dest || ""] };
+    });
+    let page = 0, size = 50, dragging = null;
+
     const tbody = h("tbody", {});
-    const empty = h("div", { class: "policy-empty" }, "No rows. Right-click here ▸ Add row.");
     const tbl = h("table", { class: "policy" },
-      h("thead", {}, h("tr", {}, h("th", { "aria-label": "Order" }), h("th", {}, "Source client"), h("th", {}, "Source name"), h("th", {}, "Destination servers"), h("th", {}, "Destination name"))), tbody);
+      h("thead", {}, h("tr", {}, h("th", { "aria-label": "Row number and order" }, "#"), ...NAMES.map((n) => h("th", {}, n)))), tbody);
+    const empty = h("div", { class: "policy-empty" }, "");
     const wrap = h("div", { class: "policy-wrap" }, tbl, empty);
+
+    const filter = h("input", { type: "search", class: "policy-filter", placeholder: "Filter rows…", "aria-label": "Filter policy rows", autocomplete: "off", spellcheck: "false" });
+    const count = h("span", { class: "policy-count muted" }, "");
+    const sizeSel = h("select", { "aria-label": "Rows per page" }, [25, 50, 100, 250, 500].map((n) => h("option", { value: String(n) }, n + " per page")));
+    sizeSel.value = String(size);
+    const mkBtn = (label, title) => h("button", { type: "button", class: "btn small", title, "aria-label": title }, label);
+    const first = mkBtn("«", "First page"), prev = mkBtn("‹", "Previous page"), next = mkBtn("›", "Next page"), last = mkBtn("»", "Last page");
+    const pageIn = h("input", { type: "number", min: "1", class: "policy-page", "aria-label": "Page number" });
+    const pages = h("span", { class: "muted" }, "");
+    const pager = h("span", { class: "policy-pager" }, first, prev, pageIn, pages, next, last);
+    const bar = h("div", { class: "policy-bar" }, filter, count, h("span", { class: "grow" }), pager, sizeSel);
+    const box = h("div", { class: "policy-box" }, bar, wrap);
+    // the filter and paging controls are not settings: they must not trigger a save
+    bar.addEventListener("change", (e) => e.stopPropagation());
+
     const changed = () => tbl.dispatchEvent(new Event("change", { bubbles: true }));
-    const refresh = () => { empty.hidden = tbody.children.length > 0; };
-    const read = (tr) => [...tr.querySelectorAll("input")].map((i) => i.value.trim());
-    const mark = (tr) => { const c = read(tr); tr.classList.toggle("incomplete", !c[2] && !c[3]); };
+    const visible = () => {
+      const q = filter.value.trim().toLowerCase();
+      return q ? data.filter((r) => r.v.some((x) => x.toLowerCase().includes(q))) : data;
+    };
+    const mark = (tr, row) => { tr.classList.toggle("incomplete", !row.v[2].trim() && !row.v[3].trim()); };
     const copyText = (vals) => vals.join("\t");
     const parseText = (txt) => txt.split(/\r?\n/).map((l) => l.split("\t").map((x) => x.trim())).filter((c) => c.length > 1 && c.some(Boolean))
       .map((c) => [c[0] || "*", c[1] || "*", c[2] || "", c[3] || ""]);
-    let dragging = null; // the row being dragged by its handle
     const clearMarks = () => tbody.querySelectorAll(".drop-above, .drop-below").forEach((x) => x.classList.remove("drop-above", "drop-below"));
-    function mk(vals) {
-      const tr = h("tr", {}, [0, 1, 2, 3].map((i) => {
-        const inp = h("input", { type: "text", autocomplete: "off", spellcheck: "false", "aria-label": ["Source client", "Source name", "Destination servers", "Destination name"][i] });
-        inp.value = vals[i] || "";
-        inp.addEventListener("input", () => mark(tr));
-        return h("td", {}, inp);
-      }));
+    const trOf = (row) => [...tbody.children].find((t) => t._row === row);
+
+    // show the page; with `follow`, the page that holds that row
+    function render(follow) {
+      const vis = visible();
+      const n = Math.max(1, Math.ceil(vis.length / size));
+      if (follow) { const i = vis.indexOf(follow); if (i >= 0) page = Math.floor(i / size); }
+      page = Math.min(Math.max(page, 0), n - 1);
+      const from = page * size;
+      tbody.replaceChildren(...vis.slice(from, from + size).map(mk));
+      const filtered = vis.length !== data.length;
+      count.textContent = vis.length
+        ? `${from + 1}–${Math.min(from + size, vis.length)} of ${vis.length}${filtered ? ` (filtered from ${data.length})` : ""}`
+        : (filtered ? `0 of ${data.length}` : "0 rows");
+      pager.hidden = n < 2;
+      pageIn.value = String(page + 1);
+      pageIn.max = String(n);
+      pages.textContent = "of " + n;
+      first.disabled = prev.disabled = page === 0;
+      next.disabled = last.disabled = page >= n - 1;
+      empty.hidden = vis.length > 0;
+      empty.textContent = data.length ? "No rows match the filter." : "No rows. Right-click here ▸ Add row.";
+    }
+
+    function moveTo(row, target, after) {
+      if (row === target) return;
+      data.splice(data.indexOf(row), 1);
+      const j = data.indexOf(target);
+      data.splice(after ? j + 1 : j, 0, row);
+      render(row);
+      changed();
+    }
+    function mk(row) {
+      const tr = h("tr", {});
+      tr._row = row;
       const grip = h("span", { class: "grip-h", draggable: "true", title: "Drag to reorder", "aria-hidden": "true" }, "⋮⋮");
-      tr.prepend(h("td", { class: "grip" }, grip));
+      tr.append(h("td", { class: "grip" }, h("span", { class: "rownum" }, String(data.indexOf(row) + 1)), grip));
+      for (let i = 0; i < 4; i++) {
+        const inp = h("input", { type: "text", autocomplete: "off", spellcheck: "false", "aria-label": NAMES[i] });
+        inp.value = row.v[i] || "";
+        inp.addEventListener("input", () => { row.v[i] = inp.value; mark(tr, row); });
+        tr.append(h("td", {}, inp));
+      }
       grip.addEventListener("dragstart", (e) => {
-        dragging = tr;
+        dragging = row;
         e.dataTransfer.effectAllowed = "move";
         try { e.dataTransfer.setData("text/plain", "policy-row"); e.dataTransfer.setDragImage(tr, 0, 0); } catch (x) { /* a browser without drag images */ }
         tr.classList.add("dragging");
       });
       grip.addEventListener("dragend", () => { dragging = null; tr.classList.remove("dragging"); clearMarks(); });
       tr.addEventListener("dragover", (e) => {
-        if (!dragging || dragging === tr) return;
+        if (!dragging || dragging === row) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         const r = tr.getBoundingClientRect();
@@ -1898,24 +1961,27 @@
         tr.classList.add(e.clientY > r.top + r.height / 2 ? "drop-below" : "drop-above");
       });
       tr.addEventListener("drop", (e) => {
-        if (!dragging || dragging === tr) return;
+        if (!dragging || dragging === row) return;
         e.preventDefault();
         const below = tr.classList.contains("drop-below");
         clearMarks();
-        if (below) tr.after(dragging); else tr.before(dragging);
+        const d = dragging;
         dragging = null;
-        changed();
+        moveTo(d, row, below);
       });
-      tr.addEventListener("contextmenu", (e) => rowMenu(menuFor(tr))(e)); // the items depend on where the row is now
-      mark(tr);
+      tr.addEventListener("contextmenu", (e) => rowMenu(menuFor(row))(e)); // the items depend on where the row is now
+      mark(tr, row);
       return tr;
     }
+    // add a row after `after` (the end when none); the filter is cleared so the new row shows
     function insert(vals, after) {
-      const tr = mk(vals);
-      if (after && after.nextSibling) tbody.insertBefore(tr, after.nextSibling); else tbody.append(tr);
-      refresh();
-      return tr;
+      const row = { v: [vals[0] || "", vals[1] || "", vals[2] || "", vals[3] || ""] };
+      data.splice(after ? data.indexOf(after) + 1 : data.length, 0, row);
+      filter.value = "";
+      render(row);
+      return row;
     }
+    const focusRow = (row) => { const t = trOf(row); if (t) t.querySelector("input").focus(); };
     async function paste(after) {
       let list = [];
       try { list = parseText(await navigator.clipboard.readText()); } catch (e) { /* no permission: the last copied row is used */ }
@@ -1925,28 +1991,40 @@
       for (const v of list) at = insert(v, at);
       changed();
     }
-    function menuFor(tr) {
+    function menuFor(row) {
+      const vis = visible(), i = vis.indexOf(row), di = data.indexOf(row);
       return [
-        ["Edit", () => tr.querySelector("input").focus()],
-        ["Copy", () => { policyClip = read(tr); try { navigator.clipboard.writeText(copyText(policyClip)); } catch (e) { /* the row stays in the page's own clipboard */ } }],
-        ["Paste", () => paste(tr)],
-        ["Add", () => insert(["*", "*", "", ""], tr).querySelector("input").focus()],
-        ...(tr.previousElementSibling ? [["Move up", () => { tr.previousElementSibling.before(tr); changed(); }]] : []),
-        ...(tr.nextElementSibling ? [["Move down", () => { tr.nextElementSibling.after(tr); changed(); }]] : []),
-        ["Delete", () => { tr.remove(); refresh(); changed(); }, "danger"],
+        ["Edit", () => focusRow(row)],
+        ["Copy", () => { policyClip = row.v.map((x) => x.trim()); try { navigator.clipboard.writeText(copyText(policyClip)); } catch (e) { /* the row stays in the page's own clipboard */ } }],
+        ["Paste", () => paste(row)],
+        ["Add", () => focusRow(insert(["*", "*", "", ""], row))],
+        ...(i > 0 ? [["Move up", () => moveTo(row, vis[i - 1], false)]] : []),
+        ...(i >= 0 && i < vis.length - 1 ? [["Move down", () => moveTo(row, vis[i + 1], true)]] : []),
+        ...(di > 0 ? [["Move to top", () => moveTo(row, data[0], false)]] : []),
+        ...(di < data.length - 1 ? [["Move to bottom", () => moveTo(row, data[data.length - 1], true)]] : []),
+        ["Delete", () => { data.splice(data.indexOf(row), 1); render(); changed(); }, "danger"],
       ];
     }
     wrap.addEventListener("contextmenu", rowMenu([
-      ["Add", () => insert(["*", "*", "", ""], tbody.lastElementChild).querySelector("input").focus()],
-      ["Paste", () => paste(tbody.lastElementChild)],
+      ["Add", () => focusRow(insert(["*", "*", "", ""], null))],
+      ["Paste", () => paste(data[data.length - 1])],
     ]));
-    for (const r of rows) tbody.append(mk([r.client, r.name, (r.servers || []).join(", "), r.dest || ""]));
-    refresh();
+
+    filter.addEventListener("input", () => { page = 0; render(); });
+    sizeSel.addEventListener("change", () => { size = +sizeSel.value || 50; page = 0; render(); });
+    first.addEventListener("click", () => { page = 0; render(); });
+    prev.addEventListener("click", () => { page--; render(); });
+    next.addEventListener("click", () => { page++; render(); });
+    last.addEventListener("click", () => { page = 1e9; render(); });
+    pageIn.addEventListener("change", () => { page = (parseInt(pageIn.value, 10) || 1) - 1; render(); });
+    pageIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); pageIn.blur(); } });
+    filter.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+    render();
     return {
-      el: wrap,
+      el: box,
       // a row with neither servers nor a destination name is not sent (it is marked until it has one); a blank client or source name is "*"
-      get: () => [...tbody.children].map(read).filter((c) => c[2] || c[3])
-        .map((c) => ({ client: c[0] || "*", name: c[1] || "*", servers: c[2].split(/[\s,]+/).filter(Boolean), ...(c[3] && c[3] !== "*" ? { dest: c[3] } : {}) })),
+      get: () => data.map((r) => r.v.map((x) => x.trim())).filter((c) => c[2] || c[3])
+        .map((c) => ({ client: c[0] || "*", name: c[1] || "*", servers: POLICY_LOCAL.test(c[2]) ? [c[2]] : c[2].split(/[\s,]+/).filter(Boolean), ...(c[3] && c[3] !== "*" ? { dest: c[3] } : {}) })),
     };
   }
 
@@ -2045,6 +2123,7 @@
           panes.forEach((p, j) => { p.hidden = j !== i; });
           buttons.forEach((b, j) => { b.setAttribute("aria-selected", j === i ? "true" : "false"); b.tabIndex = j === i ? 0 : -1; b.classList.toggle("on", j === i); });
           if (focus) buttons[i].focus();
+          if (document.getElementById("help-panel") && document.getElementById("help-panel").classList.contains("open")) fillHelp();
         }
         const strip = h("div", { class: "dtabs", role: "tablist", "aria-label": "DNS proxy settings" }, buttons);
         strip.addEventListener("keydown", (e) => {

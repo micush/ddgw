@@ -161,6 +161,8 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 				case cfg.isPaused(addr):
 					cs.Paused = cfg.serverPausedScope(addr)
 					cs.Status, cs.Detail = "paused", "paused on "+pausedWhere(cs.Paused)+" — not queried until resumed"
+				case cfg.allQueriesPaused(addr):
+					cs.Status, cs.Detail = "bad", "every probe domain is paused, so the server counts as down — not queried until one is resumed"
 				case !probed || (st.LastProbeAgo == 0 && len(st.Tests) == 0):
 					cs.Status, cs.Detail = "idle", "waiting for the first probe"
 					if g.Paused {
@@ -181,6 +183,9 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 					} else {
 						cs.Status, cs.Detail = "ok", fmt.Sprintf("healthy, %.2f ms", st.EWMAMS)
 					}
+				}
+				if np, nt := cfg.pausedQueryCount(addr); cs.Status == "ok" && nt > 1 && nt-np == 1 {
+					cs.Status, cs.Detail = "warn", fmt.Sprintf("only one probe domain is active (%d paused), so a failure elsewhere would not be noticed", np)
 				}
 				for _, q := range cfg.queriesFor(addr) {
 					ct := CanvasTest{Name: q.Name, Type: q.Type, Status: "idle", Detail: "not tested yet"}
@@ -1123,16 +1128,6 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 			if e.Action == "pause" {
 				if containsStr(*pl, key) {
 					return "", fmt.Errorf("%s is already paused on %s", e.Name, where)
-				}
-				active := 0
-				for _, o := range list {
-					k := queryKey(addr, o.Name, o.Type)
-					if k != key && !containsStr(d.PausedQueries, k) && !containsStr(dc.PausedQueriesHere, k) {
-						active++
-					}
-				}
-				if active == 0 {
-					return "", fmt.Errorf("%s is the last active domain of server %s; pause the server instead", e.Name, addr)
 				}
 				*pl = append(*pl, key)
 				return fmt.Sprintf("%s paused on %s for server %s — not asked until resumed", q.Name, where, addr), nil

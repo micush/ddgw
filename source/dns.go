@@ -331,10 +331,15 @@ type Pool struct {
 	Denied   atomic.Uint64 // refused: the client is not in allowed_clients
 	Limited  atomic.Uint64 // turned away: the client was over client_rate
 
-	avoid  nameAvoid     // servers that timed out on a name lately (slowname.go)
-	sorts  []sortRule    // the dns block's sortlist, parsed (sortlist.go)
-	policy []policyRule  // the dns block's policy rows, parsed (policy.go)
-	lim    *clientLimits // nil when no client list or rate is configured (clientlimit.go)
+	avoid    nameAvoid    // servers that timed out on a name lately (slowname.go)
+	sorts    []sortRule   // the dns block's sortlist, parsed (sortlist.go)
+	policy   []policyRule // the dns block's policy rows, parsed (policy.go)
+	pidx     *policyIndex
+	pidxOnce sync.Once
+	logSec   atomic.Int64 // the second policy matches are being counted for, how many were logged, how many were not
+	logN     atomic.Int64
+	logSupp  atomic.Int64
+	lim      *clientLimits // nil when no client list or rate is configured (clientlimit.go)
 }
 
 func NewPool(cfg DNSConfig) *Pool {
@@ -758,7 +763,7 @@ func (p *Pool) forward(ctx context.Context, query []byte, tcp bool, client netip
 	var rn *renamer
 	if r := p.policyFor(client, &qi); r != nil && count && r.action != "" { // the row answers by itself
 		p.Answered.Add(1)
-		return r.localAnswer(query, &qi), nil
+		return r.localAnswer(ctx, p, query, &qi), nil
 	} else if r != nil && count { // a policy row's servers instead of the pool's
 		if len(r.servers) == 0 { // only a destination name: the pool's servers are asked for it
 			ranked = p.Candidates()

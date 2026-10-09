@@ -178,57 +178,10 @@ func (rn *renamer) response(resp []byte) ([]byte, error) {
 		off = n + 4
 	}
 	for i := 0; i < total; i++ {
-		l, n, ok := unpackName(resp, off)
-		if !ok || n+10 > len(resp) {
-			return nil, errors.New("policy: unreadable answer")
+		var err error
+		if off, err = copyRR(w, resp, off, rn.mapName); err != nil {
+			return nil, err
 		}
-		typ := binary.BigEndian.Uint16(resp[n:])
-		rdl := int(binary.BigEndian.Uint16(resp[n+8:]))
-		if n+10+rdl > len(resp) {
-			return nil, errors.New("policy: unreadable answer")
-		}
-		rd := resp[n+10 : n+10+rdl]
-		w.name(rn.mapName(l), true)
-		w.buf = append(w.buf, resp[n:n+8]...)
-		lenAt := len(w.buf)
-		w.buf = append(w.buf, 0, 0)
-		start := len(w.buf)
-		switch {
-		case typ == 2 || typ == 5 || typ == 12: // NS, CNAME, PTR
-			t, e, ok := unpackName(resp, n+10)
-			if !ok || e != n+10+rdl {
-				return nil, errors.New("policy: unreadable answer")
-			}
-			w.name(rn.mapName(t), true)
-		case typ == 15: // MX
-			t, e, ok := unpackName(resp, n+12)
-			if rdl < 3 || !ok || e != n+10+rdl {
-				return nil, errors.New("policy: unreadable answer")
-			}
-			w.buf = append(w.buf, rd[:2]...)
-			w.name(rn.mapName(t), true)
-		case typ == 6: // SOA
-			m, e, ok := unpackName(resp, n+10)
-			if !ok {
-				return nil, errors.New("policy: unreadable answer")
-			}
-			r, e2, ok := unpackName(resp, e)
-			if !ok || e2+20 != n+10+rdl {
-				return nil, errors.New("policy: unreadable answer")
-			}
-			w.name(rn.mapName(m), true)
-			w.name(rn.mapName(r), true)
-			w.buf = append(w.buf, resp[e2:e2+20]...)
-		case plainRData[typ]:
-			w.buf = append(w.buf, rd...)
-		default:
-			return nil, fmt.Errorf("policy: a record of type %d cannot be moved to the client's name", typ)
-		}
-		if len(w.buf)-start > 0xFFFF {
-			return nil, errors.New("policy: answer too large")
-		}
-		binary.BigEndian.PutUint16(w.buf[lenAt:], uint16(len(w.buf)-start))
-		off = n + 10 + rdl
 	}
 	if off != len(resp) {
 		return nil, errors.New("policy: unreadable answer")
@@ -242,4 +195,60 @@ func (rn *renamer) back(resp []byte) ([]byte, error) {
 		return resp, nil
 	}
 	return rn.response(resp)
+}
+
+// copyRR writes the record at off of msg to w, naming it and the names in its data through mapName, and returns the
+// offset after it.
+func copyRR(w *msgWriter, resp []byte, off int, mapName func([]string) []string) (int, error) {
+	l, n, ok := unpackName(resp, off)
+	if !ok || n+10 > len(resp) {
+		return 0, errors.New("policy: unreadable answer")
+	}
+	typ := binary.BigEndian.Uint16(resp[n:])
+	rdl := int(binary.BigEndian.Uint16(resp[n+8:]))
+	if n+10+rdl > len(resp) {
+		return 0, errors.New("policy: unreadable answer")
+	}
+	rd := resp[n+10 : n+10+rdl]
+	w.name(mapName(l), true)
+	w.buf = append(w.buf, resp[n:n+8]...)
+	lenAt := len(w.buf)
+	w.buf = append(w.buf, 0, 0)
+	start := len(w.buf)
+	switch {
+	case typ == 2 || typ == 5 || typ == 12: // NS, CNAME, PTR
+		t, e, ok := unpackName(resp, n+10)
+		if !ok || e != n+10+rdl {
+			return 0, errors.New("policy: unreadable answer")
+		}
+		w.name(mapName(t), true)
+	case typ == 15: // MX
+		t, e, ok := unpackName(resp, n+12)
+		if rdl < 3 || !ok || e != n+10+rdl {
+			return 0, errors.New("policy: unreadable answer")
+		}
+		w.buf = append(w.buf, rd[:2]...)
+		w.name(mapName(t), true)
+	case typ == 6: // SOA
+		m, e, ok := unpackName(resp, n+10)
+		if !ok {
+			return 0, errors.New("policy: unreadable answer")
+		}
+		r, e2, ok := unpackName(resp, e)
+		if !ok || e2+20 != n+10+rdl {
+			return 0, errors.New("policy: unreadable answer")
+		}
+		w.name(mapName(m), true)
+		w.name(mapName(r), true)
+		w.buf = append(w.buf, resp[e2:e2+20]...)
+	case plainRData[typ]:
+		w.buf = append(w.buf, rd...)
+	default:
+		return 0, fmt.Errorf("policy: a record of type %d cannot be moved to the client's name", typ)
+	}
+	if len(w.buf)-start > 0xFFFF {
+		return 0, errors.New("policy: answer too large")
+	}
+	binary.BigEndian.PutUint16(w.buf[lenAt:], uint16(len(w.buf)-start))
+	return n + 10 + rdl, nil
 }

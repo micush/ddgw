@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"strings"
+	"time"
 )
 
 // Policy-Based Resolution (the dns block's "policy", shared by every gateway): which servers a query goes to depends
@@ -27,6 +29,9 @@ import (
 // When none of them answers, the client gets SERVFAIL: the query does not fall back to the pool.  Answers are cached
 // per row's server list, so a client sent to one set never gets an answer cached for another.
 
+// policyMaxRows is how many rows the table holds.
+const policyMaxRows = 10000
+
 // PolicyRule is one row of the table.
 type PolicyRule struct {
 	Client  string   `json:"client"`
@@ -42,19 +47,26 @@ type policyRule struct {
 	anyClient bool
 	nets      []netip.Prefix
 	anyName   bool
-	exact     string // lower case, no trailing dot; empty when the row is a "*.name" one
-	suffix    string // ".name" of a "*.name" row
+	exact     string    // lower case, no trailing dot; empty when the row is a "*.name" one
+	suffix    string    // ".name" of a "*.name" row
+	glob      *nameGlob // a name with "*" inside its labels (nameglob.go); exact and suffix are empty then
 	servers   []*Server
 	destLit   []string // the name to ask for instead, when it is one name
 	destSuf   []string // the labels after the "*" of a "*.name" destination (srcSuf: of the "*.name" it replaces)
 	srcSuf    []string
 	rename    bool
-	action    string // a keyword in place of servers (policyAction): the row answers itself, or hands the query to the pool
-	tag       string // the servers and destination, as the cache key part for answers that came from them
+	rec       *localData // local records in place of servers (action polRecord)
+	idx       int        // 1-based place in the table, for the log
+	desc      string     // what the row does, for the log
+	action    string     // a keyword in place of servers (policyAction): the row answers itself, or hands the query to the pool
+	tag       string     // the servers and destination, as the cache key part for answers that came from them
 }
 
 func policyName(s string) (exact, suffix string, all bool, err error) {
 	s = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(s), "."))
+	if _, is, _ := parseGlob(s); is {
+		return "", "", false, fmt.Errorf("%q: a pattern with * inside is allowed only as a source name", s)
+	}
 	switch {
 	case s == "*" || s == "":
 		return "", "", true, nil
@@ -124,7 +136,16 @@ func normalizePolicy(rows []PolicyRule) ([]PolicyRule, error) {
 	var out []PolicyRule
 	for i, r := range rows {
 		r.Client, r.Name = strings.TrimSpace(r.Client), strings.TrimSpace(r.Name)
-		r.Servers = splitServers(r.Servers)
+		if ld, ok := localDest(r.Dest); ok { // the answer written in the destination name column
+			if len(splitServers(r.Servers)) > 0 {
+				return nil, fmt.Errorf("dns: policy row %d: a local answer goes in the destination name; leave the servers blank", i+1)
+			}
+			r.Servers, r.Dest = []string{ld}, ""
+		}
+		rec := len(r.Servers) == 1 && isRecordSyntax(r.Servers[0]) // local records, written out whole
+		if !rec {
+			r.Servers = splitServers(r.Servers)
+		}
 		if r.Client == "" && r.Name == "" && len(r.Servers) == 0 {
 			continue
 		}
@@ -137,10 +158,26 @@ func normalizePolicy(rows []PolicyRule) ([]PolicyRule, error) {
 		if _, _, err := policyClients(r.Client); err != nil {
 			return nil, fmt.Errorf("dns: policy row %d: client: %w", i+1, err)
 		}
-		if _, _, _, err := policyName(r.Name); err != nil {
+		if _, is, err := parseGlob(r.Name); is {
+			if err != nil {
+				return nil, fmt.Errorf("dns: policy row %d: name: %w", i+1, err)
+			}
+		} else if _, _, _, err := policyName(r.Name); err != nil {
 			return nil, fmt.Errorf("dns: policy row %d: name: %w", i+1, err)
 		}
 		destSet := strings.TrimSpace(r.Dest) != "" && strings.TrimSpace(r.Dest) != "*"
+		if rec {
+			if destSet {
+				return nil, fmt.Errorf("dns: policy row %d: local records take no destination name", i+1)
+			}
+			if _, err := parseLocal(r.Servers[0]); err != nil {
+				return nil, fmt.Errorf("dns: policy row %d: %w", i+1, err)
+			}
+			r.Servers = []string{strings.TrimSpace(r.Servers[0])}
+			r.Dest = ""
+			out = append(out, r)
+			continue
+		}
 		if policyAction(r.Servers) == polPool && destSet { // "pool" with a destination name is the same as no servers
 			r.Servers = nil
 		}
@@ -173,8 +210,8 @@ func normalizePolicy(rows []PolicyRule) ([]PolicyRule, error) {
 		}
 		out = append(out, r)
 	}
-	if len(out) > 1000 {
-		return nil, fmt.Errorf("dns: policy: at most 1000 rows")
+	if len(out) > policyMaxRows {
+		return nil, fmt.Errorf("dns: policy: at most %d rows", policyMaxRows)
 	}
 	return out, nil
 }
@@ -183,21 +220,43 @@ func normalizePolicy(rows []PolicyRule) ([]PolicyRule, error) {
 func buildPolicy(rows []PolicyRule) []policyRule {
 	var out []policyRule
 	have := map[string]*Server{}
-	for _, r := range rows {
-		var pr policyRule
+	for ri, r := range rows {
+		pr := policyRule{idx: ri + 1}
 		var err error
 		if pr.anyClient, pr.nets, err = policyClients(r.Client); err != nil {
 			continue // validated when the config was loaded
 		}
-		if pr.exact, pr.suffix, pr.anyName, err = policyName(r.Name); err != nil {
+		if g, is, _ := parseGlob(r.Name); is {
+			if g == nil {
+				continue
+			}
+			pr.glob = g
+		} else if pr.exact, pr.suffix, pr.anyName, err = policyName(r.Name); err != nil {
 			continue
 		}
 		servers := r.Servers
+		if ld, ok := localDest(r.Dest); ok && len(splitServers(servers)) == 0 {
+			servers = []string{ld}
+		}
+		if len(servers) == 1 && isRecordSyntax(servers[0]) {
+			d, err := parseLocal(servers[0])
+			if err != nil {
+				continue
+			}
+			pr.rec, pr.action, pr.tag = d, polRecord, polRecord
+			pr.desc = "answered " + strings.TrimSpace(servers[0])
+			out = append(out, pr)
+			continue
+		}
 		if d := strings.TrimSpace(r.Dest); policyAction(servers) == polPool && d != "" && d != "*" {
 			servers = nil // "pool" with a destination name is the pool's servers asked for that name
 		}
 		if act := policyAction(servers); act != "" {
 			pr.action, pr.tag = act, act
+			pr.desc = "answered " + act
+			if act == polPool {
+				pr.desc = "left to the gateway's servers"
+			}
 			out = append(out, pr)
 			continue
 		}
@@ -223,30 +282,37 @@ func buildPolicy(rows []PolicyRule) []policyRule {
 		if len(pr.servers) == 0 {
 			pr.tag = "pool" // no servers of its own: the gateway's, asked for the destination name
 		}
+		pr.desc = "sent to " + pr.tag
 		if pr.rename {
 			pr.tag += "=>" + strings.ToLower(strings.TrimSuffix(strings.TrimSpace(r.Dest), "."))
+			pr.desc += ", asked as " + strings.ToLower(strings.TrimSuffix(strings.TrimSpace(r.Dest), "."))
 		}
 		out = append(out, pr)
 	}
 	return out
 }
 
+func (r *policyRule) clientMatches(client netip.Addr) bool {
+	if r.anyClient {
+		return true
+	}
+	for _, n := range r.nets {
+		if n.Contains(client) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *policyRule) matches(client netip.Addr, name string) bool {
-	if !r.anyClient {
-		in := false
-		for _, n := range r.nets {
-			if n.Contains(client) {
-				in = true
-				break
-			}
-		}
-		if !in {
-			return false
-		}
+	if !r.clientMatches(client) {
+		return false
 	}
 	switch {
 	case r.anyName:
 		return true
+	case r.glob != nil:
+		return r.glob.match(strings.ToLower(name))
 	case r.exact != "":
 		return strings.EqualFold(name, r.exact)
 	}
@@ -254,23 +320,115 @@ func (r *policyRule) matches(client netip.Addr, name string) bool {
 	return strings.EqualFold(name, r.suffix[1:]) || (len(name) > len(r.suffix) && strings.EqualFold(name[len(name)-len(r.suffix):], r.suffix))
 }
 
-// policyFor returns the first row that applies to a query from client for the question in qi, or nil.  Queries the
-// daemon makes itself (no client) never match.
-func (p *Pool) policyFor(client netip.Addr, qi *qinfo) *policyRule {
+// policyIndex finds the rows that can match a name without looking at every row: the rows are kept by the name they
+// name (exact), by the name a "*.name" row starts at (suffix), or in a list of those for every name.
+type policyIndex struct {
+	exact, suffix map[string][]int
+	gtail         map[string][]int // glob rows, by the literal labels at the end of the pattern
+	all           []int
+}
+
+func buildPolicyIndex(rows []policyRule) *policyIndex {
+	ix := &policyIndex{exact: map[string][]int{}, suffix: map[string][]int{}, gtail: map[string][]int{}}
+	for i := range rows {
+		r := &rows[i]
+		switch {
+		case r.anyName:
+			ix.all = append(ix.all, i)
+		case r.glob != nil && r.glob.tail != "":
+			ix.gtail[r.glob.tail] = append(ix.gtail[r.glob.tail], i)
+		case r.glob != nil:
+			ix.all = append(ix.all, i) // no literal end: checked for every name
+		case r.exact != "":
+			ix.exact[r.exact] = append(ix.exact[r.exact], i)
+		default:
+			ix.suffix[r.suffix[1:]] = append(ix.suffix[r.suffix[1:]], i)
+		}
+	}
+	return ix
+}
+
+func (p *Pool) pindex() *policyIndex {
+	p.pidxOnce.Do(func() { p.pidx = buildPolicyIndex(p.policy) })
+	return p.pidx
+}
+
+// lookup returns the first row, in table order, that applies to a query from client for the question in qi, whatever
+// it does (a "pool" row included), or nil.  Queries the daemon makes itself (no client) never match.
+func (p *Pool) lookup(client netip.Addr, qi *qinfo) *policyRule {
 	if len(p.policy) == 0 || !client.IsValid() || !qi.ok {
 		return nil
 	}
 	client = client.Unmap()
-	name := strings.TrimSuffix(qi.name(), ".")
-	for i := range p.policy {
-		if p.policy[i].matches(client, name) {
-			if p.policy[i].action == polPool { // matched, and the pool is to answer: no later row is looked at
-				return nil
+	name := strings.ToLower(strings.TrimSuffix(qi.name(), "."))
+	ix := p.pindex()
+	lists := make([][]int, 0, 8)
+	if l := ix.exact[name]; len(l) > 0 {
+		lists = append(lists, l)
+	}
+	for s := name; ; {
+		if l := ix.suffix[s]; len(l) > 0 {
+			lists = append(lists, l)
+		}
+		if l := ix.gtail[s]; len(l) > 0 {
+			lists = append(lists, l)
+		}
+		i := strings.IndexByte(s, '.')
+		if i < 0 {
+			break
+		}
+		s = s[i+1:]
+	}
+	if len(ix.all) > 0 {
+		lists = append(lists, ix.all)
+	}
+	pos := make([]int, len(lists))
+	for { // the candidates in table order: each list is in order, so take the smallest head
+		best := -1
+		for k := range lists {
+			if pos[k] < len(lists[k]) && (best < 0 || lists[k][pos[k]] < lists[best][pos[best]]) {
+				best = k
 			}
+		}
+		if best < 0 {
+			return nil
+		}
+		i := lists[best][pos[best]]
+		pos[best]++
+		if g := p.policy[i].glob; g != nil && !g.match(name) {
+			continue
+		}
+		if p.policy[i].clientMatches(client) {
 			return &p.policy[i]
 		}
 	}
+}
+
+// policyFor is lookup, except that a row that leaves the query to the pool gives nil (no later row is looked at).
+func (p *Pool) policyFor(client netip.Addr, qi *qinfo) *policyRule {
+	if r := p.lookup(client, qi); r != nil && r.action != polPool {
+		return r
+	}
 	return nil
+}
+
+// logPolicy writes one line for a query a row applied to (at most 100 a second; the rest are counted).
+func (p *Pool) logPolicy(r *policyRule, client netip.Addr, qi *qinfo) {
+	if !p.cfg.PolicyLog {
+		return
+	}
+	now := time.Now().Unix()
+	if p.logSec.Swap(now) != now {
+		if s := p.logSupp.Swap(0); s > 0 {
+			infof("dns: policy: %d more match(es) in the last second not logged", s)
+		}
+		p.logN.Store(0)
+	}
+	if p.logN.Add(1) > 100 {
+		p.logSupp.Add(1)
+		return
+	}
+	infof("dns: policy row %d: %s asked %s %s: %s", r.idx, client.Unmap(), strings.TrimSuffix(qi.name(), "."), qtypeName(qi.qtype), r.desc)
 }
 
 // A row whose servers are one of these words is not sent anywhere.
@@ -297,8 +455,10 @@ func policyAction(servers []string) string {
 }
 
 // localAnswer is the row's own answer to query.
-func (r *policyRule) localAnswer(query []byte, qi *qinfo) []byte {
+func (r *policyRule) localAnswer(ctx context.Context, p *Pool, query []byte, qi *qinfo) []byte {
 	switch r.action {
+	case polRecord:
+		return r.recordAnswer(ctx, p, query, qi)
 	case polNXDomain:
 		return errorResponse(query, rcodeNXDomain)
 	case polRefused:

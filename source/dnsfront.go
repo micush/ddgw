@@ -215,7 +215,14 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr, qi *
 	if p == nil {
 		return errorResponse(query, rcodeServFail)
 	}
-	if r := p.policyFor(client, qi); r != nil && r.action != "" { // answered by the policy itself: nothing to cache or wait for
+	r := p.lookup(client, qi)
+	if r != nil {
+		p.logPolicy(r, client, qi)
+		if r.action == polPool { // matched, and the pool is to answer: no later row applies
+			r = nil
+		}
+	}
+	if r != nil && r.action != "" { // answered by the policy itself: nothing to cache or wait for
 		resp, _ := p.ForwardFrom(f.ctx, query, tcp, client)
 		return resp
 	}
@@ -226,7 +233,7 @@ func (f *DNSFrontend) resolveRaw(query []byte, tcp bool, client netip.Addr, qi *
 		var kbuf [384]byte
 		var kb []byte
 		if kb, cacheable = c.keyBytes(kbuf[:0], query, qi, tcp, client, p.cfg.ECS, p.cfg.ECSPrefix4, p.cfg.ECSPrefix6); cacheable {
-			if r := p.policyFor(client, qi); r != nil { // answers from a policy row's servers are cached apart (policy.go)
+			if r != nil { // answers from a policy row's servers are cached apart (policy.go)
 				kb = append(append(kb, '|', '@'), r.tag...)
 			}
 			if r := c.getBytes(kb, query, qi.nameEnd+4); r != nil {
