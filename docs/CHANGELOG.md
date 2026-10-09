@@ -1,5 +1,20 @@
 # Changelog
 
+## [v259] - 2026-10-09 — Queries are never sent back to the server they came from; sort list takes plain networks
+
+### Fixed
+- **Forwarding loop through an upstream server.** In a troubleshooting bundle, switching on the 10.253.253.253 anycast address made the servers 10.129.0.196 and 10.128.0.200 flap DOWN with UDP and TCP timeouts within seconds, and switching it off stopped it at once, while the probes (cached names) kept passing. That is the signature of a loop: a server whose forwarder is the gateway or an anycast address sends the gateway the very query the gateway just sent it. A query that arrives from one of the pool's own servers is now never forwarded to that server; the others answer it, so the original query completes. A query from this machine itself (loopback or one of its own addresses) is never taken for that, so a local program or a DNS server on the same host is not affected. The log says once a minute which server does it and what to fix. The bundle cannot show which server has the anycast address as its forwarder; check the forwarders of aphxipm02 and ptx (and lphxns01/02).
+
+### Changed
+- **Sort list**: an entry that is just a network (`10.129.0.0/16`) is accepted and is for every client; all such entries together give the order, and the one the client is in comes first. The bundle's config had four plain networks, which the stricter format did not describe.
+- Tests: the asker dropped from the candidates (also as an IPv4-mapped address), plain-network sorting.
+
+### Verified
+- gofmt, `go vet`, builds, the whole suite with `-race`.
+
+### Not verified
+- The loop itself was not reproduced against real servers; the cause is inferred from the timing in the bundle.
+
 ## [v258] - 2026-10-08 — Configure ▸ Settings split into one page per tab
 
 ### Changed

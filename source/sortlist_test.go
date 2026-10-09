@@ -87,7 +87,7 @@ func TestSortAnswerLeavesOthersAlone(t *testing.T) {
 }
 
 func TestSortListValidation(t *testing.T) {
-	for _, bad := range []string{"10.0.0.0/8", "10.0.0.0/8:", "nonsense: 10.0.0.0/8", "10.0.0.0/8: x"} {
+	for _, bad := range []string{"10.0.0.0/8:", "10.0.0.0/8: ", "nonsense: 10.0.0.0/8", "10.0.0.0/8: x"} {
 		if _, err := normalizeSortList([]string{bad}); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
@@ -99,5 +99,24 @@ func TestSortListValidation(t *testing.T) {
 	want := []string{"10.1.0.0/16: 10.1.0.0/16, 192.168.1.5/32", "2001:db8::/32: 2001:db8:1::/48", "any: ::1/128"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("%v, want %v", got, want)
+	}
+}
+
+func TestSortListPlainNetworks(t *testing.T) {
+	list, err := normalizeSortList([]string{"10.128.0.0/16", "10.129.0.0/16", "10.133.0.0/16"})
+	if err != nil || len(list) != 3 || list[0] != "10.128.0.0/16" {
+		t.Fatalf("%v %v", list, err)
+	}
+	p := &Pool{sorts: buildSortRules(list)}
+	msg := sortMsg("10.133.0.9", "8.8.8.8", "10.129.0.7", "10.128.0.3")
+	// a client in 10.129/16: its own network first, then the listed order, then the rest
+	got := answerAddrs(t, p.sortAnswer(msg, netip.MustParseAddr("10.129.5.5")))
+	if want := []string{"10.129.0.7", "10.128.0.3", "10.133.0.9", "8.8.8.8"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("10.129 client: %v, want %v", got, want)
+	}
+	// a client in none of them: the listed order
+	got = answerAddrs(t, p.sortAnswer(msg, netip.MustParseAddr("192.168.1.1")))
+	if want := []string{"10.128.0.3", "10.129.0.7", "10.133.0.9", "8.8.8.8"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("outside client: %v, want %v", got, want)
 	}
 }

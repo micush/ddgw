@@ -249,6 +249,10 @@ type Server struct {
 
 	tests []TestStat // result of each query in the last probe round
 
+	ipOnce   sync.Once // ip: the address of Addr (invalid for tls:// and https:// servers named by host)
+	ip       netip.Addr
+	loopSeen atomic.Int64 // when the "this server sends us its queries" warning was last logged (unix seconds)
+
 	picked atomic.Uint64         // spread: the turn this server was last put first (0 = never)
 	dh     map[string]*srvSeries // the history of each domain this server is probed with, by domKey (srvhist.go)
 	hist   *srvSeries            // this server's per-minute history (srvhist.go); shared by every pool that lists the address; nil in a hand-made Server
@@ -744,6 +748,7 @@ func (p *Pool) forward(ctx context.Context, query []byte, tcp bool, client netip
 		p.Queries.Add(1)
 	}
 	ranked := p.Candidates()
+	ranked = dropAsker(ranked, client)
 	if len(ranked) == 0 {
 		return nil, errNoServers
 	}
