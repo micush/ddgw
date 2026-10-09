@@ -184,6 +184,7 @@ func cloneDNS(d DNSConfig) DNSConfig {
 	if len(d.AllowedClients) == 0 {
 		d.AllowedClients = nil
 	}
+	d.Policy = clonePolicy(d.Policy)
 	d.SortList = append([]string(nil), d.SortList...)
 	if len(d.SortList) == 0 {
 		d.SortList = nil

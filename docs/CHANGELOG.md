@@ -1,5 +1,86 @@
 # Changelog
 
+## [v276] - 2026-10-09 — Policy table: reorder rows
+
+### Added
+- Rows of the policy table can be dragged by the dots at their left to a new place (a bar shows where the row will land), and right-click has **Move up** and **Move down** (not offered at the ends of the table). The order matters because the first row that matches wins.
+
+### Verified
+- `node --check`, `go build`, `go vet`, the Help tests. Not run: the full suite and a browser (page script only, no Go change), so dragging is not tried by hand.
+
+## [v275] - 2026-10-09 — Policy: `*.name` includes `name`
+
+### Changed
+- In a policy row, a source name `*.example.com` now matches `example.com` itself as well as every name below it (it used to need a row of its own). With a `*.name` destination, `example.com` is asked as the destination's own name (`*.example.com` → `*.other.net` asks `other.net`), and `other.net` in the answer is written as `example.com`.
+- A row whose servers cell is `pool` and that has a destination name is read as "no servers" when the pool is built, not only when it is saved. A shared DNS block that no gateway uses (every gateway has its own) is not checked when it is saved, so such a row could keep the word `pool` and be treated as "the pool answers, no renaming".
+- The log line written when a DNS pool starts now says how many policy rows it has, and whether policy is off, so that a node that is not applying the rows can be told apart from one that is (a node running a version before the table, or with policy off, shows none).
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser. A reported case where no row had any effect was not reproduced here: the same rows, as saved by the GUI, answer correctly through the saved config, the pool and a real UDP query, with the gateways using the shared DNS settings and with their own.
+
+## [v274] - 2026-10-09 — Policy table spacing
+
+### Changed
+- A little space between the "Policy rows" title and the table.
+
+### Verified
+- `node --check`, `go build`, `go vet`. Not run: the full suite and a browser (one CSS line).
+
+## [v273] - 2026-10-09 — Configure ▸ DNS proxy in tabs
+
+### Changed
+- The DNS proxy page is six tabs instead of one long page: **Servers** (upstream servers), **Health & balancing** (load balancing, timing), **Listeners**, **Resolution** (policy-based resolution, sort list), **Cache & ECS** and **Clients** (rate limiting). The settings, their saving and their Help entries are the same; the tab you were on is kept while the page is open, and the arrow keys move between tabs. The documentation names the tab where it names a section.
+
+### Verified
+- `node --check`, `go build`, `go vet`, the Help tests. Not run: the full suite and a browser (page layout only, no Go change), so the tab strip is not looked at.
+
+## [v272] - 2026-10-09 — Policy-Based Resolution: a destination name without servers
+
+### Changed
+- A row with a *Destination name* and no *Destination servers* (or the word `pool` there) asks the gateway's own servers for that name and turns the answer back, as any other renaming row does. Before, such a row was dropped when saved because it had no servers, which left the name in the table but never saved or used. A row with neither servers nor a destination name is still not saved; its servers cell is outlined until it has one of them (the outline was on the wrong column since the fourth column was added).
+- Tests: a rename through the pool, both spellings, and the refused empty row.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser.
+
+## [v271] - 2026-10-09 — Policy-Based Resolution: rows that answer by themselves
+
+### Added
+- The *Destination servers* cell of a policy row may hold one keyword instead of servers, and the row then answers without asking anyone: `null` (A `0.0.0.0`, AAAA `::`, no data for other types), `nxdomain`, `nodata`, `refused`, or `pool` (the gateway's own servers answer, as if no row had matched; put it above a broader row as an exception for one client or name). A keyword stands alone: with other servers or a destination name the row is refused. Together with the wildcard source names this makes the table usable for blocking names, per client network. These answers are not cached and not counted against any server.
+- Tests: the keywords through the frontend (each answer, the exception row, other clients still blocked, no server reached) and the refused combinations.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser.
+
+## [v270] - 2026-10-09 — Policy-Based Resolution: DNSSEC note corrected
+
+### Changed
+- The README and the Help said a policy row's answer is not DNSSEC-valid without saying that this holds only for rows with a Destination name. A row without one passes the servers' answer through untouched, signatures included. Wording only; no code change.
+
+### Verified
+- `node --check`, `go build`, `go vet`, the Help tests. Not run: the full suite (documentation text only).
+
+## [v269] - 2026-10-09 — Policy-Based Resolution: destination name
+
+### Added
+- A fourth column on the policy table, **Destination name** (`dest` in the row), after the servers: the name the row's servers are asked for instead of the one the client asked. Blank asks for the client's own name; `zdnet.com` asks for that name; `*.hardocp.com`, on a row whose source name is `*.something`, keeps the part in front (`www.reddit.com` is asked as `www.hardocp.com`). The client's answer is turned back into one for the name it asked: the question and every record named like the name that was asked (or below a `*.name` destination) carry the client's name, in the A/CNAME/NS/PTR/MX/SOA records the names inside them too. Other records are as the servers sent them. Answers are cached per row's servers and destination.
+- Limits: a signed (DNSSEC) answer is not valid for the client's name; a record of a type that may hold names the daemon cannot move safely is answered with SERVFAIL.
+- The table's columns are now Source client, Source name, Destination servers, Destination name (pasting tab-separated rows uses that order).
+- Tests: destination validation, the query and answer rewritten both ways (wildcard, exact, CNAME target, SOA, refused type), and through the frontend with two rows.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser.
+
+## [v268] - 2026-10-09 — Policy-Based Resolution
+
+### Added
+- **Configure ▸ DNS proxy ▸ Policy-Based Resolution**: send a query to servers of its own depending on who asks and what is asked. A table of rows (*Source client*, *Destination name*, *Destination servers*) edited like a spreadsheet; right-click a row for Edit, Copy, Paste, Add and Delete (right-click below the rows to add one at the end). The first row, from the top, that matches both the client (`*`, an address, a network or a comma-separated list) and the name (`*`, an exact name, `*.name` for the names below it) is used; anything no row matches goes to the gateway's servers as before. Shared by the cluster; a tick box switches the whole table on or off without deleting it (`policy`, `policy_on` in the `dns` block).
+- Works for plain DNS, DoT and DoH clients (the client address is the connection's) and with plain, DoT and DoH servers in the rows. A row's servers are tried in the order given, one that failed its last query after the others; they are not probed, so never marked down. When none answers the client gets SERVFAIL; there is no fall-back to the gateway's servers. Answers are cached per row's server list, so a client sent to one set never gets an answer cached for another. The daemon's own queries (reverse lookups, update relays) ignore the table.
+- Tests: row validation, matching (exact, wildcard, networks, mapped IPv6, first match wins), routing and per-row caching through the frontend, no leak to the pool when a row's servers are dead.
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`, cgo-off and arm64 builds. Not looked at in a browser, so the table editor and its right-click menu are untested by eye.
+
 ## [v267] - 2026-10-09 — Replica banner removed
 
 ### Changed

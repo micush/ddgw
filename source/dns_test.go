@@ -19,7 +19,8 @@ type fakeDNS struct {
 	delay atomic.Int64 // ns
 	mode  atomic.Int32 // 0 ok, 1 NXDOMAIN, 2 drop, 3 SERVFAIL
 	hits  atomic.Int64
-	only  atomic.Bool // answer only the probe names (a.example, b.example): a server that cannot resolve anything else
+	lastQ atomic.Value // the last question name asked (a string)
+	only  atomic.Bool  // answer only the probe names (a.example, b.example): a server that cannot resolve anything else
 	pc    net.PacketConn
 	tl    net.Listener
 }
@@ -36,6 +37,9 @@ func reply(q []byte, rcode int, answers int) []byte {
 
 func (f *fakeDNS) answer(q []byte) []byte {
 	f.hits.Add(1)
+	if n, _, ok := questionOf(q); ok {
+		f.lastQ.Store(n)
+	}
 	if d := f.delay.Load(); d > 0 {
 		time.Sleep(time.Duration(d))
 	}

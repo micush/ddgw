@@ -555,7 +555,7 @@ func (s *Supervisor) refreshPool(nu *DaemonConfig, preprobe bool) map[int]bool {
 		if c.TLSInsecure {
 			warnf("dns: %s pool: tls_insecure is on — the certificates of tls:// and https:// servers are not checked", name)
 		}
-		infof("dns: %s pool started — %d server(s), down at %d%% of tests failing", name, len(c.Servers), c.DownPercent)
+		infof("dns: %s pool started — %d server(s), down at %d%% of tests failing, %d policy row(s)%s", name, len(c.Servers), c.DownPercent, len(p.policy), map[bool]string{true: "", false: " (policy off)"}[c.PolicyOn])
 	}
 
 	changed := map[int]bool{}

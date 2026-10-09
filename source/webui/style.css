@@ -483,3 +483,28 @@ select.capif { width: auto; flex: 0 0 auto; max-width: 14rem; }
 /* a node's name in the Gateways and Cluster tables: a long one is cut short (the whole is the tooltip) instead of widening the table past its card */
 td.nname { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.tight th, table.tight td { padding-left: .55rem; padding-right: .55rem; }   /* the Gateways and Cluster tables: many columns, so closer together */
+
+/* Policy-Based Resolution: a spreadsheet-like table of inputs */
+.policy-wrap { overflow-x: auto; min-height: 3rem; margin-top: .6rem; }
+table.policy { table-layout: fixed; min-width: 40rem; border: 1px solid var(--border); }
+table.policy th { padding: .4rem .6rem; background: var(--surface-2); }
+table.policy th:nth-child(1) { width: 2rem; padding: 0; }
+table.policy th:nth-child(2), table.policy th:nth-child(3), table.policy th:nth-child(5) { width: 22%; }
+table.policy td { padding: 0; border: 1px solid var(--border); }
+table.policy td input[type=text] { width: 100%; min-width: 0; max-width: none; border: 0; border-radius: 0; background: transparent; padding: .45rem .6rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; }
+table.policy td input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.policy tr.incomplete td:nth-child(4) { box-shadow: inset 0 0 0 2px var(--amber); }
+.policy-empty { padding: .8rem .6rem; color: var(--muted); font-size: .85rem; }
+
+/* Configure ▸ DNS proxy: tabs */
+.dtabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.dtab { background: transparent; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: inherit; padding: .6rem 1rem; margin-bottom: -1px; cursor: pointer; min-height: 44px; }
+.dtab:hover { color: var(--text); }
+.dtab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.dtab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+table.policy td.grip { text-align: center; width: 2rem; background: var(--surface-2); }
+table.policy .grip-h { display: block; cursor: grab; color: var(--muted); letter-spacing: -.15em; padding: .4rem 0; user-select: none; }
+table.policy .grip-h:active { cursor: grabbing; }
+table.policy tr.dragging { opacity: .45; }
+table.policy tr.drop-above td { box-shadow: inset 0 3px 0 var(--accent); }
+table.policy tr.drop-below td { box-shadow: inset 0 -3px 0 var(--accent); }

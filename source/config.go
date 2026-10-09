@@ -427,6 +427,11 @@ type DNSConfig struct {
 	SortList []string `json:"sortlist,omitempty"`
 	// SortListOn switches the sort list on (the default) or off without deleting it.
 	SortListOn bool `json:"sortlist_on"`
+	// Policy is Policy-Based Resolution: rows of client, name and servers; the first row that matches a query sends
+	// it to its own servers instead of the pool's (see policy.go).
+	Policy []PolicyRule `json:"policy,omitempty"`
+	// PolicyOn switches the policy rows on (the default) or off without deleting them.
+	PolicyOn bool `json:"policy_on"`
 	// ClientRate limits each client (an IPv4 address or an IPv6 /64) to this many queries a second; 0 (the default)
 	// is no limit. ClientBurst is how many it may send at once (0 = twice the rate, at least 10). ClientAction is what
 	// a client over its rate gets: "drop" (the default, kept as empty in the file), "truncate" (UDP: a short answer
@@ -528,6 +533,7 @@ func defaultDNS() DNSConfig {
 		ListenPort:      53,
 		ForwardUpdates:  true,
 		SortListOn:      true,
+		PolicyOn:        true,
 		Spread:          true,
 		SpreadBand:      20,
 		Cache:           true,
@@ -775,6 +781,11 @@ func (d *DNSConfig) Validate() error {
 		return err
 	}
 	d.SortList = sl
+	pol, err := normalizePolicy(d.Policy)
+	if err != nil {
+		return err
+	}
+	d.Policy = pol
 	if d.ECSPrefix4 < 1 || d.ECSPrefix4 > 32 {
 		return errors.New("dns: ecs_prefix4 must be 1-32")
 	}
@@ -902,6 +913,8 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	if len(c.ClientExempt) == 0 {
 		c.ClientExempt = nil
 	}
+	c.PolicyOn = shared.PolicyOn
+	c.Policy = clonePolicy(shared.Policy)
 	c.SortListOn = shared.SortListOn
 	c.SortList = append([]string(nil), shared.SortList...)
 	if len(c.SortList) == 0 {

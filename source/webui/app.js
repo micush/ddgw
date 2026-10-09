@@ -1811,6 +1811,9 @@
     { section: "Sort List" },
     { shared: true, k: "sortlist_on", l: "Sort list enabled", t: "bool" },
     { shared: true, k: "sortlist", l: "Sort list", t: "list", wide: true },
+    { section: "Policy-Based Resolution" },
+    { shared: true, k: "policy_on", l: "Policy-Based Resolution enabled", t: "bool" },
+    { shared: true, k: "policy", l: "Policy rows", t: "policy", wide: true },
     { section: "Client Rate Limiting", note: "Applies to every gateway that uses these settings, over UDP, TCP, DoT and DoH, before the cache. This node itself is always allowed and never limited. Counters are per node." },
     { shared: true, k: "allowed_clients", l: "Allowed clients", t: "list", wide: true, hint: "Networks that may use the proxy, one per line: 10.0.0.0/8, 192.168.1.5, 2001:db8::/32. Empty = everyone. Anyone else is answered REFUSED (dynamic updates too)." },
     { shared: true, k: "client_rate", l: "Queries per second", t: "int", min: 0, max: 10000000, hint: "0 = no limit. A client is one IPv4 address or one IPv6 /64." },
@@ -1851,6 +1854,102 @@
   const sharedTag = (f) => (f.shared && state.clustered
     ? h("span", { class: "pill info tiny", title: "Replicated from the cluster's primary. Changes made here are accepted by the primary first." }, "shared") : null);
 
+  // Policy-Based Resolution: a table of rows (source client, destination name, destination servers) edited like a
+  // spreadsheet.  Every cell is an input; right-click a row for Edit, Copy, Paste, Add and Delete.  The rows are read
+  // from the top and the first match wins, so their order is kept.
+  let policyClip = null;
+  function policyTable(rows) {
+    const tbody = h("tbody", {});
+    const empty = h("div", { class: "policy-empty" }, "No rows. Right-click here ▸ Add row.");
+    const tbl = h("table", { class: "policy" },
+      h("thead", {}, h("tr", {}, h("th", { "aria-label": "Order" }), h("th", {}, "Source client"), h("th", {}, "Source name"), h("th", {}, "Destination servers"), h("th", {}, "Destination name"))), tbody);
+    const wrap = h("div", { class: "policy-wrap" }, tbl, empty);
+    const changed = () => tbl.dispatchEvent(new Event("change", { bubbles: true }));
+    const refresh = () => { empty.hidden = tbody.children.length > 0; };
+    const read = (tr) => [...tr.querySelectorAll("input")].map((i) => i.value.trim());
+    const mark = (tr) => { const c = read(tr); tr.classList.toggle("incomplete", !c[2] && !c[3]); };
+    const copyText = (vals) => vals.join("\t");
+    const parseText = (txt) => txt.split(/\r?\n/).map((l) => l.split("\t").map((x) => x.trim())).filter((c) => c.length > 1 && c.some(Boolean))
+      .map((c) => [c[0] || "*", c[1] || "*", c[2] || "", c[3] || ""]);
+    let dragging = null; // the row being dragged by its handle
+    const clearMarks = () => tbody.querySelectorAll(".drop-above, .drop-below").forEach((x) => x.classList.remove("drop-above", "drop-below"));
+    function mk(vals) {
+      const tr = h("tr", {}, [0, 1, 2, 3].map((i) => {
+        const inp = h("input", { type: "text", autocomplete: "off", spellcheck: "false", "aria-label": ["Source client", "Source name", "Destination servers", "Destination name"][i] });
+        inp.value = vals[i] || "";
+        inp.addEventListener("input", () => mark(tr));
+        return h("td", {}, inp);
+      }));
+      const grip = h("span", { class: "grip-h", draggable: "true", title: "Drag to reorder", "aria-hidden": "true" }, "⋮⋮");
+      tr.prepend(h("td", { class: "grip" }, grip));
+      grip.addEventListener("dragstart", (e) => {
+        dragging = tr;
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", "policy-row"); e.dataTransfer.setDragImage(tr, 0, 0); } catch (x) { /* a browser without drag images */ }
+        tr.classList.add("dragging");
+      });
+      grip.addEventListener("dragend", () => { dragging = null; tr.classList.remove("dragging"); clearMarks(); });
+      tr.addEventListener("dragover", (e) => {
+        if (!dragging || dragging === tr) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const r = tr.getBoundingClientRect();
+        clearMarks();
+        tr.classList.add(e.clientY > r.top + r.height / 2 ? "drop-below" : "drop-above");
+      });
+      tr.addEventListener("drop", (e) => {
+        if (!dragging || dragging === tr) return;
+        e.preventDefault();
+        const below = tr.classList.contains("drop-below");
+        clearMarks();
+        if (below) tr.after(dragging); else tr.before(dragging);
+        dragging = null;
+        changed();
+      });
+      tr.addEventListener("contextmenu", (e) => rowMenu(menuFor(tr))(e)); // the items depend on where the row is now
+      mark(tr);
+      return tr;
+    }
+    function insert(vals, after) {
+      const tr = mk(vals);
+      if (after && after.nextSibling) tbody.insertBefore(tr, after.nextSibling); else tbody.append(tr);
+      refresh();
+      return tr;
+    }
+    async function paste(after) {
+      let list = [];
+      try { list = parseText(await navigator.clipboard.readText()); } catch (e) { /* no permission: the last copied row is used */ }
+      if (!list.length && policyClip) list = [policyClip];
+      if (!list.length) return;
+      let at = after;
+      for (const v of list) at = insert(v, at);
+      changed();
+    }
+    function menuFor(tr) {
+      return [
+        ["Edit", () => tr.querySelector("input").focus()],
+        ["Copy", () => { policyClip = read(tr); try { navigator.clipboard.writeText(copyText(policyClip)); } catch (e) { /* the row stays in the page's own clipboard */ } }],
+        ["Paste", () => paste(tr)],
+        ["Add", () => insert(["*", "*", "", ""], tr).querySelector("input").focus()],
+        ...(tr.previousElementSibling ? [["Move up", () => { tr.previousElementSibling.before(tr); changed(); }]] : []),
+        ...(tr.nextElementSibling ? [["Move down", () => { tr.nextElementSibling.after(tr); changed(); }]] : []),
+        ["Delete", () => { tr.remove(); refresh(); changed(); }, "danger"],
+      ];
+    }
+    wrap.addEventListener("contextmenu", rowMenu([
+      ["Add", () => insert(["*", "*", "", ""], tbody.lastElementChild).querySelector("input").focus()],
+      ["Paste", () => paste(tbody.lastElementChild)],
+    ]));
+    for (const r of rows) tbody.append(mk([r.client, r.name, (r.servers || []).join(", "), r.dest || ""]));
+    refresh();
+    return {
+      el: wrap,
+      // a row with neither servers nor a destination name is not sent (it is marked until it has one); a blank client or source name is "*"
+      get: () => [...tbody.children].map(read).filter((c) => c[2] || c[3])
+        .map((c) => ({ client: c[0] || "*", name: c[1] || "*", servers: c[2].split(/[\s,]+/).filter(Boolean), ...(c[3] && c[3] !== "*" ? { dest: c[3] } : {}) })),
+    };
+  }
+
   // Build inputs for one object; returns {el, get()} where get() reads values back with types.
   // With asCards, every {section} spec starts a card of its own (title in the header, optional note above the fields).
   function fieldset(specs, obj, asCards) {
@@ -1875,6 +1974,12 @@
         get = () => input.checked;
         grid.append(h("label", { class: "f check" }, input, f.l, sharedTag(f)));
         getters[f.k] = get;
+        continue;
+      }
+      if (f.t === "policy") {
+        const pol = policyTable(v || []);
+        getters[f.k] = pol.get;
+        grid.append(h("div", { class: "f wide" }, h("span", {}, f.l, sharedTag(f)), pol.el));
         continue;
       }
       if (f.t === "select") {
@@ -1918,6 +2023,39 @@
       const web = fieldset(WEB_FIELDS, cfg.web);
       const dns = fieldset(DNS_FIELDS, cfg.dns, true);
       const cluster = fieldset(CLUSTER_FIELDS, cfg.cluster || {});
+      // the DNS proxy page is six tabs; every card stays in the page (a hidden one is still read when saving)
+      const dnsTabs = () => {
+        const TABS = [
+          ["Servers", ["Upstream servers"]],
+          ["Health & balancing", ["Load Balancing", "Timing"]],
+          ["Listeners", ["Listeners"]],
+          ["Resolution", ["Policy-Based Resolution", "Sort List"]],
+          ["Cache & ECS", ["Cache", "Client network (ECS)"]],
+          ["Clients", ["Client Rate Limiting"]],
+        ];
+        const titleOf = (c) => ((c.querySelector("header h2") || {}).textContent || "");
+        const panes = TABS.map(() => h("div", { role: "tabpanel" }));
+        for (const c of [...dns.el.children]) {
+          const i = TABS.findIndex(([, names]) => names.includes(titleOf(c)));
+          panes[i < 0 ? TABS.length - 1 : i].append(c);
+        }
+        const buttons = TABS.map(([name], i) => h("button", { type: "button", role: "tab", class: "dtab", onclick: () => show(i) }, name));
+        function show(i, focus) {
+          state.dnsTab = i;
+          panes.forEach((p, j) => { p.hidden = j !== i; });
+          buttons.forEach((b, j) => { b.setAttribute("aria-selected", j === i ? "true" : "false"); b.tabIndex = j === i ? 0 : -1; b.classList.toggle("on", j === i); });
+          if (focus) buttons[i].focus();
+        }
+        const strip = h("div", { class: "dtabs", role: "tablist", "aria-label": "DNS proxy settings" }, buttons);
+        strip.addEventListener("keydown", (e) => {
+          const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+          if (!d) return;
+          e.preventDefault();
+          show((state.dnsTab + d + TABS.length) % TABS.length, true);
+        });
+        show(state.dnsTab >= 0 && state.dnsTab < TABS.length ? state.dnsTab : 0);
+        return h("div", {}, strip, ...panes);
+      };
       const groupsEl = h("div", {});
       const groups = []; // {el, get}
       const addGroup = (g) => {
@@ -1974,7 +2112,7 @@
       const panels = [
         ["general", "General", h("div", {}, section("General", general.el), updatesCard())],
         ["groups", "Gateway groups", h("div", {}, groupsEl)],
-        ["dns", "DNS proxy", h("div", {}, dns.el)],
+        ["dns", "DNS proxy", dnsTabs()],
         ["web", "Web GUI", h("div", {}, section("Web GUI", web.el), certBox)],
         ["cluster", "Cluster", section("Cluster", cluster.el)],
       ];
