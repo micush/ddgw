@@ -283,7 +283,7 @@ func (s *StatusServer) dnsStatus() map[string]any {
 	}}
 }
 
-// namedServers is the pool's servers with the names given on the Topology page (Settings ▸ DNS ▸ server names).  The pool
+// namedServers is the pool's servers with the names given on the Topology page (Configure ▸ DNS ▸ server names).  The pool
 // itself runs without them (a rename must not restart it), so they come from the full configuration.
 func (s *StatusServer) namedServers(pi poolInfo) []ServerStat {
 	sv := pi.Pool.Snapshot()

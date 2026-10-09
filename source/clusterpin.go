@@ -74,6 +74,9 @@ func learnPinnedCert(ctx context.Context, addr, fp string) (*x509.Certificate, e
 // is down, though the peers themselves are fine.
 const peerLookupTimeout = 2 * time.Second
 
+// peerConnectTimeout bounds making a connection to one address of a peer (lookup, connect, TLS handshake).
+var peerConnectTimeout = 6 * time.Second
+
 var (
 	lookupPeerHost = net.DefaultResolver.LookupHost // replaced in tests
 	peerHostAddrs  sync.Map                         // host -> []string, the addresses it last resolved to
@@ -129,13 +132,17 @@ func dialPinnedAs(ctx context.Context, addr, fp string, me *tls.Certificate) (ne
 	if !validHostPort(addr) {
 		return nil, errors.New("invalid peer address")
 	}
-	cert, err := learnPinnedCert(ctx, addr, fp)
+	// The connection (name lookup, TCP, TLS handshake) must come up within peerConnectTimeout, so that a dead address
+	// costs that much and the next one is tried; the call itself, once connected, may take as long as its caller allows.
+	dctx, dcancel := context.WithTimeout(ctx, peerConnectTimeout)
+	defer dcancel()
+	cert, err := learnPinnedCert(dctx, addr, fp)
 	if err != nil {
 		return nil, err
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(cert)
-	conn, err := dialPeerTCP(ctx, addr)
+	conn, err := dialPeerTCP(dctx, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +151,7 @@ func dialPinnedAs(ctx context.Context, addr, fp string, me *tls.Certificate) (ne
 		cfg.Certificates = []tls.Certificate{*me}
 	}
 	tc := tls.Client(conn, cfg)
-	if err := tc.HandshakeContext(ctx); err != nil {
+	if err := tc.HandshakeContext(dctx); err != nil {
 		conn.Close()
 		pinnedCerts.Delete(fp)
 		return nil, err

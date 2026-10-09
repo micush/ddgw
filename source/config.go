@@ -408,7 +408,7 @@ type DNSConfig struct {
 	// ListenPort is the port the proxy serves on the VIP (UDP and TCP).
 	ListenPort int `json:"listen_port"`
 	// DoTPort serves DNS over TLS (RFC 7858) to clients on the VIP on this TCP port; 0 (the default) is off. The
-	// certificate is the one the web GUI uses (Settings ▸ Web GUI).
+	// certificate is the one the web GUI uses (Configure ▸ Web GUI).
 	DoTPort int `json:"dot_port,omitempty"`
 	// DoHPort serves DNS over HTTPS (RFC 8484) to clients on the VIP on this TCP port, at /dns-query; 0 (the
 	// default) is off. The certificate is the web GUI's.
@@ -422,6 +422,9 @@ type DNSConfig struct {
 	// AllowedClients are the networks (10.0.0.0/8, 192.168.1.5, 2001:db8::/32) that may use the proxy; empty means
 	// everyone. Any other client is answered REFUSED, dynamic updates included. The node itself always may.
 	AllowedClients []string `json:"allowed_clients,omitempty"`
+	// SortList orders the A and AAAA records of an answer per client network: "10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"
+	// (see sortlist.go). Empty means answers keep the order the servers gave.
+	SortList []string `json:"sortlist,omitempty"`
 	// ClientRate limits each client (an IPv4 address or an IPv6 /64) to this many queries a second; 0 (the default)
 	// is no limit. ClientBurst is how many it may send at once (0 = twice the rate, at least 10). ClientAction is what
 	// a client over its rate gets: "drop" (the default, kept as empty in the file), "truncate" (UDP: a short answer
@@ -461,7 +464,7 @@ type DNSConfig struct {
 	LB *LBConfig `json:"lb,omitempty"`
 }
 
-// LBConfig is the set of load-balancing settings (Settings ▸ DNS proxy ▸ Load Balancing): how servers share the
+// LBConfig is the set of load-balancing settings (Configure ▸ DNS proxy ▸ Load Balancing): how servers share the
 // queries and when one counts as down.  A gateway that has its own pool follows the shared values unless its own
 // pool carries an LBConfig.
 type LBConfig struct {
@@ -764,6 +767,11 @@ func (d *DNSConfig) Validate() error {
 	if err := d.validateClients(); err != nil {
 		return err
 	}
+	sl, err := normalizeSortList(d.SortList)
+	if err != nil {
+		return err
+	}
+	d.SortList = sl
 	if d.ECSPrefix4 < 1 || d.ECSPrefix4 > 32 {
 		return errors.New("dns: ecs_prefix4 must be 1-32")
 	}
@@ -890,6 +898,10 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	c.ClientExempt = append([]string(nil), shared.ClientExempt...)
 	if len(c.ClientExempt) == 0 {
 		c.ClientExempt = nil
+	}
+	c.SortList = append([]string(nil), shared.SortList...)
+	if len(c.SortList) == 0 {
+		c.SortList = nil
 	}
 	c.ClientRate, c.ClientBurst, c.ClientAction = shared.ClientRate, shared.ClientBurst, shared.ClientAction
 }

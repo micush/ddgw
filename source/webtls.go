@@ -66,7 +66,7 @@ func loadOrCreateSelfSigned(confPath string, force bool) (tls.Certificate, error
 			warnf("web: could not store the self-signed certificate (%v) — a new one is generated at every start", err)
 		}
 	}
-	infof("web: generated self-signed certificate (sha256 %s) — browsers will warn until you install a certificate (GUI: Settings ▸ Web GUI, CLI: --tls-install)", fingerprint(c))
+	infof("web: generated self-signed certificate (sha256 %s) — browsers will warn until you install a certificate (GUI: Configure ▸ Web GUI, CLI: --tls-install)", fingerprint(c))
 	return c, nil
 }
 

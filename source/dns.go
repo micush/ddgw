@@ -327,11 +327,12 @@ type Pool struct {
 	Denied   atomic.Uint64 // refused: the client is not in allowed_clients
 	Limited  atomic.Uint64 // turned away: the client was over client_rate
 
-	lim *clientLimits // nil when no client list or rate is configured (clientlimit.go)
+	sorts []sortRule    // the dns block's sortlist, parsed (sortlist.go)
+	lim   *clientLimits // nil when no client list or rate is configured (clientlimit.go)
 }
 
 func NewPool(cfg DNSConfig) *Pool {
-	p := &Pool{cfg: cfg, lim: newClientLimits(cfg)}
+	p := &Pool{cfg: cfg, lim: newClientLimits(cfg), sorts: buildSortRules(cfg.SortList)}
 	if cfg.Cache {
 		p.cache = newRespCache(cfg.CacheEntries, cfg.CacheMaxTTL)
 	}

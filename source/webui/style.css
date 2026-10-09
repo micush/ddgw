@@ -349,6 +349,12 @@ fieldset.radios { border: 1px solid var(--border); border-radius: 8px; margin: 0
 fieldset.radios legend { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 0 .3rem; }
 fieldset.radios .opt { display: flex; align-items: center; gap: .4rem; padding: .25rem 0; }
 input.narrow { width: 5.5rem; }
+/* Configure ▸ Anycast: AS, router ID, timers and the AS Prepend box on one line */
+.bgprow { display: flex; flex-wrap: wrap; gap: .6rem .7rem; align-items: flex-start; }
+.bgprow input[type=text] { width: 8.5rem; }
+.bgprow input.narrow { width: 3.5rem; }
+.bgprow label.f:has(> input.narrow) { flex: none; }
+.bgprow .opt { display: flex; align-items: center; gap: .45rem; height: 2.3rem; color: var(--text); }
 fieldset.radios input[type=time] { width: 9rem; }
 fieldset.radios .opt { flex-wrap: wrap; }
 

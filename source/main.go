@@ -110,7 +110,7 @@ the web GUI):
                    --tls-revert  --tls-regenerate
   BGP (FRR)        --bgp   (this node's settings, announced addresses, neighbor and BFD state)
                    --asn N|off [--router-id A.B.C.D|-]     (BGP runs while an AS is set)
-                   [--keepalive S] [--hold S]
+                   [--keepalive S] [--hold S] [--as-prepend on|off]   (on: the local AS three more times on every announcement)
                    --bgp-neighbor-add ADDR --remote-as N [--description T] [--password P] [--multihop N]
                    --bgp-neighbor-del ADDR
                    --bgp-disable | --bgp-enable   (stop / restart BGP on this node, settings kept)
@@ -180,6 +180,9 @@ DNS proxy ("dns" block at the top level of the config):
   client_action      what a client over its rate gets: drop (default; nothing is sent), truncate (UDP: a short answer
                      with the TC bit, so a real client retries over TCP) or refused. Over TCP/DoT/DoH: always REFUSED
   client_exempt      networks never rate limited (still subject to allowed_clients)
+  sortlist           per-client-network order of the A/AAAA records in answers, one entry each:
+                     "client-network: preferred-network, ...", e.g. ["10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"];
+                     "any" matches every client; unmatched addresses keep their order after the preferred ones
   ecs                true (default) passes the client's network to the servers (EDNS Client
                      Subnet, RFC 7871); ecs_prefix4 (24) / ecs_prefix6 (56) bits only; a server that
                      refuses it (FORMERR/REFUSED) is asked again without and then left alone
@@ -213,11 +216,11 @@ Web GUI ("web" block): everything above is also available in a browser.
   failed_login_window_minutes default 1    ... within this window lock the
   lockout_minutes      default 15  address (and address with user name) out for this long
   min_password_length  default 8   fewest characters of a password set on the Users page
-  The certificate is managed with --tls-* / Settings ▸ Web GUI (the old
+  The certificate is managed with --tls-* / Configure ▸ Web GUI (the old
   cert_file/key_file settings still work and take precedence).
   Pages: Topology (--canvas, --canvas-add/-del: draw gateways, DNS servers and
   the domains to test as circle, squares and trapezoids), Gateways (--show-gateways, --show-neighbors),
-  Cluster monitor (--cluster-status), DNS (--show-dns), Settings (--show-config,
+  Cluster monitor (--cluster-status), DNS (--show-dns), Configure (--show-config,
   --configure: form), History (--versions...), Certificate
   (--tls-...), Node (--assert-agc, --node-pause..., --power), Cluster (--cluster-...), Upgrade (--update-...); the ? at the top right
   opens help for the page. Version is in the header. A certificate installed through the GUI/CLI is
@@ -556,7 +559,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 func certExpiryWatch(ctx context.Context, mg *Mgmt) {
 	for {
 		if w := mg.certs.ExpiryWarning(); w != "" {
-			warnf("web: %s — replace it under Settings ▸ Web GUI or with ddgw --tls-install", w)
+			warnf("web: %s — replace it under Configure ▸ Web GUI or with ddgw --tls-install", w)
 		}
 		select {
 		case <-ctx.Done():

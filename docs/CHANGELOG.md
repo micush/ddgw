@@ -1,5 +1,88 @@
 # Changelog
 
+## [v258] - 2026-10-08 — Configure ▸ Settings split into one page per tab
+
+### Changed
+- Configure ▸ Settings is gone. Its tabs are now pages of their own under Configure: General, Gateway groups, DNS proxy, Web GUI and Cluster (then Anycast, Users, History as before). Each page saves as the old form did. Old links (`#config`, `#certificate`) open General and Web GUI. The help for all five pages is the former Settings help. Every "Settings ▸ …" path in the GUI text, help, README, QUICKSTART and the program's messages now reads "Configure ▸ …".
+
+### Verified
+- `node --check`, gofmt, `go vet`, `go build`, the help/field and web tests.
+
+### Not verified
+- Not looked at in a browser; the full suite was not re-run (web files and message text only).
+
+## [v257] - 2026-10-08 — DNS sort list
+
+### Added
+- **Sort list** (`sortlist` in the shared `dns` block; Settings ▸ DNS proxy ▸ Sort List): per-client-network ordering of the A and AAAA records in an answer. Each entry is `client-network: preferred-network, preferred-network` (e.g. `10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8`); the first entry that contains the asking client is used, `any` matches every client. Addresses inside the client network itself always come first (it need not be repeated in the list), then those in the first preferred network, the second, and so on; others keep their order after those. The sort is stable and applied to each client's copy, so the cache is not changed. Error answers and answers carrying anything besides CNAMEs and addresses are left as they came. Empty (default) changes nothing. The option has no text on its card; the description is in help, the README and `--help`.
+- Tests: ordering per client, the input message untouched, CNAME kept first, no rule / error answer / already-ordered left alone, entry validation and normalising.
+
+### Verified
+- gofmt, `go vet`, `go build` (amd64, CGO off, arm64, arm), `node --check`, the whole suite with `-race`.
+
+### Not verified
+- Not looked at in a browser, and not tried against a live resolver.
+
+## [v256] - 2026-10-08 — Configure ▸ Anycast: no descriptions on the card, tighter fields
+
+### Changed
+- The BGP card has no description text any more (the line under the title and the lines under Local AS number and Router ID are gone; the help page has them), and its fields are narrower with less space between them.
+
+### Verified
+- `node --check`, `go build`, `go vet`. Not looked at in a browser and the test suite not re-run: a layout change in two web files.
+
+## [v255] - 2026-10-08 — Configure ▸ Anycast: AS, router ID, timers and AS Prepend on one line
+
+### Changed
+- The BGP card's fields are on one line: Local AS number, Router ID, Keepalive, Hold time (no "(seconds)", short fields) and the **AS Prepend** tick box next to them. They wrap on a narrow window.
+
+### Verified
+- `node --check`, `go build`, `go vet`. Not looked at in a browser and the test suite not re-run: a layout change in two web files.
+
+## [v254] - 2026-10-08 — The AS prepend tick box is just the box and "AS Prepend"
+
+### Changed
+- Configure ▸ Anycast: the tick box reads **AS Prepend** (it said "Prepend the local AS 3 times"). The hint text under it is gone too; the explanation is in the help page. Behaviour unchanged.
+
+### Verified
+- `node --check`, `go build`, `go vet`. Not re-run: the full test suite (a label change in two web files).
+
+## [v254] - 2026-10-08 — The AS prepend tick box is just the box and "AS Prepend"
+
+### Changed
+- On Configure ▸ Anycast the tick box reads **AS Prepend** (it said "Prepend the local AS 3 times"). What it does is unchanged and is in the hint under it and in the help page.
+
+### Verified
+- `node --check`, `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v252] - 2026-10-08 — Configure ▸ Anycast: AS prepend
+
+### Added
+- **AS prepend** tick box on Configure ▸ Anycast (BGP card). Ticked, the node adds its local AS **three more times** to the AS path of every anycast route it announces (`set as-path prepend ASN ASN ASN` in the outbound route-maps for IPv4 and IPv6; the inbound route-map is unchanged), so routers prefer the nodes that do not have it ticked. It is a per-node setting like the rest of the card (`as_prepend` in the `bgp` block, not shared), applies at once through the usual FRR reload, and `ddgw --as-prepend on|off` does the same from the command line; `ddgw --bgp` shows it when on. Help and README describe it.
+- Test: `TestRenderFRRASPrepend`.
+
+### Verified live
+- Headless Chromium against a real daemon: the tick box sits under the hold time, ticking it saved `as_prepend: true` in the configuration.
+
+### Not verified
+- Against a real router: the generated `frr.conf` was checked, FRR was not run here. A BGP session shows the longer path as `<AS> <AS> <AS> <AS>` (the three prepended plus the one FRR adds when sending to an eBGP neighbor).
+
+### Verified
+- `gofmt -l .`, `node --check`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
+## [v251] - 2026-10-08 — tshoot finishes again
+
+### Fixed
+- **tshoot (Monitor ▸ Log ▸ tshoot, `--tshoot --all-nodes`) never finished, so there was no download.** Collecting another node's bundle is one long cluster call (up to a minute: the 8 s capture, FRR, the journal). A peer has several addresses (its name and its IPs) and the call code cut the call short after **6 s on every address but the last** and started it again on the next one, so each node was asked again and again, up to once per address, and the whole request ran past the web server's 90 s write limit and was dropped. The cut-off was meant to give up on a dead address quickly; it now does that where it belongs, in making the connection (name lookup, TCP, TLS handshake: 6 s per address), and a call that is connected may take as long as its caller allows. Every long call to a peer (a bundle, an update upload) was affected, not only this one.
+- The per-node wait for a bundle is 75 s (was 90 s, equal to the web server's write limit), so a node that does not answer gives a note in the bundle instead of the whole download being cut off.
+- Test: `TestDialPinnedGivesUpOnASilentAddress`.
+
+### Not verified
+- tshoot on the real cluster (the long relayed call was not reproduced here; the cause is from reading the call path: the 6 s cap in `callRaw` against an 8 s capture).
+
+### Verified
+- `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
 ## [v250] - 2026-10-08 — Anycast page: the "announced to … neighbors only, and there is none" banner is gone
 
 ### Removed

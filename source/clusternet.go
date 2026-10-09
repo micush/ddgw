@@ -510,12 +510,11 @@ func (c *Cluster) call(ctx context.Context, peer ClusterPeer, method, path strin
 func (c *Cluster) callRaw(ctx context.Context, peer ClusterPeer, method, path string, body []byte, onBody func(io.Reader) error, timeout time.Duration, hdr http.Header) error {
 	addrs := c.addrsFor(peer)
 	var errs []string
-	for i, a := range addrs {
-		t := timeout
-		if i < len(addrs)-1 && t > 6*time.Second {
-			t = 6 * time.Second // do not sit on a dead address
-		}
-		err := c.callAddr(ctx, a, peer, method, path, body, onBody, t, hdr)
+	for _, a := range addrs {
+		// A dead address is given up on when the connection cannot be made (peerConnectTimeout, in the dial), not by cutting
+		// the whole call short: a call that takes a while (a troubleshooting bundle, an upload) must not be abandoned at the
+		// first address and started again on the next.
+		err := c.callAddr(ctx, a, peer, method, path, body, onBody, timeout, hdr)
 		if err == nil {
 			c.noteGoodAddr(peer, a)
 			return nil

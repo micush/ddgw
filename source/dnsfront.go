@@ -186,6 +186,9 @@ func (f *DNSFrontend) resolve(query []byte, tcp bool, client netip.Addr) []byte 
 	var qi qinfo // the question, read once for the cache key and for the statistics
 	parseQuestion(query, &qi)
 	resp := f.resolveRaw(query, tcp, client, &qi)
+	if p := f.pool(); p != nil && len(p.sorts) > 0 {
+		resp = p.sortAnswer(resp, client)
+	}
 	if timed && f.ctx.Err() == nil {
 		f.gw.lat(time.Since(t0))
 	}

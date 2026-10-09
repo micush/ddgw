@@ -412,3 +412,19 @@ func TestBGPTimerSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderFRRASPrepend(t *testing.T) {
+	b := &BGPConfig{ASN: 4215123199, Neighbors: []BGPNeighbor{{Peer: "192.0.2.1", RemoteAS: 64500}}}
+	if conf := renderFRR(b, []string{"203.0.113.53"}, []string{"2001:db8:53::1"}, "h"); strings.Contains(conf, "as-path prepend") {
+		t.Fatalf("prepend without being asked:\n%s", conf)
+	}
+	b.ASPrepend = true
+	conf := renderFRR(b, []string{"203.0.113.53"}, []string{"2001:db8:53::1"}, "h")
+	want := " set as-path prepend 4215123199 4215123199 4215123199\n"
+	if strings.Count(conf, want) != 2 || !strings.Contains(conf, "match ip address prefix-list DDGW-ANYCAST-V4\n"+want) || !strings.Contains(conf, "match ipv6 address prefix-list DDGW-ANYCAST-V6\n"+want) {
+		t.Fatalf("both outbound route-maps must prepend three times:\n%s", conf)
+	}
+	if strings.Contains(strings.SplitN(conf, "route-map DDGW-IN", 2)[1], "prepend") {
+		t.Fatal("the inbound route-map must not change")
+	}
+}

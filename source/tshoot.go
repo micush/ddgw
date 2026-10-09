@@ -493,7 +493,9 @@ func (m *Mgmt) TshootCluster(capture bool, actor string) ([]byte, error) {
 				}
 				results[i].files, results[i].err = untarFiles(tgz)
 			default:
-				ctx, cancel := context.WithTimeout(context.Background(), tshootNodeTime+30*time.Second)
+				// shorter than the web server's 90 s write limit, so that one node that does not answer gives a note in the bundle instead of
+				// the whole download being cut off
+				ctx, cancel := context.WithTimeout(context.Background(), tshootNodeTime+15*time.Second)
 				defer cancel()
 				body, _ := json.Marshal(map[string]any{"enabled": capture})
 				resp, err := m.cl.Relay(ctx, t.Addr, proxyReq{User: actor, Method: "POST", Path: "/api/tshoot/node", CT: "application/json", Body: body})

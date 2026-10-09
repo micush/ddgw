@@ -54,7 +54,7 @@ A new install has no gateways. Topology is the first page.
 
 Add a second server the same way for redundancy, and right-click a square to **Add domain…** so each server is tested with more than one name. Hover any shape for its status and uptime ("Online for 1m 1s - 0 failures").
 
-Colours: **green** working, **yellow** degraded (the gateway runs but something is down), **red** down, **grey** not known yet. A server is only taken out of service when half or more of its test domains fail (change that on the Settings page).
+Colours: **green** working, **yellow** degraded (the gateway runs but something is down), **red** down, **grey** not known yet. A server is only taken out of service when half or more of its test domains fail (change that on Configure ▸ DNS proxy).
 
 ## 4. Try it
 
@@ -80,11 +80,11 @@ Both nodes now answer on the shared address and one of them is the controller (s
 
 ## 6. Replace the certificate
 
-**Configure ▸ Settings ▸ Web GUI** shows the certificate the GUI uses. Install your own (paste the certificate and key, or generate a signing request and paste the signed result) so your browser stops warning. The same certificate is used for DNS over TLS if you turn it on.
+**Configure ▸ Web GUI** shows the certificate the GUI uses. Install your own (paste the certificate and key, or generate a signing request and paste the signed result) so your browser stops warning. The same certificate is used for DNS over TLS if you turn it on.
 
 ## 7. Worth knowing
 
-- **Settings** (Configure) holds everything else, and every field saves on its own: probe timing, cache, spread of queries over servers of similar speed, `down_percent`, DNS over TLS and DNS over HTTPS ports for clients, and more. Each page's **?** help lists the command-line equivalent.
+- **General, Gateway groups, DNS proxy, Web GUI and Cluster** (all under Configure) hold everything else, and every field saves on its own: probe timing, cache, spread of queries over servers of similar speed, `down_percent`, DNS over TLS and DNS over HTTPS ports for clients, and more. Each page's **?** help lists the command-line equivalent.
 - **History** keeps every saved change as a version. You can compare a version with the live one and restore any of them.
 - **Operate ▸ Upgrade**: upload a newer Anyname tarball, tick the nodes to update and press the button in the Nodes card (none ticked = this node). A bad update rolls back by itself.
 - **Operate ▸ Anycast**: switch BGP, or a single neighbor, off and on without losing the settings (set them under **Configure ▸ Anycast**).

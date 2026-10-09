@@ -184,6 +184,10 @@ func cloneDNS(d DNSConfig) DNSConfig {
 	if len(d.AllowedClients) == 0 {
 		d.AllowedClients = nil
 	}
+	d.SortList = append([]string(nil), d.SortList...)
+	if len(d.SortList) == 0 {
+		d.SortList = nil
+	}
 	d.ClientExempt = append([]string(nil), d.ClientExempt...)
 	if len(d.ClientExempt) == 0 {
 		d.ClientExempt = nil

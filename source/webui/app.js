@@ -214,7 +214,7 @@
   const TOPO = "Topology";
   const NAV_GROUPS = [
     ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["capture", "Capture"], ["log", "Log"]]],
-    ["Configure", [["config", "Settings"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
+    ["Configure", [["cfg_general", "General"], ["cfg_groups", "Gateway groups"], ["cfg_dns", "DNS proxy"], ["cfg_web", "Web GUI"], ["cfg_cluster", "Cluster"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
     ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["updates", "Upgrade"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
@@ -290,7 +290,8 @@
     if (wanted === "power" || wanted === "gateway") wanted = "node"; // Power and the short-lived Gateway page became Operate ▸ Node
     if (wanted === "bgpstatus") wanted = "anycaststatus"; // Monitor ▸ BGP became Monitor ▸ Anycast
     if (wanted === "bgp") wanted = "anycast"; // likewise Configure ▸ BGP
-    if (wanted === "certificate") { wanted = "config"; state.cfgTab = "web"; } // moved under Settings ▸ Web GUI
+    if (wanted === "certificate") wanted = "cfg_web"; // moved under Configure ▸ Web GUI
+    if (wanted === "config") wanted = "cfg_general"; // Configure ▸ Settings was split into one page per tab
     selectTab(TABS.some(([id]) => id === wanted) ? wanted : "topology");
   }
 
@@ -373,7 +374,7 @@
     b.title = open ? "Close help (Esc)" : "Help for this page";
   }
   function fillHelp() {
-    const [t, kids] = helpBody(state.tab);
+    const [t, kids] = helpBody(state.tab.startsWith("cfg_") ? "config" : state.tab);
     document.getElementById("help-title").textContent = t;
     const body = clear(document.getElementById("help-body"));
     body.append(...kids);
@@ -1801,11 +1802,13 @@
     { shared: true, k: "fail_threshold", l: "Failures before down", t: "int", min: 1 },
     { shared: true, k: "max_attempts", l: "Max servers tried", t: "int", min: 1 },
     { shared: true, k: "latency_alpha", l: "Latency smoothing (0–1]", t: "float" },
-    { section: "Listeners", note: "Plain DNS is always on. DNS over TLS (usually 853) and DNS over HTTPS (usually 443, served at /dns-query) use the GUI certificate (Settings ▸ Web GUI); 0 turns one off." },
+    { section: "Listeners", note: "Plain DNS is always on. DNS over TLS (usually 853) and DNS over HTTPS (usually 443, served at /dns-query) use the GUI certificate (Configure ▸ Web GUI); 0 turns one off." },
     { shared: true, k: "listen_port", l: "DNS port (UDP and TCP)", t: "int", min: 1, max: 65535 },
     { shared: true, k: "dot_port", l: "DNS over TLS port", t: "int", min: 0, max: 65535 },
     { shared: true, k: "doh_port", l: "DNS over HTTPS port", t: "int", min: 0, max: 65535 },
     { shared: true, k: "forward_updates", l: "Forward dynamic DNS updates to the zone's primary server", t: "bool" },
+    { section: "Sort List" },
+    { shared: true, k: "sortlist", l: "Sort list", t: "list", wide: true },
     { section: "Client Rate Limiting", note: "Applies to every gateway that uses these settings, over UDP, TCP, DoT and DoH, before the cache. This node itself is always allowed and never limited. Counters are per node." },
     { shared: true, k: "allowed_clients", l: "Allowed clients", t: "list", wide: true, hint: "Networks that may use the proxy, one per line: 10.0.0.0/8, 192.168.1.5, 2001:db8::/32. Empty = everyone. Anyone else is answered REFUSED (dynamic updates too)." },
     { shared: true, k: "client_rate", l: "Queries per second", t: "int", min: 0, max: 10000000, hint: "0 = no limit. A client is one IPv4 address or one IPv6 /64." },
@@ -1899,9 +1902,11 @@
     return { el: wrap, get: () => Object.fromEntries(Object.entries(getters).map(([k, g]) => [k, g()])) };
   }
 
-  VIEWS.config = (() => {
+  // Configure ▸ General, Gateway groups, DNS proxy, Web GUI and Cluster: one page each, all made from the one form
+  // (every page shows its own panel and saves through the same call).
+  const makeConfigView = (only) => {
     let holder, status, collect = null;
-    let tab = "general"; // the Settings tab being shown; kept across the redraws a save causes
+    const tab = only;
 
     // Action results ("Saved", "Restored" …) are not announced; only errors, warnings and hints are.
     const say = (kind, ...msg) => kind === "ok" ? clear(status) : clear(status).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
@@ -1971,24 +1976,8 @@
         ["web", "Web GUI", h("div", {}, section("Web GUI", web.el), certBox)],
         ["cluster", "Cluster", section("Cluster", cluster.el)],
       ];
-      if (state.cfgTab) { tab = state.cfgTab; delete state.cfgTab; }   // an old link to the Certificate page opens Web GUI
-      const tabs = h("div", { class: "tabbar", role: "tablist", "aria-label": "Settings" });
-      const show = (id) => {
-        tab = id;
-        for (const [pid, , el] of panels) el.hidden = pid !== id;
-        for (const b of tabs.children) { const on = b.dataset.tab === id; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; }
-      };
-      for (const [id, label] of panels) {
-        tabs.append(h("button", { type: "button", role: "tab", class: "tabbtn", "data-tab": id, onclick: () => show(id),
-          onkeydown: (e) => {
-            const ids = panels.map((p) => p[0]), at = ids.indexOf(id);
-            const to = e.key === "ArrowRight" ? ids[(at + 1) % ids.length] : e.key === "ArrowLeft" ? ids[(at + ids.length - 1) % ids.length] : null;
-            if (to) { e.preventDefault(); show(to); tabs.querySelector('[data-tab="' + to + '"]').focus(); }
-          } }, label));
-      }
-      const form = h("div", {}, tabs, ...panels.map((p) => p[2]));
-      if (!panels.some((p) => p[0] === tab)) tab = "general";
-      show(tab);
+      for (const [pid, , el] of panels) el.hidden = pid !== tab;
+      const form = h("div", {}, ...panels.map((p) => p[2]));
       form.addEventListener("change", () => autosave());
       return form;
     }
@@ -2047,7 +2036,8 @@
         load().catch((e) => { if (e.message !== "unauthenticated") say("bad", e.message); });
       },
     };
-  })();
+  };
+  for (const id of ["general", "groups", "dns", "web", "cluster"]) VIEWS["cfg_" + id] = makeConfigView(id);
 
   // ── shared helpers for the management pages ───────────────────────────────
   // What the memory guard did (Statistics and Host): it drops the oldest history when memory use reaches its limit.
@@ -2138,7 +2128,7 @@
     try {
       const c = (await api("GET", "/api/tls")).data;
       clear(slot);
-      if (c.expired) slot.append(h("div", { class: "notice bad", role: "alert" }, "The GUI certificate has expired. Install a new one under Settings ▸ Web GUI."));
+      if (c.expired) slot.append(h("div", { class: "notice bad", role: "alert" }, "The GUI certificate has expired. Install a new one under Configure ▸ Web GUI."));
       else if (c.expires_soon && c.source !== "self-signed") slot.append(h("div", { class: "notice warn" }, "The GUI certificate expires in " + c.days_left + " day(s)."));
     } catch (_) { /* not critical */ }
   }
@@ -2447,7 +2437,7 @@
       const addrs = new Set(v.nodes.map((n) => n.addr));
       for (const a of [...selected]) if (!addrs.has(a)) selected.delete(a);
       const picked = v.clustered ? [...selected] : [];
-      const go = h("button", { class: "btn primary hdr", type: "button", disabled: v.intent.auto_all || !newer || v.busy || !v.toolchain, title: v.intent.auto_all ? "Automatic updates are on: every node updates itself. Turn them off in Settings ▸ General ▸ Updates to update by hand." : null, onclick: () => picked.length
+      const go = h("button", { class: "btn primary hdr", type: "button", disabled: v.intent.auto_all || !newer || v.busy || !v.toolchain, title: v.intent.auto_all ? "Automatic updates are on: every node updates itself. Turn them off in Configure ▸ General ▸ Updates to update by hand." : null, onclick: () => picked.length
         ? act("/api/update/push", { nodes: picked }, "Update " + picked.length + " selected node" + (picked.length === 1 ? "" : "s") + " to v" + v.source_version + "?\n\nThey build and restart one at a time.", "Queued " + picked.length + " node(s).")
         : act("/api/update/apply", {}, "Build v" + v.source_version + " on this node and restart into it?\n\nThe node is briefly unavailable. If the new version fails to stay up it is rolled back automatically.", "Building v" + v.source_version + " — this node restarts when it is done.") },
         picked.length ? "Update " + picked.length + " selected" : "Update this node now");
@@ -3376,8 +3366,9 @@
     function drawSettings() {
       const asn = h("input", { type: "text", inputmode: "numeric", pattern: "[0-9]*", autocomplete: "off", value: cfg.asn ? String(cfg.asn) : "", placeholder: "64512" });
       const rid = h("input", { type: "text", value: cfg.router_id || "", placeholder: "192.0.2.1 (optional)", spellcheck: "false" });
-      const secs = (v, d, label) => h("input", { class: "as", type: "text", inputmode: "numeric", pattern: "[0-9]*", autocomplete: "off", value: String(v || d), "aria-label": label });
+      const secs = (v, d, label) => h("input", { class: "narrow", type: "text", inputmode: "numeric", pattern: "[0-9]*", autocomplete: "off", value: String(v || d), "aria-label": label });
       const ka = secs(cfg.keepalive, 3, "Keepalive"), hold = secs(cfg.hold, 9, "Hold time");
+      const prep = h("input", { type: "checkbox", checked: !!cfg.as_prepend });
       const needAS = () => { rid.disabled = !(Number(asn.value) > 0); };   // a router ID means nothing without an AS
       needAS();
       const commit = () => {
@@ -3386,17 +3377,18 @@
         const next = clone(cfg);
         next.asn = Number(asn.value) || 0; next.router_id = rid.value.trim();
         next.keepalive = Number(ka.value) || 0; next.hold = Number(hold.value) || 0;
+        if (prep.checked) next.as_prepend = true; else delete next.as_prepend;
         save(next);
       };
       asn.addEventListener("input", needAS);
-      for (const el of [asn, rid, ka, hold]) el.addEventListener("change", commit);
+      for (const el of [asn, rid, ka, hold, prep]) el.addEventListener("change", commit);
       clear(settings).append(section("BGP",
-        h("p", { class: "hint" }, "When configured, BGP announces the gateways' anycast addresses and accepts no routes from its neighbors."),
-        h("div", { class: "grid" },
-          h("label", { class: "f" }, h("span", {}, "Local AS number"), asn, h("span", { class: "hint" }, "BGP runs on this node while an AS number is set; clear it to turn BGP off.")),
-          h("label", { class: "f" }, h("span", {}, "Router ID"), rid, h("span", { class: "hint" }, "An IPv4 address; empty lets FRR pick one.")),
-          h("label", { class: "f" }, h("span", {}, "Keepalive (seconds)"), ka),
-          h("label", { class: "f" }, h("span", {}, "Hold time (seconds)"), hold))));
+        h("div", { class: "bgprow" },
+          h("label", { class: "f" }, h("span", {}, "Local AS number"), asn),
+          h("label", { class: "f" }, h("span", {}, "Router ID"), rid),
+          h("label", { class: "f" }, h("span", {}, "Keepalive"), ka),
+          h("label", { class: "f" }, h("span", {}, "Hold time"), hold),
+          h("label", { class: "f" }, h("span", {}, "\u00a0"), h("span", { class: "opt" }, prep, " AS Prepend")))));
     }
 
     async function load() {

@@ -123,7 +123,7 @@ with no servers yet answers SERVFAIL and shows amber.
 * **No eligible server** – clients get an immediate SERVFAIL, not a timeout.
 * Truncated (TC) UDP answers are relayed so the client retries over TCP, which
   the proxy forwards over TCP.
-* **Client subnet (ECS)** – on by default (`"ecs": true`; turn it off in Settings ▸ DNS proxy ▸
+* **Client subnet (ECS)** – on by default (`"ecs": true`; turn it off in Configure ▸ DNS proxy ▸
   Client network, or per gateway on the Topology page: edit the gateway → "Tell the DNS servers
   which network the client is on"). With it off, every upstream server sees all queries coming
   from the Anyname node. With it on the proxy attaches the
@@ -139,14 +139,15 @@ with no servers yet answers SERVFAIL and shows amber.
   queries carried it. Set it per gateway (inside the group's `dns` block) or in
   the shared top-level block. ECS is not DoT/DoH.
 * **DNS over HTTPS to clients** – set `doh_port` (usually 443; 0, the default, is off) and the gateway address (and any anycast address of the gateway) also answers DoH (RFC 8484) at `https://<address>:<port>/dns-query`: POST with an `application/dns-message` body, or GET with the message as the base64url `dns` parameter; HTTP/2 or HTTP/1.1, TLS 1.2 or later, the GUI's certificate, the same pool, cache and statistics as plain DNS (counted as TCP). Only that path is served (others get 404; a wrong method 405, content type 415, a bad message 400). `doh_port` must differ from `listen_port` and `dot_port`; if it cannot be opened the error is logged and the other listeners keep running. There is no `Cache-Control` freshness on answers (`no-store`) and no client-certificate or token check: it is as open as plain DNS on the same address.
-* **Client Rate Limiting** – in the top-level `dns` block (Settings ▸ DNS proxy ▸ Client Rate Limiting); every gateway uses it, including one with its own `dns` block, whose copy of these values is ignored: `allowed_clients` is a list of networks (`10.0.0.0/8`, `192.168.1.5`, `2001:db8::/32`) that may use the proxy — empty (default) is everyone; any other client is answered REFUSED, dynamic updates included. `client_rate` is the queries per second one client (an IPv4 address, or an IPv6 /64) may send (0, the default, is no limit) and `client_burst` how many at once (0 = twice the rate, at least 10); `client_action` is what a client over its rate gets: `drop` (default: nothing is sent, so a forged source cannot be used to bounce answers at a victim), `truncate` (UDP: a short answer with the TC bit, so a real resolver retries over TCP) or `refused`. Over TCP, DoT and DoH the address is real and the answer is always REFUSED. `client_exempt` lists networks never rate limited (they stay subject to `allowed_clients`). The node itself (loopback) is always allowed and never limited. Both checks run before the cache; the DNS page and `--show-dns` show the limit and how many queries were refused or turned away, and the log says so at most once a minute. Counters are per node (a client that reaches several nodes gets the limit at each), and at most about 130,000 clients are tracked at once (a flood of new addresses cannot grow memory further; a forgotten client simply starts with a full burst). This is per-client *query* limiting, the kind resolvers use, not response rate limiting (RRL), which protects authoritative servers.
-* **Fallback servers** – `fallback_servers` in the `dns` block (shared, or a gateway's own; Settings ▸ DNS proxy ▸ Fallback servers, *Edit gateway…* on the Topology page, or `--canvas-add fallback --group N --server ADDR` / `--canvas-del fallback …`) lists upstreams that are used **only while no normal server is in service** (every one down or paused, or none listed; only a paused or stopped gateway serves nothing at all). They are **never probed** and always count as up (the domains the normal servers are tested with may be internal names a public resolver knows nothing about, so probing a fallback with them would only mislead); while no normal server is in service only the fallbacks take queries, and as soon as a normal server passes a probe again the pool goes back to the normal servers and the fallbacks get nothing. The DNS page marks them and says when they are in use, the canvas shows amber "answering from the fallback servers", the log says when the pool switches either way. They may use `tls://`/`https://` like any server; a fallback cannot also be a normal server, and `server_queries`, names and pausing apply to normal servers only.
-* **DNS over TLS to clients** – set `dot_port` (usually 853; 0, the default, is off) in the `dns` block (shared, or a gateway's own) or under Settings ▸ DNS proxy, and the VIP (and any anycast address) also answers DoT (RFC 7858) on that TCP port, through the same pool, cache and statistics as plain DNS. The certificate is the web GUI's: whatever Settings ▸ Web GUI shows (the self-signed one until you install a real one), so clients that check certificates need a certificate valid for the name or address they connect to. `dot_port` must differ from `listen_port`; if the DoT port cannot be opened the error is logged and plain DNS keeps running. DoT queries count as TCP in the statistics. `tls_insecure` is about the other direction (servers you forward to): a DoT listener has no client certificate to skip.
+* **Sort List** – `sortlist` in the top-level `dns` block (Configure ▸ DNS proxy ▸ Sort List); every gateway uses it. A list of entries `client-network: preferred-network, preferred-network` (for example `10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8`). The first entry whose client network contains the asking client is used (`any` matches every client); the A and AAAA records of a plain answer are put in this order: addresses inside the client network itself first, then those in the first preferred network, the second, and so on, and addresses in none of them keep their order after those. The sort is stable and per client: the cache is not changed, and an error answer, or one with other record types besides CNAMEs, is left as it came. Empty (default) keeps the order the servers gave.
+* **Client Rate Limiting** – in the top-level `dns` block (Configure ▸ DNS proxy ▸ Client Rate Limiting); every gateway uses it, including one with its own `dns` block, whose copy of these values is ignored: `allowed_clients` is a list of networks (`10.0.0.0/8`, `192.168.1.5`, `2001:db8::/32`) that may use the proxy — empty (default) is everyone; any other client is answered REFUSED, dynamic updates included. `client_rate` is the queries per second one client (an IPv4 address, or an IPv6 /64) may send (0, the default, is no limit) and `client_burst` how many at once (0 = twice the rate, at least 10); `client_action` is what a client over its rate gets: `drop` (default: nothing is sent, so a forged source cannot be used to bounce answers at a victim), `truncate` (UDP: a short answer with the TC bit, so a real resolver retries over TCP) or `refused`. Over TCP, DoT and DoH the address is real and the answer is always REFUSED. `client_exempt` lists networks never rate limited (they stay subject to `allowed_clients`). The node itself (loopback) is always allowed and never limited. Both checks run before the cache; the DNS page and `--show-dns` show the limit and how many queries were refused or turned away, and the log says so at most once a minute. Counters are per node (a client that reaches several nodes gets the limit at each), and at most about 130,000 clients are tracked at once (a flood of new addresses cannot grow memory further; a forgotten client simply starts with a full burst). This is per-client *query* limiting, the kind resolvers use, not response rate limiting (RRL), which protects authoritative servers.
+* **Fallback servers** – `fallback_servers` in the `dns` block (shared, or a gateway's own; Configure ▸ DNS proxy ▸ Fallback servers, *Edit gateway…* on the Topology page, or `--canvas-add fallback --group N --server ADDR` / `--canvas-del fallback …`) lists upstreams that are used **only while no normal server is in service** (every one down or paused, or none listed; only a paused or stopped gateway serves nothing at all). They are **never probed** and always count as up (the domains the normal servers are tested with may be internal names a public resolver knows nothing about, so probing a fallback with them would only mislead); while no normal server is in service only the fallbacks take queries, and as soon as a normal server passes a probe again the pool goes back to the normal servers and the fallbacks get nothing. The DNS page marks them and says when they are in use, the canvas shows amber "answering from the fallback servers", the log says when the pool switches either way. They may use `tls://`/`https://` like any server; a fallback cannot also be a normal server, and `server_queries`, names and pausing apply to normal servers only.
+* **DNS over TLS to clients** – set `dot_port` (usually 853; 0, the default, is off) in the `dns` block (shared, or a gateway's own) or under Configure ▸ DNS proxy, and the VIP (and any anycast address) also answers DoT (RFC 7858) on that TCP port, through the same pool, cache and statistics as plain DNS. The certificate is the web GUI's: whatever Configure ▸ Web GUI shows (the self-signed one until you install a real one), so clients that check certificates need a certificate valid for the name or address they connect to. `dot_port` must differ from `listen_port`; if the DoT port cannot be opened the error is logged and plain DNS keeps running. DoT queries count as TCP in the statistics. `tls_insecure` is about the other direction (servers you forward to): a DoT listener has no client certificate to skip.
 * **DNS over HTTPS to a server** – list a server as `https://host`, `https://host:port` or `https://host/path` (port 443 and path `/dns-query` unless given) and each query is sent to it as an HTTPS POST of the DNS message (`application/dns-message`, RFC 8484; HTTP/2 when the server offers it, no redirects followed, never through a proxy). The certificate rules and `tls_insecure` are the same as for `tls://`. As with DoT every probe and query opens a new connection, so a DoH server's measured latency includes the TLS handshake and HTTP request. Clients can also use DoH to reach ddgw (`doh_port`).
-* **DNS over TLS to a server** – list a server as `tls://host` or `tls://host:port` (port 853 by default; the host is an IP address or a name) and ddgw probes it and forwards to it over TLS (RFC 7858), whatever the client used to ask. The server's certificate must be valid for that host name (or IP address) and signed by an authority this machine trusts; a certificate that is not is refused and the server shows as down with the reason. **`tls_insecure`** (Settings ▸ DNS proxy, shared block or a gateway's own `dns` block; off by default) accepts any certificate from a `tls://` or `https://` server — self-signed, expired, the wrong name — for when you cannot fix the server: the traffic is still encrypted but the server is not authenticated, so anyone on the path could answer as it. While it is on the DNS page shows "tls:// certificates not checked", `--show-dns` says so and the log warns when the pool starts. A plain and a TLS entry for the same host are two servers. Clients reach ddgw over plain DNS, DoT (`dot_port`) or DoH (`doh_port`).
+* **DNS over TLS to a server** – list a server as `tls://host` or `tls://host:port` (port 853 by default; the host is an IP address or a name) and ddgw probes it and forwards to it over TLS (RFC 7858), whatever the client used to ask. The server's certificate must be valid for that host name (or IP address) and signed by an authority this machine trusts; a certificate that is not is refused and the server shows as down with the reason. **`tls_insecure`** (Configure ▸ DNS proxy, shared block or a gateway's own `dns` block; off by default) accepts any certificate from a `tls://` or `https://` server — self-signed, expired, the wrong name — for when you cannot fix the server: the traffic is still encrypted but the server is not authenticated, so anyone on the path could answer as it. While it is on the DNS page shows "tls:// certificates not checked", `--show-dns` says so and the log warns when the pool starts. A plain and a TLS entry for the same host are two servers. Clients reach ddgw over plain DNS, DoT (`dot_port`) or DoH (`doh_port`).
 * **Spread** – the healthy servers whose smoothed latency is within `spread_band` percent (default 20, 1–1000) of
   the fastest one's take turns, round-robin, so a pool of equally good servers shares its load; slower servers stay
-  fallbacks behind them. On by default; `"spread": false` (Configure → Settings → DNS proxy) gives every query to the fastest server and
+  fallbacks behind them. On by default; `"spread": false` (Configure ▸ DNS proxy) gives every query to the fastest server and
   keeps the rest as fallbacks. **Where it is set:** the load-balancing settings (spread, spread band, down at, failures before down,
   max servers tried, latency smoothing) are the Settings values for every gateway, including one drawn on the Topology page with
   its own servers. A gateway can have its own instead: Topology ▸ right-click the gateway ▸ *Edit gateway…* ▸ **Load balancing** ▸
@@ -155,7 +156,7 @@ with no servers yet answers SERVFAIL and shows amber.
   answering server hands the query to the next in the order either way. The band is relative, so 0.2 ms against 0.3 ms
   is not "within 20%". `--show-dns` and the DNS page show whether it is on; the Served column shows the real split. On the Topology page the line from a gateway to each server that is currently within the band is drawn **blue** (`--canvas` marks them `[spread: takes turns]`).
 * **Answer cache** – a pool answers a repeated query from memory for as long as the records' TTLs allow
-  (on by default; `"cache": false` or Configure → Settings → DNS proxy switches it off, for every gateway, including one with its own `dns` block). It keeps NOERROR answers
+  (on by default; `"cache": false` or Configure ▸ DNS proxy switches it off, for every gateway, including one with its own `dns` block). It keeps NOERROR answers
   (also "no data") and NXDOMAIN, and a negative answer only with the zone's SOA, whose MINIMUM says how long it
   holds (RFC 2308). An entry lives for the smallest TTL among its records and at most `cache_max_ttl` seconds
   (default 3600); the TTLs a client sees count down with the entry's age and are capped to that maximum. At most
@@ -186,7 +187,7 @@ with no servers yet answers SERVFAIL and shows amber.
   updates under **Recent dynamic updates** (and by `ddgw --dns-updates`): time, client, zone, what
   it changed (`add host1.example.com A 192.0.2.7`, `delete old.example.com A`), the primary and its answer. A primary that
   filters by source address sees the Anyname node, not the client — use TSIG keys, which travel with the
-  message. Switch it off with `"forward_updates": false` (Configure → Settings → DNS proxy): updates
+  message. Switch it off with `"forward_updates": false` (Configure ▸ DNS proxy): updates
   are then answered REFUSED. Note that anyone who can reach the VIP can send updates to your primary
   this way; the primary's own authorisation (TSIG, ACL) is what decides.
 * `ddgw --show-dns` prints the ranking, health, latency and counters.
@@ -377,12 +378,13 @@ package (the installer adds both) — without it a reload cannot work, so Anynam
 change and the sessions drop briefly. An `frr.conf` that Anyname did not write is saved once as
 `frr.conf.pre-ddgw` before it is replaced. Clearing the
 AS number removes the BGP section and leaves FRR running (the router ID can only be set while an AS is set, and clearing the AS clears it); **Operate → Anycast** does the same without forgetting any setting (*Disable BGP*), and can shut down a single neighbor (`neighbor … shutdown`, the neighbor stays configured); a node that never set an
-AS never has its FRR files touched. BFD is on for every neighbor. BGP keepalive and hold time are settings next to the router ID (default 3 s / 9 s; `--keepalive S --hold S`, `-` for the default); the session uses the lower hold time of the two ends. A neighbor can have a **multihop** limit (2-255, eBGP only) for a peer that is not on a connected subnet; FRR then runs BFD to it in multihop mode, so the peer must be set up the same way. Do not run this on a
+AS never has its FRR files touched. BFD is on for every neighbor. BGP keepalive and hold time are settings next to the router ID (default 3 s / 9 s; `--keepalive S --hold S`, `-` for the default); the session uses the lower hold time of the two ends. **AS prepend** (Configure ▸ Anycast, a tick box; `--as-prepend on|off`; `as_prepend` in the `bgp` block) adds the local AS three more times to every anycast route the node announces (`set as-path prepend ASN ASN ASN` in the outbound route-maps), so routers prefer the nodes that do not have it: tick it on the nodes that should be the backup. A neighbor can have a **multihop** limit (2-255, eBGP only) for a peer that is not on a connected subnet; FRR then runs BFD to it in multihop mode, so the peer must be set up the same way. Do not run this on a
 host whose FRR is managed by something else — they would overwrite each other.
 
     ddgw --bgp                                                    # settings, neighbor and BFD state, announced addresses
     ddgw --asn 64512 --router-id 192.0.2.10        # --router-id needs an AS, set now or earlier
     ddgw --keepalive 3 --hold 9
+    ddgw --as-prepend on                  # the local AS three more times on every announcement (off undoes it)
     ddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core
     ddgw --bgp-neighbor-add 2001:db8::1 --remote-as 64500
     ddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2   # peer not on a connected subnet (e.g. AWS VPC Route Server)
@@ -477,7 +479,7 @@ no MAC is ever on two nodes.
 
 Virtual MACs need the network to deliver frames addressed to a MAC that is not the NIC's own. A VMware port group with
 promiscuous mode off drops them, and clouds that allow one MAC per interface do the same. For those, a gateway has a setting,
-**Use real MAC addresses** (Settings, a gateway's card; `real_macs` in the file, `--configure`; shared by the cluster,
+**Use real MAC addresses** (Configure ▸ Gateway groups; `real_macs` in the file, `--configure`; shared by the cluster,
 and changing it restarts the gateway), and everything above is replaced as follows. It is **on for a gateway you create**
 (first start, Add gateway, `--canvas-add gateway`, `--configure`), because most networks need it; a gateway that already
 existed keeps the setting it had (a file that does not say `real_macs` means off), so an upgrade changes nothing. Off is the
@@ -516,13 +518,13 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--assert-agc` | Operate ▸ Node ▸ **Gateway controller**: "Make this node the gateway controller" (asks to confirm) |
 | `--cluster-status` | Monitor ▸ Cluster (the members) |
 | `--show-dns` | DNS tab (ranking, health, latency bars, counters) |
-| `--show-config`, `--configure` | Settings page (form; every edit saves and applies at once) |
+| `--show-config`, `--configure` | Configure pages (form; every edit saves and applies at once) |
 | `--versions`, `--version-show/-diff/-snapshot/-restore/-export`, `--config-import` | History tab |
 | `--users`, `--user-add`, `--user-passwd`, `--user-expiry`, `--user-del` | Configure ▸ Users |
-| `--tls-status/-install/-csr/-revert/-regenerate` | Settings ▸ Web GUI (certificate) |
+| `--tls-status/-install/-csr/-revert/-regenerate` | Configure ▸ Web GUI (certificate) |
 | `--cluster-status/-token/-join/-promote/-remove/-unremove/-leave/-sync` | Cluster tab |
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
-| `--update-auto` | Settings ▸ General ▸ **Upgrade** card |
+| `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
@@ -563,7 +565,7 @@ listens on all interfaces by default — bind it to a management address
 (lost on restart; a user's sessions also end when that user's password changes, the account is deleted or it expires), HttpOnly/Secure/SameSite=Strict cookies named with the `__Host-` prefix, a CSRF token on every
 change, a strict CSP (no inline script), and failed logins are limited: 3 wrong passwords within 1 minute lock that
 address, and that address together with that user name (never the user name alone), out for 15 minutes — all three numbers are on the
-Settings page (`web.max_failed_logins`, `web.failed_login_window_minutes`,
+Configure ▸ Web GUI (`web.max_failed_logins`, `web.failed_login_window_minutes`,
 `web.lockout_minutes`). Passwords set on the Users page must have at least 8 characters
 (`web.min_password_length`, 1–128; absent or 0 means 8). A failed login gets one message that does not say what was wrong, which group is
 needed or how many tries are left (that would give a guesser a target); only once
@@ -631,7 +633,7 @@ shared part through the primary like any other edit.
 
 `web.cert_file`/`web.key_file` take precedence (and are re-read
 when the files change, so a renewal needs no restart). Without them you can
-manage the certificate at runtime (Settings ▸ Web GUI, or the commands below):
+manage the certificate at runtime (Configure ▸ Web GUI, or the commands below):
 
     ddgw --tls-status
     ddgw --tls-csr --cn gw.example.com --san gw.example.com,10.0.0.5   # key stays on the node
@@ -687,7 +689,7 @@ sync, so a changed IP is picked up on its own.
   configure and monitor any member from the node you are logged in to. Requests are
   relayed over the cluster channel and recorded as `user via node`. Every page
   follows the picked node — Cluster (leave, promote, join code, sync) and Upgrade
-  (upload, update now) included, and Settings ▸ General ▸ Upgrade (auto-update); only the sign-in is always on
+  (upload, update now) included, and Configure ▸ General ▸ Upgrade (auto-update); only the sign-in is always on
   the node you logged in to. Uploads through another node are limited to 5 MB.
 - Nodes authenticate each other with a pinned per-node identity certificate
   (SHA-256 from the join code) and an HMAC over every request using the cluster

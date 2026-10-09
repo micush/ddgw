@@ -70,6 +70,9 @@ type BGPConfig struct {
 	Keepalive int           `json:"keepalive,omitempty"` // seconds; 0 = 3
 	Hold      int           `json:"hold,omitempty"`      // seconds; 0 = 9
 	Neighbors []BGPNeighbor `json:"neighbors"`
+	// ASPrepend adds the local AS three more times to the AS path of every anycast route this node announces, so that the
+	// routes of nodes that have it are the less preferred ones (a longer path) wherever the rest is equal.
+	ASPrepend bool `json:"as_prepend,omitempty"`
 	// Disabled stops BGP on this node without forgetting the settings (Operate ▸ Anycast): the BGP section is
 	// removed from frr.conf as if the AS were cleared, and put back when it is enabled again.
 	Disabled bool `json:"disabled,omitempty"`
@@ -210,8 +213,12 @@ func renderFRR(b *BGPConfig, v4, v6 []string, hostname string) string {
 	for i, a := range v6 {
 		o.WriteString(fmt.Sprintf("ipv6 prefix-list DDGW-ANYCAST-V6 seq %d permit %s/128\n", 10+i, a))
 	}
-	o.WriteString("!\nroute-map DDGW-OUT-V4 permit 10\n match ip address prefix-list DDGW-ANYCAST-V4\n")
-	o.WriteString("route-map DDGW-OUT-V6 permit 10\n match ipv6 address prefix-list DDGW-ANYCAST-V6\n")
+	prepend := ""
+	if b.ASPrepend {
+		prepend = fmt.Sprintf(" set as-path prepend %d %d %d\n", b.ASN, b.ASN, b.ASN)
+	}
+	o.WriteString("!\nroute-map DDGW-OUT-V4 permit 10\n match ip address prefix-list DDGW-ANYCAST-V4\n" + prepend)
+	o.WriteString("route-map DDGW-OUT-V6 permit 10\n match ipv6 address prefix-list DDGW-ANYCAST-V6\n" + prepend)
 	o.WriteString("route-map DDGW-IN deny 10\n!\n")
 	o.WriteString(fmt.Sprintf("router bgp %d\n no bgp default ipv4-unicast\n", b.ASN))
 	if b.RouterID != "" {

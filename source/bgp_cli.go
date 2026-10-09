@@ -43,6 +43,17 @@ func runBGP(sock string, f *cliFlags) {
 		}
 		changed = true
 	}
+	if *f.asPrepend != "" {
+		switch strings.ToLower(*f.asPrepend) {
+		case "on", "yes", "true":
+			c.ASPrepend = true
+		case "off", "no", "false":
+			c.ASPrepend = false
+		default:
+			fatalf("--as-prepend takes on or off")
+		}
+		changed = true
+	}
 	for _, t := range []struct {
 		flag, name string
 		dst        *int
@@ -132,6 +143,9 @@ func printBGP(st BGPStatus) {
 	}
 	rid := orDefault(c.RouterID, "chosen by FRR")
 	fmt.Printf("BGP is on: AS %d, router id %s, BFD on every neighbor\n", c.ASN, rid)
+	if c.ASPrepend {
+		fmt.Printf("  AS path prepend: on (the local AS %d three more times on every announcement)\n", c.ASN)
+	}
 	fmt.Printf("  FRR: %s", map[bool]string{true: "installed", false: "NOT installed"}[st.Installed])
 	if st.Installed {
 		fmt.Printf(", bgpd %s", map[bool]string{true: "answering", false: "not answering"}[st.Running])
