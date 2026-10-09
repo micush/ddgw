@@ -138,6 +138,7 @@ the web GUI):
   Users            --users   (the accounts that may sign in to the web GUI)
                    --user-add NAME [--expires YYYY-MM-DD]   (asks for the password)
                    --user-passwd NAME   --user-del NAME
+                   --user-grant NAME   (an account that already exists joins the group)   --user-revoke NAME
                    --user-expiry NAME --expires YYYY-MM-DD|never
   Power            --power restart|shutdown [--in MINUTES | --at HH:MM]
                    --power cancel  --power status

@@ -61,6 +61,8 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users/password", w.authed(w.op("users.password", nil)))
 	mux.HandleFunc("POST /api/users/expiry", w.authed(w.op("users.expiry", nil)))
 	mux.HandleFunc("POST /api/users/delete", w.authed(w.op("users.delete", nil)))
+	mux.HandleFunc("POST /api/users/grant", w.authed(w.op("users.grant", nil)))
+	mux.HandleFunc("POST /api/users/revoke", w.authed(w.op("users.revoke", nil)))
 	mux.HandleFunc("GET /api/power", w.authed(w.op("power.status", nil)))
 	mux.HandleFunc("POST /api/power", w.authed(w.op("power.do", nil)))
 	mux.HandleFunc("GET /api/update", w.authed(w.op("update.status", nil)))

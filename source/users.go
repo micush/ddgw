@@ -36,6 +36,8 @@ type UserInfo struct {
 type UsersView struct {
 	Group string     `json:"group"`
 	Users []UserInfo `json:"users"`
+	// Others are the local accounts that could be added to the group (people, not system accounts).
+	Others []string `json:"others"`
 }
 
 var (
@@ -145,7 +147,7 @@ func (m *Mgmt) UsersList() UsersView {
 		}
 	}
 	today := usersNow().Unix() / 86400
-	v := UsersView{Group: g, Users: []UserInfo{}}
+	v := UsersView{Group: g, Users: []UserInfo{}, Others: otherAccounts(g)}
 	for _, n := range groupMembers(g) {
 		if n == "root" {
 			continue // never listed, never managed
@@ -158,6 +160,51 @@ func (m *Mgmt) UsersList() UsersView {
 		v.Users = append(v.Users, u)
 	}
 	return v
+}
+
+// otherAccounts lists the accounts on this machine that are not in the group and could be: ordinary accounts (a user
+// id from 1000 up, not "nobody"), by name.  A system account can still be added by typing its name.
+func otherAccounts(group string) []string {
+	in := map[string]bool{"root": true}
+	for _, n := range groupMembers(group) {
+		in[n] = true
+	}
+	out := []string{}
+	b, err := os.ReadFile(usersPasswdFile)
+	if err != nil {
+		return out
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		f := strings.Split(l, ":")
+		if len(f) < 7 || in[f[0]] || !validUserName(f[0]) {
+			continue
+		}
+		if uid, err := strconv.Atoi(f[2]); err != nil || uid < 1000 || uid >= 65534 {
+			continue
+		}
+		out = append(out, f[0])
+	}
+	sort.Strings(out)
+	return out
+}
+
+// listedInGroup says whether name is named on the group's line in /etc/group (as opposed to being a member only
+// because the group is its primary group, which gpasswd cannot undo).
+func listedInGroup(group, name string) bool {
+	b, err := os.ReadFile(usersGroupFile)
+	if err != nil {
+		return false
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if f := strings.Split(l, ":"); len(f) >= 4 && f[0] == group {
+			for _, n := range strings.Split(f[3], ",") {
+				if strings.TrimSpace(n) == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func userDate(unix int64) string {
@@ -236,7 +283,7 @@ func (m *Mgmt) memberOf(name string) bool {
 
 // usersMsg is one change as it travels between members.
 type usersMsg struct {
-	Op      string `json:"op"` // apply | password | expiry | delete
+	Op      string `json:"op"` // apply | password | expiry | delete | grant | revoke
 	Name    string `json:"name"`
 	Hash    string `json:"hash,omitempty"`
 	Expires int64  `json:"expires,omitempty"`
@@ -346,6 +393,37 @@ func (m *Mgmt) usersPeer(msg usersMsg, by string) error {
 		}
 		m.endUserSessions(name) // a changed password ends the sessions that were signed in with the old one
 		infof("users: %s set up account %q here", by, name)
+	case "grant":
+		switch {
+		case m.memberOf(name):
+			return nil
+		case userExists(name):
+			if err := m.addToGroup(name); err != nil {
+				return err
+			}
+		case cryptHashRe.MatchString(msg.Hash): // not here yet: made the same as on the node that added it
+			if err := m.createUser(name, msg.Expires); err != nil {
+				return err
+			}
+			if out, err := usersRun(name+":"+msg.Hash+"\n", "chpasswd", "-e"); err != nil {
+				return fmt.Errorf("chpasswd failed: %s", firstNonEmpty(out, err.Error()))
+			}
+		default:
+			return fmt.Errorf("there is no account %q here, and the one it was added from has no password to copy", name)
+		}
+		infof("users: %s added %q to the %s group here", by, name, m.guiGroup())
+	case "revoke":
+		if !m.memberOf(name) {
+			return nil // already out
+		}
+		if m.countMembers() <= 1 {
+			return errors.New("that is the last account that can sign in on this node")
+		}
+		if err := m.removeFromGroup(name); err != nil {
+			return err
+		}
+		m.endUserSessions(name)
+		infof("users: %s removed %q from the %s group here", by, name, m.guiGroup())
 	case "expiry":
 		if err := m.requireMember(name); err != nil {
 			return err
@@ -398,6 +476,24 @@ func (m *Mgmt) createUser(name string, expires int64) error {
 	return nil
 }
 
+func (m *Mgmt) addToGroup(name string) error {
+	if out, err := usersRun("", "usermod", "-aG", m.guiGroup(), name); err != nil {
+		return fmt.Errorf("usermod failed: %s", firstNonEmpty(out, err.Error()))
+	}
+	return nil
+}
+
+func (m *Mgmt) removeFromGroup(name string) error {
+	g := m.guiGroup()
+	if !listedInGroup(g, name) {
+		return fmt.Errorf("%q is in the %s group because it is that account's primary group; change that with usermod -g, or delete the account", name, g)
+	}
+	if out, err := usersRun("", "gpasswd", "-d", name, g); err != nil {
+		return fmt.Errorf("gpasswd failed: %s", firstNonEmpty(out, err.Error()))
+	}
+	return nil
+}
+
 func (m *Mgmt) setExpiry(name string, expires int64) error {
 	arg := ""
 	if expires > 0 {
@@ -430,6 +526,56 @@ func (m *Mgmt) UserAdd(name, password string, expires int64, actor string) (stri
 	}
 	infof("users: %s created account %q in group %q", actor, name, m.guiGroup())
 	msg, partial := m.usersFan(usersMsg{Op: "apply", Name: name, Hash: shadowHash(name), Expires: expires, By: actor}, "User "+name+" added.")
+	return msg, partial, nil
+}
+
+// UserGrant puts an account that already exists on this machine into the GUI group, so it can sign in with the
+// password it already has.  On the other nodes the account is added to the group when it exists there and created
+// with the same password hash when it does not.
+func (m *Mgmt) UserGrant(name, actor string) (string, bool, error) {
+	if !validUserName(name) || name == "root" {
+		return "", false, errors.New("invalid user name")
+	}
+	if !userExists(name) {
+		return "", false, fmt.Errorf("there is no account called %q on this machine; use Add user to create one", name)
+	}
+	if m.memberOf(name) {
+		return "", false, fmt.Errorf("%q is already in the %s group", name, m.guiGroup())
+	}
+	if err := m.addToGroup(name); err != nil {
+		return "", false, err
+	}
+	infof("users: %s added the existing account %q to the %s group", actor, name, m.guiGroup())
+	hash := shadowHash(name)
+	if !cryptHashRe.MatchString(hash) {
+		hash = ""
+	}
+	done := "User " + name + " added to the group."
+	if hash == "" {
+		done += " It has no password yet: set one with Password."
+	}
+	msg, partial := m.usersFan(usersMsg{Op: "grant", Name: name, Hash: hash, Expires: localExpiry(name), By: actor}, done)
+	return msg, partial, nil
+}
+
+// UserRevoke takes an account out of the GUI group without deleting it.  The signed-in user and the last member
+// cannot be taken out.
+func (m *Mgmt) UserRevoke(name, actor string) (string, bool, error) {
+	if err := m.requireMember(name); err != nil {
+		return "", false, err
+	}
+	if name == actor {
+		return "", false, errors.New("you cannot remove the account you are signed in as")
+	}
+	if m.countMembers() <= 1 {
+		return "", false, errors.New("that is the last account that can sign in; add another one first")
+	}
+	if err := m.removeFromGroup(name); err != nil {
+		return "", false, err
+	}
+	m.endUserSessions(name)
+	infof("users: %s removed %q from the %s group", actor, name, m.guiGroup())
+	msg, partial := m.usersFan(usersMsg{Op: "revoke", Name: name, By: actor}, "User "+name+" removed from the group; the account is kept.")
 	return msg, partial, nil
 }
 

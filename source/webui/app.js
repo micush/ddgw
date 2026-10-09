@@ -1992,7 +1992,6 @@
       try {
         const c = await api("GET", "/api/cluster");
         state.clustered = !!(c.data.enabled && c.data.peers.length > 1);
-        state.replica = state.clustered && c.data.role === "replica";
       } catch (e) { if (e.message === "unauthenticated") throw e; }
       try { state.autoUpdate = !!(await api("GET", "/api/update")).data.intent.auto_all; } catch (e) { if (e.message === "unauthenticated") throw e; state.autoUpdate = null; }
       const r = await api("GET", "/api/config");
@@ -2000,7 +1999,6 @@
       state.cfgInfo = r;
       clear(status);
       if (!r.exists) say("info", "No config file at " + r.path + " yet — the first change creates it.");
-      else if (state.replica) say("info", "This node is a replica: changes to settings marked “shared” are sent to the primary first and replicate back.");
       draw();
     }
 
@@ -3463,7 +3461,7 @@
 
   // ── Users  (CLI: --users, --user-add, --user-passwd, --user-expiry, --user-del) ──
   VIEWS.users = (() => {
-    let status, box, users = [], group = "", editing = false;
+    let status, box, users = [], others = [], group = "", editing = false, otherList = null;
     const dateText = (u) => (u.expires ? new Date(u.expires * 1000).toISOString().slice(0, 10) : "never");
     const toUnix = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? Math.floor(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10), 12) / 1000) : 0);
     const me = () => (state.session && state.session.user) || "";
@@ -3509,17 +3507,21 @@
       box.append(h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, h("th", {}, "User"), h("th", {}, "Expires"), h("th", {}, ""))),
         h("tbody", {}, users.map((u) => {
-          const act = h("td", {});
-          const row = h("tr", {},
-            h("td", {}, u.name, u.name === me() ? h("span", { class: "pill info tiny" }, "you") : null),
+          const act = h("td", {});   // the password / expiry editor opens here
+          const self = u.name === me();
+          const items = [["Password", () => editor(act, u, "password")], ["Expiry", () => editor(act, u, "expiry")]];
+          if (!self) {
+            items.push(["Remove from group", () => {
+              if (confirm("Remove " + u.name + " from the " + group + " group?\n\nThe account is kept; it just cannot sign in here any more.")) call("revoke", { username: u.name });
+            }]);
+            items.push(["Delete", () => {
+              if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
+            }, "danger"]);
+          }
+          const row = h("tr", { tabindex: "0", oncontextmenu: rowMenu(items) },
+            h("td", {}, u.name, self ? h("span", { class: "pill info tiny" }, "you") : null),
             h("td", {}, u.expired ? h("span", { class: "pill bad" }, "expired " + dateText(u)) : dateText(u)),
             act);
-          act.append(
-            h("button", { class: "btn small", type: "button", onclick: () => editor(act, u, "password") }, "Password"), " ",
-            h("button", { class: "btn small", type: "button", onclick: () => editor(act, u, "expiry") }, "Expiry"), " ",
-            h("button", { class: "btn small danger", type: "button", disabled: u.name === me(), onclick: () => {
-              if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
-            } }, "Delete"));
           return row;
         })))));
     }
@@ -3532,7 +3534,14 @@
         const pw = h("input", { type: "password", autocomplete: "new-password" });
         const exp = h("input", { type: "date" });
         const add = () => call("add", { username: name.value.trim(), password: pw.value, expires: toUnix(exp.value) }, () => { name.value = ""; pw.value = ""; exp.value = ""; });
+        const who = h("input", { type: "text", list: "users-others", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
+        otherList = h("datalist", { id: "users-others" });
+        const grant = () => call("grant", { username: who.value.trim() }, () => { who.value = ""; });
+        who.addEventListener("keydown", (e) => { if (e.key === "Enter") grant(); });
         main.append(status,
+          section("Add existing user",
+            h("div", { class: "grid c3" }, h("label", { class: "f" }, "Name", who, otherList)),
+            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: grant }, "Add to group"))),
           section("Add user",
             h("div", { class: "grid c3" },
               h("label", { class: "f" }, "Name", name),
@@ -3545,7 +3554,9 @@
         if (editing && force !== true) return;
         const r = (await api("GET", "/api/users")).data;
         users = r.users || [];
+        others = r.others || [];
         group = r.group;
+        if (otherList) clear(otherList).append(...others.map((n) => h("option", { value: n })));
         draw();
       },
     };

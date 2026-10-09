@@ -350,3 +350,80 @@ func TestUsersExport(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+const fxPasswd2 = fxPasswd + "dave:x:1004:1004::/home/dave:/bin/bash\nsvc:x:998:998::/:/usr/sbin/nologin\nnobody:x:65534:65534::/:/usr/sbin/nologin\n"
+
+func TestUsersListSuggestsOrdinaryAccountsNotInTheGroup(t *testing.T) {
+	m, _ := usersFixture(t, fxGroup, fxPasswd2, "")
+	got := m.UsersList().Others
+	if len(got) != 1 || got[0] != "dave" {
+		t.Fatalf("others = %v, want [dave] (not members, not system accounts, not nobody, not root)", got)
+	}
+}
+
+func TestUserGrantAddsAnExistingAccountToTheGroup(t *testing.T) {
+	m, calls := usersFixture(t, fxGroup, fxPasswd2, "dave:$6$salt$abcdefghijklmnop:1::::::\n")
+	if _, _, err := m.UserGrant("dave", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*calls) != 1 || (*calls)[0].name != "usermod" || strings.Join((*calls)[0].args, " ") != "-aG ddgw dave" {
+		t.Fatalf("calls: %+v", *calls)
+	}
+	for _, c := range []struct{ name, why string }{{"nobody-here", "an account that does not exist"}, {"alice", "an account already in the group"}, {"root", "root"}, {"Bad Name", "an invalid name"}} {
+		if _, _, err := m.UserGrant(c.name, "alice"); err == nil {
+			t.Errorf("%s must be refused", c.why)
+		}
+	}
+	if len(*calls) != 1 {
+		t.Errorf("a refused grant ran a command: %+v", *calls)
+	}
+}
+
+func TestUserRevokeKeepsTheAccount(t *testing.T) {
+	m, calls := usersFixture(t, fxGroup, fxPasswd2, "")
+	if _, _, err := m.UserRevoke("bob", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*calls) != 1 || (*calls)[0].name != "gpasswd" || strings.Join((*calls)[0].args, " ") != "-d bob ddgw" {
+		t.Fatalf("calls: %+v", *calls)
+	}
+	if _, _, err := m.UserRevoke("alice", "alice"); err == nil {
+		t.Error("removing yourself must be refused")
+	}
+	if _, _, err := m.UserRevoke("carol", "alice"); err == nil || !strings.Contains(err.Error(), "primary group") {
+		t.Errorf("a member by primary group must be refused with the reason: %v", err)
+	}
+	if _, _, err := m.UserRevoke("dave", "alice"); err == nil {
+		t.Error("a non-member must be refused")
+	}
+	m2, calls2 := usersFixture(t, "ddgw:x:1001:alice\n", "alice:x:1000:1000::/:/bin/bash\n", "")
+	if _, _, err := m2.UserRevoke("alice", "cli:root"); err == nil || len(*calls2) != 0 {
+		t.Errorf("the last account must stay: %v %+v", err, *calls2)
+	}
+}
+
+func TestPeerGrantAndRevoke(t *testing.T) {
+	m, calls := usersFixture(t, fxGroup, fxPasswd2, "")
+	if err := m.usersPeer(usersMsg{Op: "grant", Name: "dave"}, "x"); err != nil || (*calls)[0].name != "usermod" {
+		t.Fatalf("existing account: %v %+v", err, *calls)
+	}
+	*calls = nil
+	hash := "$6$salt$abcdefghijklmnop"
+	if err := m.usersPeer(usersMsg{Op: "grant", Name: "erin", Hash: hash}, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*calls) < 2 || (*calls)[0].name != "useradd" || (*calls)[1].name != "chpasswd" || !strings.Contains((*calls)[1].stdin, hash) {
+		t.Fatalf("a missing account must be created with the hash: %+v", *calls)
+	}
+	if err := m.usersPeer(usersMsg{Op: "grant", Name: "frank"}, "x"); err == nil {
+		t.Error("a missing account without a hash cannot be made")
+	}
+	*calls = nil
+	if err := m.usersPeer(usersMsg{Op: "revoke", Name: "bob"}, "x"); err != nil || (*calls)[0].name != "gpasswd" {
+		t.Fatalf("revoke: %v %+v", err, *calls)
+	}
+	*calls = nil
+	if err := m.usersPeer(usersMsg{Op: "revoke", Name: "dave"}, "x"); err != nil || len(*calls) != 0 {
+		t.Fatalf("revoking a non-member is a no-op: %v %+v", err, *calls)
+	}
+}

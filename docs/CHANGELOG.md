@@ -1,5 +1,23 @@
 # Changelog
 
+## [v267] - 2026-10-09 — Replica banner removed
+
+### Changed
+- The Configure pages no longer show the "This node is a replica: changes to settings marked shared are sent to the primary first and replicate back" banner. Behaviour is unchanged; the Help text still explains how shared settings replicate.
+
+### Verified
+- `node --check`, `go build`, `go vet`. Not run: the full test suite and a browser (text-only UI change).
+
+## [v266] - 2026-10-09 — Add an existing account to the GUI group
+
+### Added
+- **Configure ▸ Users ▸ Add existing user**: type (or pick from the suggestions: ordinary accounts not yet in the group) the name of an account that is already on the machine and press *Add to group*; it can then sign in with the password it already has. Nothing else about the account is changed. In a cluster the other nodes add it to the group where it exists and create it with the same password hash where it does not. CLI: `ddgw --user-grant NAME`.
+- The Users table has no buttons any more: right-click a row for **Password**, **Expiry**, **Remove from group** and **Delete** (the last two not on your own row). **Remove from group** (CLI `ddgw --user-revoke NAME`): takes the account out of the group and keeps it, on every node. Refused for the signed-in user, for the last account that can sign in, and for an account that is a member only because the group is its primary group (the message says so). *Delete* is unchanged and still removes the account.
+- Tests: the suggestions, the grant and revoke commands and their refusals, and the peer side (existing account, account created from the hash, no hash, revoke of a non-member).
+
+### Verified
+- gofmt, `go vet`, `node --check`, builds, the whole suite with `-race`. Not tried against a real `usermod`/`gpasswd` or looked at in a browser.
+
 ## [v265] - 2026-10-09 — The changelog, examples and tests carry no site names or addresses
 
 ### Changed

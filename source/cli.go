@@ -25,7 +25,7 @@ type cliFlags struct {
 	certFile, keyFile, cn, san                                                                                                                                                                *string
 	clusterJoin, clusterRemove, clusterUnremove                                                                                                                                               *string
 	users                                                                                                                                                                                     *bool
-	userAdd, userPasswd, userExpiry, userDel, expires                                                                                                                                         *string
+	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires                                                                                                                  *string
 	power, powerAt                                                                                                                                                                            *string
 	powerIn                                                                                                                                                                                   *int
 	bgp, bgpDisable, bgpEnable, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                            *bool
@@ -60,7 +60,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		failThreshold: fs.Int("fail-threshold", 0, ""), maxAttempts: fs.Int("max-attempts", 0, ""), latencyAlpha: fs.Float64("latency-alpha", 0, ""),
 		vip: s("vip"), ifname: s("interface"), server: s("server"), name: s("name"), qtype: s("type"),
 		group: fs.Int("group", 0, ""),
-		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), expires: s("expires"),
+		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
 		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
@@ -381,7 +381,7 @@ func (f *cliFlags) run(sock string) bool {
 			fmt.Println("This node is running.")
 		}
 	// ── console users ──
-	case *f.users || *f.userAdd != "" || *f.userPasswd != "" || *f.userExpiry != "" || *f.userDel != "":
+	case *f.users || *f.userAdd != "" || *f.userPasswd != "" || *f.userExpiry != "" || *f.userDel != "" || *f.userGrant != "" || *f.userRevoke != "":
 		runUsers(sock, f)
 	// ── power ──
 	case *f.power != "":

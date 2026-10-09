@@ -521,7 +521,7 @@ Everything the CLI does is also in a browser, over HTTPS on port **53853**
 | `--show-dns` | DNS tab (ranking, health, latency bars, counters) |
 | `--show-config`, `--configure` | Configure pages (form; every edit saves and applies at once) |
 | `--versions`, `--version-show/-diff/-snapshot/-restore/-export`, `--config-import` | History tab |
-| `--users`, `--user-add`, `--user-passwd`, `--user-expiry`, `--user-del` | Configure ▸ Users |
+| `--users`, `--user-add`, `--user-grant`, `--user-revoke`, `--user-passwd`, `--user-expiry`, `--user-del` | Configure ▸ Users |
 | `--tls-status/-install/-csr/-revert/-regenerate` | Configure ▸ Web GUI (certificate) |
 | `--cluster-status/-token/-join/-promote/-remove/-unremove/-leave/-sync` | Cluster tab |
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
@@ -587,11 +587,13 @@ Each account can have an expiry date; the operating system refuses it from that 
     ddgw --user-add alice --expires 2027-06-30     # asks for the password
     ddgw --user-passwd alice
     ddgw --user-expiry alice --expires never
+    ddgw --user-grant bob                          # an account that already exists joins the group
+    ddgw --user-revoke bob                         # leaves the group; the account is kept
     ddgw --user-del alice
 
 Names are 1-32 lower-case letters, digits, `_` or `-`. Passwords go to `chpasswd` on its standard
-input, never on a command line. *Add* never touches an account that already exists (put one in the
-group with `usermod -aG ddgw NAME`), only members of the group can be changed, `root` is never listed
+input, never on a command line. *Add user* never touches an account that already exists; **Add existing user** (`--user-grant`) puts one in
+the group with `usermod -aG` and, on the other nodes, adds it where it exists and creates it with the same password hash where it does not; **Remove from group** (right-click a row; `--user-revoke`) takes any member out with `gpasswd -d` and keeps the account (refused for yourself, for the last account, and for one that is a member only as its primary group). Only members of the group can be changed, `root` is never listed
 or changeable, and neither the signed-in user nor the last account that can sign in can be deleted.
 Any member can manage the others, which is the same power they already have over the daemon. Every
 change is logged with who made it. The installer adds the user who ran it to the group.

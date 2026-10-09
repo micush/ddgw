@@ -289,7 +289,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	// console users
 	case "users.list":
 		return m.UsersList(), nil
-	case "users.add", "users.password", "users.expiry", "users.delete":
+	case "users.add", "users.password", "users.expiry", "users.delete", "users.grant", "users.revoke":
 		var msg string
 		var partial bool
 		var err error
@@ -300,6 +300,10 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 			msg, partial, err = m.UserPassword(a.User, a.Password, actor)
 		case "users.expiry":
 			msg, partial, err = m.UserExpiry(a.User, a.Expires, actor)
+		case "users.grant":
+			msg, partial, err = m.UserGrant(a.User, actor)
+		case "users.revoke":
+			msg, partial, err = m.UserRevoke(a.User, actor)
 		default:
 			msg, partial, err = m.UserDelete(a.User, actor)
 		}

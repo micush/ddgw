@@ -132,9 +132,9 @@ func TestCapFilter(t *testing.T) {
 	frames := map[string][]byte{"dq": dq, "dr": dr, "web": web, "v6": v6, "arp": arpq, "ping": ping}
 	for filter, want := range map[string]string{
 		"":                                     "dq dr web v6 arp ping",
-		"host 10.20.0.205":                    "dq dr arp", // the ARP's target address counts, as in tcpdump
-		"src host 10.20.0.205":                "dr",
-		"dst host 10.20.0.205":                "dq arp",
+		"host 10.20.0.205":                     "dq dr arp", // the ARP's target address counts, as in tcpdump
+		"src host 10.20.0.205":                 "dr",
+		"dst host 10.20.0.205":                 "dq arp",
 		"net 192.0.2.0/24":                     "dq dr web ping",
 		"src net 192.0.2.0/24 and not port 53": "web ping",
 		"port 53":                              "dq dr v6",
@@ -151,7 +151,7 @@ func TestCapFilter(t *testing.T) {
 		"ip host 2001:db8::1":                  "",
 		"arp":                                  "arp",
 		"icmp":                                 "ping",
-		"host 10.20.0.205 and not arp":        "dq dr",
+		"host 10.20.0.205 and not arp":         "dq dr",
 		"(tcp or icmp) and host 192.0.2.9":     "web",
 		"tcp || icmp":                          "web v6 ping",
 		"! udp && ! arp":                       "web v6 ping",

@@ -100,6 +100,21 @@ func runUsers(sock string, f *cliFlags) {
 		}
 		decode(op(sock, "users.expiry", map[string]any{"username": *f.userExpiry, "expires": exp}), &r)
 		report(r.Message, r.Partial)
+	case *f.userGrant != "":
+		var r struct {
+			Message string `json:"message"`
+			Partial bool   `json:"partial"`
+		}
+		decode(op(sock, "users.grant", map[string]any{"username": *f.userGrant}), &r)
+		report(r.Message, r.Partial)
+	case *f.userRevoke != "":
+		askYes("Remove "+*f.userRevoke+" from the group? The account is kept.", *f.yes)
+		var r struct {
+			Message string `json:"message"`
+			Partial bool   `json:"partial"`
+		}
+		decode(op(sock, "users.revoke", map[string]any{"username": *f.userRevoke}), &r)
+		report(r.Message, r.Partial)
 	case *f.userDel != "":
 		askYes("Delete the account "+*f.userDel+"?", *f.yes)
 		var r struct {
