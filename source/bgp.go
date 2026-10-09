@@ -658,20 +658,6 @@ func (m *Mgmt) BGPStatus() (*BGPStatus, error) {
 		}
 	}
 	if st.Config.Active() {
-		var has4, has6 bool
-		for _, n := range st.Config.Neighbors {
-			if ip, _ := netip.ParseAddr(n.Peer); ip.Is6() {
-				has6 = true
-			} else {
-				has4 = true
-			}
-		}
-		if len(v4) > 0 && !has4 {
-			st.Notes = append(st.Notes, "IPv4 anycast addresses are announced to IPv4 neighbors only, and there is none.")
-		}
-		if len(v6) > 0 && !has6 {
-			st.Notes = append(st.Notes, "IPv6 anycast addresses are announced to IPv6 neighbors only, and there is none.")
-		}
 		if st.Installed && !frrCanReload() {
 			st.Notes = append(st.Notes, "FRR cannot reload its config here (the frr-pythontools package is missing), so every BGP change restarts FRR and drops the sessions briefly. Install frr-pythontools.")
 		}

@@ -1,5 +1,13 @@
 # Changelog
 
+## [v250] - 2026-10-08 — Anycast page: the "announced to … neighbors only, and there is none" banner is gone
+
+### Removed
+- The yellow banner on Monitor ▸ Anycast (and `ddgw --show-bgp`'s note) "IPv6 anycast addresses are announced to IPv6 neighbors only, and there is none." and its IPv4 twin. An address of one family with no neighbor of that family simply is not announced; the table of anycast addresses and the neighbors list already show that. The other notes (FRR cannot reload, nothing is announced yet) stay.
+
+### Verified
+- `gofmt -l .`, `go vet ./...`, `go test -race -count=1 ./...`, cgo-off vet and test, five cross-compiles (built to /dev/null; archive checked for binaries).
+
 ## [v249] - 2026-10-08 — A node that joins the cluster is not added to the gateways
 
 ### Changed
