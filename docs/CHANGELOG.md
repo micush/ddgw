@@ -1,5 +1,38 @@
 # Changelog
 
+## [v290] - 2026-10-09 — Statistics: create a policy row from a domain
+
+### Added
+- Right-click a name in **Top domains** ▸ **Create PBR NODATA**, **Create PBR NXDOMAIN** or **Create PBR REFUSED**: a row (any client, that exact name, that keyword) is put at the top of the shared Policy-Based Resolution table and saved (it shows in the config history and goes to the cluster like any other save). If a row for that name already exists, nothing is added and the message names it; if Policy-Based Resolution is switched off, the message says so.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. In a browser: right-click a domain, Create PBR NODATA; the row was written to the config file and recorded in the history.
+
+### Not verified
+The NXDOMAIN and REFUSED items (same code path with a different keyword); gateways that carry their own `dns` block (the row goes in the top-level one).
+
+## [v289] - 2026-10-09 — Statistics: click QPS to graph it
+
+### Added
+- The **QPS** tile is a button: it draws queries per second in the chart (one line, y axis in queries per second, tooltip with the rate). With a kind picked (NX Domain, say) it is that kind's rate. Clicking it again or any other tile returns to counts.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. In a browser with about 25 queries per second of test traffic: the tile read 24.3 (peak 25.8) and the graph showed the same ramp.
+
+### Not verified
+The QPS graph combined with a client or domain drill-down; ranges longer than an hour.
+
+## [v288] - 2026-10-09 — Statistics: QPS tile
+
+### Added
+- A **QPS** tile on the Statistics page: queries per second in the last finished interval (the newest one is still filling), with the highest interval of the range underneath and the average in the tooltip. The tiles are slightly narrower so nine fit in a row.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. The tile and the one-row layout in a browser (with no traffic: 0.0).
+
+### Not verified
+The tile's numbers with traffic (the demo had none during the check); it divides each interval's count by the interval length.
+
 ## [v287] - 2026-10-09 — Users: Save button; install example trimmed
 
 ### Changed

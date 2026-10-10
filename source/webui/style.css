@@ -392,7 +392,7 @@ td input[type=date] { width: 11rem; }
   }
 }
 .q-total { --c: var(--q-total); } .q-ok { --c: var(--q-ok); } .q-nx { --c: var(--q-nx); } .q-ref { --c: var(--q-ref); }
-.q-oth { --c: var(--q-oth); } .q-fail { --c: var(--q-fail); } .q-clients, .q-cache { --c: var(--muted); } .q-upd { --c: var(--q-upd); }
+.q-oth { --c: var(--q-oth); } .q-fail { --c: var(--q-fail); } .q-clients, .q-cache { --c: var(--muted); } .q-qps { --c: var(--q-total); } .q-upd { --c: var(--q-upd); }
 .t1 { --c: var(--t1); } .t2 { --c: var(--t2); } .t3 { --c: var(--t3); } .t4 { --c: var(--t4); } .t5 { --c: var(--t5); }
 .t6 { --c: var(--t6); } .t7 { --c: var(--t7); } .t8 { --c: var(--t8); } .t-other { --c: var(--t-other); }
 .qbar { gap: .5rem; padding-right: 3.2rem; }
@@ -405,7 +405,7 @@ td input[type=date] { width: 11rem; }
 .qupd { margin-top: 1rem; }
 .warnline { color: var(--warn); }
 .qupd td.wrap { white-space: normal; max-width: 16rem; }
-.qtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
+.qtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
 .qtile { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 6px; padding: .55rem .8rem; box-shadow: var(--shadow); }
 .qtile.pick { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
 .qtile.pick:hover { border-color: var(--c); }

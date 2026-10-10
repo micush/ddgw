@@ -754,7 +754,7 @@ The Monitor section of the GUI has pages for statistics, the host, packet captur
 
 Monitor ▸ Statistics (or `ddgw --stats`) shows what the DNS proxy has answered:
 
-- the total number of queries and how they ended (No Error, Server Failure, NX Domain, Refused, and dynamic DNS Updates),
+- the total number of queries and how they ended (No Error, Server Failure, NX Domain, Refused, and dynamic DNS Updates), and the **QPS** (queries per second in the last finished interval, with the peak of the range under it; click it to draw the rate in the chart),
 - the number of different clients,
 - a line chart over time (hover for the values, click a name in the legend to hide a line),
 - donuts for record type and transport (UDP and TCP), and
@@ -765,6 +765,8 @@ Monitor ▸ Statistics (or `ddgw --stats`) shows what the DNS proxy has answered
 The range is Last Hour, Last Day, Last Week, Last Month, or a custom start and end. The proxy does not block or serve zones itself, so there are no Blocked or Authoritative figures; cache hits have their own tile.
 
 **Drilling down.** Click a tile (No Error, Server Failure, NX Domain, Refused) to limit the chart, the donuts and the top lists to that kind of answer, for example to see which domains get NXDOMAIN and who asks for them. Total Queries clears it. Click a client to list the domains it asked for, or a domain to list the clients that asked for it; this combines with the tiles.
+
+**Answering a name yourself.** Right-click a name in Top domains ▸ **Create PBR NODATA**, **Create PBR NXDOMAIN** or **Create PBR REFUSED** adds a row (any client, that exact name) at the top of the Policy-Based Resolution table and saves it, so the proxy answers that name itself from then on and no longer asks the servers. The statistics still count the answer under its kind (NX Domain, and so on). An existing row for the name is left alone.
 
 **Names and whois.** Client names come from a PTR lookup that asks the DNS servers Anyname forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file. A client with no name is asked again after 2 minutes, and a name is kept for 10.
 

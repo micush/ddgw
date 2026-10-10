@@ -2746,7 +2746,7 @@
     const pct = (n, t) => (t <= 0 ? "–" : n === 0 ? "0%" : (100 * n / t).toFixed(n / t < 0.001 ? 2 : 1) + "%");
 
     let status, bar, cnote, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;
-    let range = "1h", sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false;
+    let range = "1h", qpsView = false, sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false;
 
     // ── fetching ──
     // the picked node (Node menu in the top bar) answers; pick another member there
@@ -2781,12 +2781,18 @@
       const t = d.sums.total;
       // a tile with a kind is a button: it limits the lists and the chart to that answer; Total Queries clears it
       const tile = (cls, label, value, sub, key, tip) => h(key === undefined ? "div" : "button", key === undefined ? { class: "qtile " + cls, title: tip || null } :
-        { type: "button", class: "qtile pick " + cls, "aria-pressed": (KINDS[key] || "") === sel ? "true" : "false", title: key ? "Show only " + label + " in the chart and lists" : "Show everything",
-          onclick: () => pick(KINDS[key] || "") },
+        { type: "button", class: "qtile pick " + cls, "aria-pressed": (key === "qps" ? qpsView : (KINDS[key] || "") === sel && !qpsView) ? "true" : "false",
+          title: key === "qps" ? (tip || "") : key ? "Show only " + label + " in the chart and lists" : "Show everything",
+          onclick: () => (key === "qps" ? toggleQps() : pick(KINDS[key] || "")) },
         (() => { const huge = typeof value !== "string" && value >= 1e12, text = typeof value === "string" ? value : huge ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value), qv = h("div", { class: "qv", title: huge ? n0(value) : null }, text); qv.style.setProperty("--len", String(Math.max(1, text.length - (text.match(/[,.\s]/g) || []).length / 2))); return qv; })(), // CSSOM, allowed by the CSP
         h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
       clear(tiles).append(
         tile("q-total", "Total Queries", t, t ? "100%" : "", ""),
+        // queries per second: now = the last finished bucket (the newest one is still filling), with the average and the peak over the range
+        (() => { const b = d.total || [], st = d.step || 60, f = (v) => (v >= 100 ? n0(Math.round(v)) : v.toFixed(1)),
+            rate = b.map((v) => v / st), cur = rate.length > 1 ? rate[rate.length - 2] : rate.length ? rate[0] : 0,
+            avg = rate.length ? rate.reduce((a, v) => a + v, 0) / rate.length : 0, peak = rate.length ? Math.max(...rate) : 0;
+          return tile("q-qps", "QPS", f(cur), rate.length ? "peak " + f(peak) : "", "qps", "Click to draw queries per second in the chart. Queries per second in the last finished interval. Over the chosen range: average " + f(avg) + ", peak " + f(peak)); })(),
         tile("q-ok", "No Error", d.sums.no_error, pct(d.sums.no_error, t), "no_error"),
         tile("q-fail", "Server Failure", d.sums.server_failure, pct(d.sums.server_failure, t), "server_failure"),
         tile("q-nx", "NX Domain", d.sums.nx_domain, pct(d.sums.nx_domain, t), "nx_domain"),
@@ -2802,19 +2808,22 @@
     function drawChart(d) {
       clear(chartBox);
       const only = Object.keys(KINDS).find((k) => KINDS[k] === sel); // the one line a tile picked
-      const avail = SERIES.filter((s) => only ? s.key === only : (s.key !== "other" || d.sums.other > 0) && (s.key !== "updates" || d.sums.updates > 0));
+      if (qpsView) d = Object.assign({}, d, { qps: (d[only || "total"] || d.total).map((v) => v / (d.step || 60)) });   // the rate of what is picked (all queries when nothing is)
+      const fq = (v) => (v >= 10 ? n0(Math.round(v)) : Number(v).toFixed(1));
+      const qs = SERIES.find((s) => s.key === (only || "total"));
+      const avail = qpsView ? [{ key: "qps", label: "QPS" + (only ? " — " + qs.label : ""), cls: qs.cls }] : SERIES.filter((s) => only ? s.key === only : (s.key !== "other" || d.sums.other > 0) && (s.key !== "updates" || d.sums.updates > 0));
       const shown = avail.filter((s) => only || !hidden.has(s.key));
       const legend = h("div", { class: "qlegend", role: "group", "aria-label": "Series" }, avail.map((s) =>
-        h("button", { type: "button", class: "qchip " + s.cls, "aria-pressed": hidden.has(s.key) && !only ? "false" : "true", disabled: only ? "" : null,
+        h("button", { type: "button", class: "qchip " + s.cls, "aria-pressed": hidden.has(s.key) && !only ? "false" : "true", disabled: only || qpsView ? "" : null,
           onclick: () => { if (hidden.has(s.key)) hidden.delete(s.key); else hidden.add(s.key); drawChart(d); } },
           h("span", { class: "sw" }), s.label)));
       const n = d.total.length;
-      const max = niceMax(Math.max(1, ...shown.flatMap((s) => d[s.key])));
-      const yLabels = [0, 1, 2, 3, 4].map((g) => n0(Math.round((max * g) / 4)));
+      const top = Math.max(qpsView ? 0.1 : 1, ...shown.flatMap((s) => d[s.key])), max = qpsView ? 4 * niceMax(top / 4) : niceMax(top);   // a rate gets four round steps
+      const yLabels = [0, 1, 2, 3, 4].map((g) => (qpsView ? fq((max * g) / 4) : n0(Math.round((max * g) / 4))));
       const W = 1000, H = 300, L = axisMargin(yLabels, 52), R = 14, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
       const x = (i) => L + (n <= 1 ? pw / 2 : (pw * i) / (n - 1));
       const y = (v) => T + ph - (ph * v) / max;
-      const svg = sv("svg", { class: "qchart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Queries over time" });
+      const svg = sv("svg", { class: "qchart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": qpsView ? "Queries per second over time" : "Queries over time" });
       for (let g = 0; g <= 4; g++) {
         const v = (max * g) / 4;
         svg.append(sv("line", { class: "qgrid", x1: L, x2: W - R, y1: y(v), y2: y(v) }), sv("text", { class: "qax", x: L - 6, y: y(v) + 4, "text-anchor": "end" }, yLabels[g]));
@@ -2844,7 +2853,7 @@
           cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.classList.remove("hidden");
           shown.forEach((s, k) => { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(d[s.key][i])); });
           tipHead.textContent = when((d.start + i * d.step) * 1000);
-          shown.forEach((s, k) => { tipRows[k].lastChild.textContent = s.label + ": " + n0(d[s.key][i]); });
+          shown.forEach((s, k) => { tipRows[k].lastChild.textContent = s.label + ": " + (qpsView ? fq(d[s.key][i]) : n0(d[s.key][i])); });
           const tx = x(i) > W / 2 ? x(i) - 220 : x(i) + 12;
           tip.setAttribute("transform", `translate(${tx} ${T + 6})`); tip.classList.remove("hidden");
         },
@@ -2918,6 +2927,21 @@
     // A row is a button: picking a client lists what it asked for in Top domains, picking a
     // domain lists who asked for it in Top clients.  o.picked is this list's picked row,
     // o.note says the list is filtered, o.onClear drops that filter.
+    // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
+    async function addPolicyRow(name, keyword) {
+      try {
+        const cfg = (await api("GET", "/api/config")).config;
+        cfg.dns = cfg.dns || {};
+        const list = cfg.dns.policy || [];
+        const same = list.findIndex((r) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase());
+        if (same >= 0) { say(status, "warn", "There already is a policy row for " + name + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
+        list.unshift({ client: "*", name, servers: [keyword] });
+        cfg.dns.policy = list;
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + keyword + " for " + name });
+        say(status, cfg.dns.policy_on === false ? "warn" : "info", "Added policy row 1: " + name + " → " + keyword + "." + (cfg.dns.policy_on === false ? " Policy-Based Resolution is switched off, so it does nothing until you switch it on (Configure ▸ DNS proxy ▸ Resolution)." : ""));
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not added: " + e.message); }
+    }
+
     function topTable(title, items, total, more, onMore, withHost, o) {
       const rows = (more ? items : items.slice(0, 10));
       const mine = withHost ? "Client" : "Domain";
@@ -2926,7 +2950,12 @@
         h("div", { class: "hint qnote" }, o.note ? [o.note, " ", h("button", { class: "qlink", type: "button", onclick: o.onClear }, "Show all")] : "\u00a0"),
         h("div", { class: "body flush" }, rows.length
           ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
-            h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null },
+            h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
+              // right-click a domain: add a Policy-Based Resolution row for it
+              oncontextmenu: !withHost && e.name !== "(others)" ? rowMenu([
+                ["Create PBR NODATA", () => addPolicyRow(e.name, "nodata")],
+                ["Create PBR NXDOMAIN", () => addPolicyRow(e.name, "nxdomain")],
+                ["Create PBR REFUSED", () => addPolicyRow(e.name, "refused")]]) : null },
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
@@ -2948,10 +2977,13 @@
     function pickC(c) { if (c === pickClient) return; pickClient = c; pickDomain = ""; load(); }
     function pickD(n) { if (n === pickDomain) return; pickDomain = n; pickClient = ""; load(); }
     function pick(kind) {
-      if (kind === sel) return;
+      const was = qpsView;
+      qpsView = false;   // any other tile goes back to counting queries
+      if (kind === sel) { if (was && last) draw(last); return; }
       sel = kind;
       load();
     }
+    function toggleQps() { qpsView = !qpsView; if (last) draw(last); }
 
     function draw(d) {
       last = d;
