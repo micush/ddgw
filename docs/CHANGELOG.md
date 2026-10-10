@@ -1,5 +1,17 @@
 # Changelog
 
+## [v293] - 2026-10-09 — Statistics: the tooltip bug, for real
+
+### Fixed
+- A name in Top clients / Top domains could show the tooltip of another name. The real cause: the lists are redrawn in place and a row's button is reused for another name, but its hover handler had been added with `addEventListener`, so it stayed on the button and looked up the name the button had before. The handlers are now set the way every other handler on these pages is, so the redraw replaces them. (v292's check on the late whois answer is kept.)
+- The tooltip no longer goes back to "Hover for whois" at each refresh when the answer is already known.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. In a browser, with live traffic re-sorting the lists: 85 hovers over five refreshes, every tooltip was either its own name's data or the "Hover for whois" prompt; none showed another name. Every other list that is redrawn in place (Statistics, Host, Gateways, Cluster, Users, Anycast) was searched for the same pattern; this was the only one.
+
+### Not verified
+Real whois answers (the demo has no outbound port 43).
+
 ## [v292] - 2026-10-09 — Statistics: tooltip showed another domain's data
 
 ### Fixed

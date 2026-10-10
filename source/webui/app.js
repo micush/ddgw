@@ -2907,6 +2907,11 @@
       return addrs + [w.domain, w.registrar && "Registrar: " + w.registrar, w.registrant && "Registrant: " + w.registrant, w.registered && "Registered: " + w.registered,
         w.updated && "Updated: " + w.updated, w.expires && "Expires: " + w.expires, (w.name_servers || []).length && "Name servers: " + w.name_servers.join(", "), "From: " + w.server].filter(Boolean).join("\n");
     };
+    // what a redraw gives the button before the next hover: the answer already looked up, if there is one, so a refresh does not wipe it
+    function cachedWhois(name, head, tail) {
+      const hit = whoisSeen.get((state.target || "") + "|" + name);
+      return hit && hit.text && Date.now() - hit.at < (hit.ok ? 600000 : 60000) ? (head ? head + "\n\n" : "") + hit.text + tail : "";
+    }
     function whoisFor(btn, name, tail, head) {
       head = head ? head + "\n\n" : "";
       const key = (state.target || "") + "|" + name;
@@ -2959,11 +2964,13 @@
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
-                  const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
-                    title: withHost ? ((e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") + "\n" + e.name + tail) : "Hover for whois" + tail,
-                    onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
                   const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") : "";
-                  { const go = () => whoisFor(b, e.name, tail, head); b.addEventListener("mouseenter", go); b.addEventListener("focus", go); }
+                  // the handlers are properties of the new element, so that morphing the list into the old one gives the reused button
+                  // this row's name (a listener added with addEventListener would stay on it and look up the name it had before)
+                  const go = (ev) => whoisFor(ev.currentTarget, e.name, tail, head);
+                  const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
+                    title: cachedWhois(e.name, head, tail) || (withHost ? (head + "\n" + e.name + tail) : "Hover for whois" + tail),
+                    onclick: () => o.onPick(e.name === o.picked ? "" : e.name), onmouseenter: go, onfocus: go }, e.name);
                   return b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
