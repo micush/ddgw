@@ -541,3 +541,11 @@ table.policy .rownum { display: inline-block; vertical-align: middle; font-size:
 .urow.actions { border-top: 1px solid var(--border); padding-top: 1rem; align-items: center; }
 .urow.actions .grow { flex: 1 1 auto; }
 .usaved { color: var(--ok); font-size: .85rem; align-self: center; min-width: 3rem; }
+
+/* Statistics top lists: a long name is cut with an ellipsis (the full name is the button's tooltip) so Queries and Share always stay in view */
+table.qtop { table-layout: fixed; }
+table.qtop th.num:nth-child(2) { width: 6.5rem; }
+table.qtop th.num:nth-child(3) { width: 5rem; }
+table.qtop td:first-child { overflow: hidden; }
+table.qtop .qlink { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
+table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

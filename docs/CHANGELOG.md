@@ -1,5 +1,16 @@
 # Changelog
 
+## [v291] - 2026-10-09 — Statistics: long names are cut with an ellipsis
+
+### Changed
+- Top clients and Top domains: a long name is cut with an ellipsis, so Queries and Share are always in view without scrolling sideways. Hovering the name still shows the full name (and the whois or reverse-DNS data).
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. The page at 900 and 520 px wide; a long name in a plain test page with the real stylesheet is cut with an ellipsis.
+
+### Not verified
+A long name on the live page (none of the demo's names was long enough to reach the top lists).
+
 ## [v290] - 2026-10-09 — Statistics: create a policy row from a domain
 
 ### Added

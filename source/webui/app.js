@@ -2949,7 +2949,7 @@
         items.length > 10 ? h("button", { class: "btn", type: "button", onclick: onMore }, more ? "Fewer" : "More") : null),
         h("div", { class: "hint qnote" }, o.note ? [o.note, " ", h("button", { class: "qlink", type: "button", onclick: o.onClear }, "Show all")] : "\u00a0"),
         h("div", { class: "body flush" }, rows.length
-          ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
+          ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
             h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
               // right-click a domain: add a Policy-Based Resolution row for it
               oncontextmenu: !withHost && e.name !== "(others)" ? rowMenu([
