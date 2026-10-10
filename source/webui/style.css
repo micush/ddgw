@@ -555,3 +555,6 @@ table.qtop .qlink { display: block; max-width: 100%; overflow: hidden; text-over
 table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .bad-text { color: var(--bad); }
+.toolbar input[type=file] { margin-top: 0; }
+label.check { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 0 1.5rem; color: var(--text); }
+label.check input { margin: 0; }

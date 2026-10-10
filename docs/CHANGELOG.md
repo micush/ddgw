@@ -1,5 +1,21 @@
 # Changelog
 
+## [v316] - 2026-10-10 — Upload a release: more space before Fetch from online
+
+### Changed
+- The Fetch from online box on Updates ▸ Upload a release has more space to its left (1.5 rem), so it is clear of the file picker.
+
+### Verified
+vet. Not verified: the page in a browser.
+
+## [v315] - 2026-10-10 — Upload a release: Fetch from online lines up with the file box
+
+### Changed
+- The Fetch from online box on Updates ▸ Upload a release sits on the same line as the file box, next to it and vertically centred with it (the file box had a top margin that pushed it lower).
+
+### Verified
+gofmt, vet, `node --check`. Not verified: the page in a browser (the cause was read from the style sheet, not seen).
+
 ## [v314] - 2026-10-10 — Upload a release: the box is called Fetch from online
 
 ### Changed
