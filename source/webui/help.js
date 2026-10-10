@@ -580,7 +580,7 @@ const DDGW_HELP = {
       ["ul", [
         "The accounts are listed on the left (with a filter box); pick one to work on it on the right. **+ New** opens the form for a new account.",
         "**Add user** creates an account with no shell and no home directory, in the GUI group, so it can sign in here and do nothing else on the machine.",
-        "**New password** and **Expires** save by themselves: the password when you leave the field or press Enter, the date as soon as you pick it. Clear the date to let the account never expire; from the date on the operating system refuses the account.",
+        "Pick an account, then type a **New password** and/or change **Expires**, and press **Save** (Enter in the password field does the same). A blank date means the account never expires; from the date on the operating system refuses the account.",
         "**Add an existing account…** puts an account that is already on the machine into the GUI group so it can sign in here with the password it already has (nothing about the account is changed). The Name box suggests the ordinary accounts that are not in the group yet; type any other account name to add that one. On the other nodes the account is added to the group where it exists and created with the same password where it does not.",
         "**Disable** takes the account out of the GUI group and keeps the account (it just cannot sign in here any more). It works for any listed account except yourself and the last one; an account that is in the group only because it is its primary group is refused, with the reason.",
         "**Delete** removes the account. You cannot delete yourself or the last account that can sign in.",

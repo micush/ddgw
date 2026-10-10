@@ -54,8 +54,6 @@ To install the latest tagged release straight from GitHub (this also upgrades an
 
 ```
 curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
-curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --add-user alice
-curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --version v215
 ```
 
 `get.sh` finds the newest GitHub release (or, if there is none, the highest `v<number>` tag), downloads that tag's source archive and runs its `install.sh`. Everything after `--` goes to `install.sh`, except `--version TAG`, which installs that tag instead. It needs `curl` or `wget`, and `tar`. To publish a version, push a tag named `v<VERSION>` (for example `v223`).
@@ -626,7 +624,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 
 Configure ▸ Users (or `ddgw --users`) manages the accounts that may sign in to the GUI: the members of the GUI group (`ddgw`, or `web.group`). They are ordinary operating-system accounts on the node, managed with `useradd`, `usermod`, `userdel` and `chpasswd`, so PAM stays the single place passwords are checked. A new account has no shell and no home directory and exists only to sign in. Each account can have an expiry date, and the operating system refuses it from that day.
 
-The accounts are listed on the left. Pick one to change it on the right: the password and the expiry date save as soon as you leave the field (clear the date and the account never expires), **Disable** takes the account out of the group while keeping it, and **Delete** removes it. **+ New** and **Add an existing account…** open their forms in the same place.
+The accounts are listed on the left. Pick one to change it on the right: type a new password and/or change the expiry date and press **Save** (leave the date blank and the account never expires). **Disable** takes the account out of the group while keeping it, and **Delete** removes it. **+ New** and **Add an existing account…** open their forms in the same place.
 
 ![Configure ▸ Users: the accounts on the left, the chosen account on the right](snaps/users.png)
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## [v287] - 2026-10-09 — Users: Save button; install example trimmed
+
+### Changed
+- Users page: the password and expiry no longer save by themselves. A **Save** button at the right of the form sends what changed (a typed password, a different date; blank date = never expires); **Disable** and **Delete** are at the left.
+- README: the `get.sh` example lines with `--add-user` and `--version` are removed.
+
+### Fixed
+- Users page: after **Add user** or **Add an existing account…** the form stayed on screen instead of showing the new account.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. In a browser: Add user then Save with a new date and password.
+
+### Not verified
+Disable and Delete from the new position; Add an existing account.
+
+## [v286] - 2026-10-09 — Policy table: normal row height
+
+### Fixed
+- Policy rows were about twice as tall as they need to be because the row number and the drag handle were stacked in the first cell. They now sit side by side, so a row is one input high. The README's policy screenshot is retaken.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. Row height checked in a browser.
+
+### Not verified
+Dragging a row by the handle after the change (only the handle's layout changed).
+
 ## [v285] - 2026-10-09 — Users page: list and detail
 
 ### Changed

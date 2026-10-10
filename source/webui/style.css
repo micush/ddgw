@@ -502,8 +502,8 @@ table.policy tr.incomplete td:nth-child(4) { box-shadow: inset 0 0 0 2px var(--a
 .dtab:hover { color: var(--text); }
 .dtab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 .dtab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
-table.policy td.grip { text-align: center; width: 3.6rem; background: var(--surface-2); }
-table.policy .grip-h { display: block; cursor: grab; color: var(--muted); letter-spacing: -.15em; padding: .4rem 0; user-select: none; }
+table.policy td.grip { text-align: center; width: 3.6rem; background: var(--surface-2); white-space: nowrap; }
+table.policy .grip-h { display: inline-block; vertical-align: middle; cursor: grab; color: var(--muted); letter-spacing: -.15em; padding: .4rem .15rem; user-select: none; }
 table.policy .grip-h:active { cursor: grabbing; }
 table.policy tr.dragging { opacity: .45; }
 table.policy tr.drop-above td { box-shadow: inset 0 3px 0 var(--accent); }
@@ -517,7 +517,7 @@ table.policy tr.drop-below td { box-shadow: inset 0 -3px 0 var(--accent); }
 .policy-pager { display: inline-flex; align-items: center; gap: .35rem; }
 .policy-pager[hidden], .policy-empty[hidden] { display: none; }
 .policy-box .policy-wrap { margin-top: .4rem; }
-table.policy .rownum { display: block; font-size: .7rem; color: var(--muted); text-align: center; padding-top: .3rem; }
+table.policy .rownum { display: inline-block; vertical-align: middle; font-size: .7rem; color: var(--muted); min-width: 1.2rem; text-align: right; }
 
 /* Users: list on the left, the chosen account on the right */
 .usersplit { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
@@ -538,5 +538,6 @@ table.policy .rownum { display: block; font-size: .7rem; color: var(--muted); te
 .ubody { display: flex; flex-direction: column; gap: 1.2rem; }
 .urow { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
 .urow .grow { flex: 1 1 12rem; }
-.urow.end { justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 1rem; }
+.urow.actions { border-top: 1px solid var(--border); padding-top: 1rem; align-items: center; }
+.urow.actions .grow { flex: 1 1 auto; }
 .usaved { color: var(--ok); font-size: .85rem; align-self: center; min-width: 3rem; }

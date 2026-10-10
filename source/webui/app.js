@@ -3711,7 +3711,9 @@
       } finally { morph(real, listBox); listBox = real; }
     }
 
+    let shown = "";   // what the detail panel is showing: the mode and the account
     function drawDetail() {
+      shown = mode + "/" + (mode === "user" ? sel : "");
       clear(detail);
       if (mode === "new") {
         const name = h("input", { type: "text", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
@@ -3740,25 +3742,37 @@
       if (!u) { detail.append(h("div", { class: "empty" }, users.length ? "Choose a user on the left." : "Add a user to get started.")); return; }
       const self = u.name === me();
       const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "New password for " + u.name });
-      const pwNote = h("span", { class: "usaved", "aria-live": "polite" }), dNote = h("span", { class: "usaved", "aria-live": "polite" });
-      const saved = (el) => { el.textContent = "Saved"; setTimeout(() => { if (el.textContent === "Saved") el.textContent = ""; }, 2500); };
-      // both fields save by themselves: the password when the field is left or Enter is pressed, the date as soon as one is chosen
-      const setPw = () => { if (!pw.value) return; call("password", { username: u.name, password: pw.value }, () => { pw.value = ""; saved(pwNote); }); };
-      pw.addEventListener("change", setPw);
       const d = h("input", { type: "date", value: u.expires ? dateText(u) : "", "aria-label": "Expiry date for " + u.name });
-      d.addEventListener("change", () => call("expiry", { username: u.name, expires: d.value ? toUnix(d.value) : 0 }, () => saved(dNote)));   // blank = never expires
+      const note = h("span", { class: "usaved", "aria-live": "polite" });
+      // Save sends what changed: a new password if one was typed, the date if it differs (blank = never expires)
+      const save = async () => {
+        const was = u.expires ? dateText(u) : "";
+        if (!pw.value && d.value === was) { note.textContent = "Nothing to save"; return; }
+        note.textContent = "";
+        if (pw.value) {
+          let ok = true;
+          await call("password", { username: u.name, password: pw.value }, () => { pw.value = ""; });
+          if (pw.value) ok = false;   // still there: the call failed and the message is shown above
+          if (!ok) return;
+        }
+        if (d.value !== was) await call("expiry", { username: u.name, expires: d.value ? toUnix(d.value) : 0 });
+        drawDetail();
+        const n = detail.querySelector(".usaved"); if (n) n.textContent = "Saved";
+      };
+      pw.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
       const body = h("div", { class: "body ubody" },
-        h("div", { class: "urow" }, h("label", { class: "f grow" }, "New password", pw), pwNote),
-        h("div", { class: "urow" }, h("label", { class: "f grow" }, "Expires (blank = never)", d), dNote));
+        h("div", { class: "urow" }, h("label", { class: "f grow" }, "New password", pw)),
+        h("div", { class: "urow" }, h("label", { class: "f grow" }, "Expires (blank = never)", d)));
+      const left = [];
       if (!self) {
-        body.append(h("div", { class: "urow end" },
-          h("button", { class: "btn", type: "button", onclick: () => {
-            if (confirm("Disable " + u.name + "?\n\nThe account is kept; it just cannot sign in here any more.")) call("revoke", { username: u.name });
-          } }, "Disable"),
-          h("button", { class: "btn danger", type: "button", onclick: () => {
-            if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
-          } }, "Delete")));
+        left.push(h("button", { class: "btn", type: "button", onclick: () => {
+          if (confirm("Disable " + u.name + "?\n\nThe account is kept; it just cannot sign in here any more.")) call("revoke", { username: u.name });
+        } }, "Disable"),
+        h("button", { class: "btn danger", type: "button", onclick: () => {
+          if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
+        } }, "Delete"));
       }
+      body.append(h("div", { class: "urow actions" }, ...left, h("span", { class: "grow" }), note, h("button", { class: "btn primary", type: "button", onclick: save }, "Save")));
       detail.append(h("header", {}, h("h2", {}, u.name)), body);
     }
 
@@ -3784,12 +3798,10 @@
         others = r.others || [];
         group = r.group;
         if (otherList) clear(otherList).append(...others.map((n) => h("option", { value: n })));
-        const first = !current() && mode === "user";
-        if (first) sel = users.length ? users[0].name : null;
+        if (mode === "user" && !current()) sel = users.length ? users[0].name : null;
         drawList();
-        // the detail panel is left alone on a poll so what is being typed survives; it is redrawn when it first has something to show
-        if (first || !detail.firstChild) drawDetail();
-        else if (mode === "user" && !current()) drawDetail();
+        // the panel is left alone on a poll so what is being typed survives, and redrawn when what it should show has changed
+        if (!detail.firstChild || shown !== mode + "/" + (mode === "user" ? sel : "")) drawDetail();
       },
     };
   })();
