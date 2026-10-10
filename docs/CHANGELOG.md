@@ -1,5 +1,16 @@
 # Changelog
 
+## [v302] - 2026-10-10 — Domains: same menu and 🚫 as clients
+
+### Changed
+- The Top domains right-click menu is like the clients': **Block** (a NODATA row for that name, any client) or, on a name that already has a keyword row of its own, **Unblock** (removes it). The three "Create PBR NODATA / NXDOMAIN / REFUSED" items are gone.
+
+### Added
+- In Top domains a name that has a row of its own in the Policy-Based Resolution table (any client, answered NODATA, NXDOMAIN, REFUSED or null) has the same 🚫 as a blocked client; its tooltip says which answer it gets. The icon goes when the row does. Wildcard rows (`*.example.com`) and rows that send the name to servers are not marked.
+
+### Verified
+cgo build, `node --check`. In a browser: Create PBR NODATA on a domain shows the icon with its tooltip (a row that was already there shows it too). Block then Unblock from the new menu checked (icon appears, then goes). Deleting a row by hand was not tried. The Go tests were not re-run (only the web UI and docs changed).
+
 ## [v300] - 2026-10-10 — A blocked client shows a 🚫
 
 ### Added

@@ -3002,6 +3002,16 @@
 
     // the row Block writes: this client, any name, answered NODATA
     let blocked = new Set();   // clients with a Block row, for the icon after their name
+    let blockedNames = new Map();   // domains answered by a keyword (any client): lower-case name -> keyword
+    const KEYWORD_ROWS = ["null", "nxdomain", "nodata", "refused"];
+    const blockedNamesOf = (cfg) => {
+      const m = new Map();
+      for (const r of ((cfg.dns || {}).policy || [])) {
+        const s = r.servers || [], k = s.length === 1 ? String(s[0]).toLowerCase() : "";
+        if ((r.client || "*") === "*" && r.name && r.name !== "*" && KEYWORD_ROWS.includes(k) && !m.has(String(r.name).toLowerCase())) m.set(String(r.name).toLowerCase(), k);
+      }
+      return m;
+    };
     const blockedOf = (cfg) => new Set(((cfg.dns || {}).policy || []).filter((r) => isBlockRow(r, r.client || "*") && (r.client || "*") !== "*").map((r) => r.client));
     const isBlockRow = (r, client) => (r.client || "*") === client && String(r.name || "*") === "*" && (r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "nodata";
     async function unblockClient(client) {
@@ -3015,6 +3025,26 @@
         await load();
         say(status, "info", "Unblocked " + client + ": its policy row was removed.");
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not unblocked: " + e.message); }
+    }
+    // a domain: the rows that answer exactly this name with a keyword for every client
+    const isNameRow = (r, name) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase() && (r.servers || []).length === 1 && KEYWORD_ROWS.includes(String(r.servers[0]).toLowerCase());
+    async function unblockName(name) {
+      try {
+        const cfg = (await api("GET", "/api/config")).config;
+        const list = (cfg.dns && cfg.dns.policy) || [];
+        const keep = list.filter((r) => !isNameRow(r, name));
+        if (keep.length === list.length) { say(status, "warn", name + " has no such policy row any more."); return; }
+        cfg.dns.policy = keep;
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row removed from Statistics: unblock " + name });
+        await load();
+        say(status, "info", "Unblocked " + name + ": its policy row was removed.");
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not unblocked: " + e.message); }
+    }
+    async function domainMenu(e, name) {
+      e.preventDefault(); e.stopPropagation();
+      let has = false;
+      try { has = (((await api("GET", "/api/config")).config.dns || {}).policy || []).some((r) => isNameRow(r, name)); } catch (_) { /* offer Block */ }
+      rowMenu([has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")]])(e);
     }
     async function clientMenu(e, addr) {
       e.preventDefault(); e.stopPropagation();
@@ -3034,10 +3064,7 @@
           ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
             h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
               // right-click a domain: add a Policy-Based Resolution row for it
-              oncontextmenu: e.name === "(others)" ? null : withHost ? (ev) => clientMenu(ev, e.name) : rowMenu([
-                ["Create PBR NODATA", () => addPolicyRow(e.name, "nodata")],
-                ["Create PBR NXDOMAIN", () => addPolicyRow(e.name, "nxdomain")],
-                ["Create PBR REFUSED", () => addPolicyRow(e.name, "refused")]]) },
+              oncontextmenu: e.name === "(others)" ? null : (ev) => (withHost ? clientMenu(ev, e.name) : domainMenu(ev, e.name)) },
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
@@ -3048,9 +3075,12 @@
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
                     title: cachedWhois(e.name, head, tail) || (withHost ? (head + "\n" + e.name + tail) : "Hover for whois" + tail),
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name), onmouseenter: go, onfocus: go }, e.name);
+                  const kw = withHost ? null : blockedNames.get(e.name.toLowerCase());
                   return withHost && blocked.has(e.name)
                     ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
                       title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫"))
+                    : kw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "in the Policy-Based Resolution table",
+                      title: "Answered by the Policy-Based Resolution table: " + kw.toUpperCase() + " for every client. Edit it on Configure ▸ DNS proxy ▸ Resolution." }, "🚫"))
                     : b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
@@ -3112,7 +3142,7 @@
       try {
         const wantUpd = sel === "update"; // the card of recent updates belongs to the Updates tile
         const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null,
-          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); }, () => null)]);
+          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); blockedNames = blockedNamesOf(r.config); }, () => null)]);
         if (my !== seq) return;
         lastAt = Date.now();
         draw(d);
