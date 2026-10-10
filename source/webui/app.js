@@ -2921,7 +2921,7 @@
         whoisSeen.set(key, { text: whoisText(r.data), ok: true, at: Date.now() });
       }, (e) => {
         whoisSeen.set(key, { text: "whois: " + (e.message || "failed"), ok: false, at: Date.now() });
-      }).then(() => { btn.title = head + whoisSeen.get(key).text + tail; });
+      }).then(() => { if (btn.getAttribute("data-name") === name) btn.title = head + whoisSeen.get(key).text + tail; });   // the list is redrawn in place: this button may show another name by now
     }
 
     // A row is a button: picking a client lists what it asked for in Top domains, picking a
@@ -2959,7 +2959,7 @@
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
-                  const b = h("button", { type: "button", class: "qlink mono", "aria-pressed": e.name === o.picked ? "true" : "false",
+                  const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
                     title: withHost ? ((e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") + "\n" + e.name + tail) : "Hover for whois" + tail,
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
                   const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") : "";

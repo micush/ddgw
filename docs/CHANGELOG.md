@@ -1,5 +1,16 @@
 # Changelog
 
+## [v292] - 2026-10-09 — Statistics: tooltip showed another domain's data
+
+### Fixed
+- A name's tooltip (whois or reverse-DNS data) could show the data of a different name. The lists are redrawn in place every few seconds and a row's button can end up showing another name; a whois lookup that finished after that wrote its text into the button's tooltip. The lookup now writes only when the button still shows the name it was started for.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`.
+
+### Not verified
+The race itself (it needs a slow whois answer and a re-sorted list at the same moment); the fix is a check that the button still shows the same name.
+
 ## [v291] - 2026-10-09 — Statistics: long names are cut with an ellipsis
 
 ### Changed
