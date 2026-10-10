@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -224,13 +225,14 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 			}
 		}
 		// the gateway itself, one state per address family
-		anyHealthy, anyDown, nPaused := false, false, 0
+		anyHealthy, anyDown, nPaused, nUsable := false, false, 0, 0
 		for _, s := range cg.Servers {
 			if s.Status == "paused" {
 				nPaused++
 			}
 			if s.Status == "ok" || s.Status == "warn" {
 				anyHealthy = true
+				nUsable++
 			}
 			if s.Status == "bad" {
 				anyDown = true
@@ -277,6 +279,8 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 				cf.Status, cf.Detail = "warn", "running, but no DNS server is configured yet, so clients cannot be answered"
 			case anyDown:
 				cf.Status, cf.Detail = "warn", "running, but some DNS servers are down"
+			case nPaused > 0 && nUsable == 1 && len(cg.Servers) >= 3:
+				cf.Status, cf.Detail = "warn", "running, but only one of the "+strconv.Itoa(len(cg.Servers))+" DNS servers is left (the rest are paused)"
 			default:
 				cf.Status, cf.Detail = "ok", "running and answering"
 			}

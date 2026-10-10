@@ -739,3 +739,36 @@ func TestCanvasMove(t *testing.T) {
 		t.Fatalf("a moved configuration must stay valid: %v", err)
 	}
 }
+
+// With several servers and only one left in service, the gateway is amber: it works, but one failure from being down.
+func TestOnlyOneServerLeftIsAmber(t *testing.T) {
+	a, b, c := newFakeDNS(t), newFakeDNS(t), newFakeDNS(t)
+	d := testDNSCfg(a.addr, b.addr, c.addr)
+	g := defaultGroup()
+	g.DNSProxy, g.DNS = true, &d
+	dc := newDaemonConfig()
+	dc.Groups = []GroupConfig{g}
+	pause := func(addr string) {
+		t.Helper()
+		if _, err := applyCanvasEdit(dc, canvasEdit{Action: "pause", Kind: "server", Group: 1, Server: addr}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows := []SnapshotRow{{GroupID: 1, AF: "v4", Local: true, State: "active", DNSUp: true}}
+	status := func() CanvasGateway {
+		t.Helper()
+		_ = dc.Validate()
+		s := NewSupervisor(context.Background(), dc)
+		s.refreshPool(dc, true)
+		defer s.StopAll()
+		return buildCanvas(dc, rows, s.poolList())[0]
+	}
+	pause(c.addr)
+	if cv := status(); cv.Status != "ok" {
+		t.Fatalf("one of three paused: %s (%s)", cv.Status, cv.Detail)
+	}
+	pause(b.addr)
+	if cv := status(); cv.Status != "warn" || !strings.Contains(cv.Detail, "only one") {
+		t.Fatalf("two of three paused: %s (%s)", cv.Status, cv.Detail)
+	}
+}

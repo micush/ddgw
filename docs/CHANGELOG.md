@@ -1,5 +1,13 @@
 # Changelog
 
+## [v317] - 2026-10-10 — Topology: the gateway is amber when only one server is left
+
+### Changed
+- A gateway with three or more DNS servers (each address family's server counts on its own, as drawn) turns amber, not green, when the other servers are paused and only one is left in service: "running, but only one of the N DNS servers is left (the rest are paused)". Servers that are down already made it amber; pausing one server of several, or one of two, still leaves it green, as before (a paused server is not a fault). All paused is still red.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: one of three paused stays green, two of three paused is amber), cgo-off and arm64 builds, `node --check`. Not verified: the Topology page in a browser.
+
 ## [v316] - 2026-10-10 — Upload a release: more space before Fetch from online
 
 ### Changed
