@@ -1865,7 +1865,7 @@
     { shared: true, k: "register_ttl", l: "Registered record TTL (s)", t: "int", min: 0, max: 604800, hint: "0 = 300" },
   ];
   const WEB_FIELDS = [
-    { k: "listen", l: "Listen address", t: "text", hint: "host:port, default :53853" },
+    { k: "listen", l: "Listen address", t: "port", hint: "the port, default 53853 (all addresses); to listen on one address only, write it with the port: 10.0.0.1:53853" },
     { k: "group", l: "Login group", t: "text" },
     { k: "pam_service", l: "PAM service", t: "text" },
     { k: "session_idle_minutes", l: "Session idle timeout (min)", t: "int", min: 1 },
@@ -1875,7 +1875,7 @@
     { k: "min_password_length", l: "Minimum password length", t: "int", min: 0, max: 128, hint: "0 = 8" },
   ];
   const CLUSTER_FIELDS = [
-    { k: "listen", l: "Binding address", t: "text" },
+    { k: "listen", l: "Binding address", t: "port", hint: "the port, default 53854 (all addresses); or an address with the port: 10.0.0.1:53854" },
     { k: "self", l: "Advertised address", t: "text" },
     { k: "sync_interval_sec", l: "Sync interval (s)", t: "int", min: 1, max: 3600 },
   ];
@@ -2100,6 +2100,11 @@
           if (f.t === "list") return ls;
           return ls.map((s) => { const p = s.split(/\s+/); return { name: p[0], type: (p[1] || "A").toUpperCase() }; });
         };
+      } else if (f.t === "port") {
+        // a listen address kept as ":53853" in the file is shown as the port alone; one with a host in front is shown as it is
+        input = h("input", { type: "text", inputmode: "numeric", autocomplete: "off", spellcheck: "false" });
+        input.value = v == null ? "" : String(v).replace(/^:(\d+)$/, "$1");
+        get = () => { const t = input.value.trim(); return /^\d+$/.test(t) ? ":" + t : t; };
       } else if (f.t === "int" || f.t === "float") {
         input = h("input", { type: "number", step: f.t === "float" ? "any" : "1", min: f.min, max: f.max });
         input.value = v == null ? "" : v;

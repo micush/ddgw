@@ -183,7 +183,7 @@ const DDGW_HELP = {
       ]],
       ["h", "Web GUI"],
       ["fields", [
-        ["Listen address", "`host:port` the GUI listens on, default `:53853`. Changing it restarts the GUI and logs everyone out, so you are asked to confirm."],
+        ["Listen address", "The port the GUI listens on, default `53853`, on every address; to listen on one address only, write it with the port, such as `10.0.0.5:53853` (saved as `listen` in the `web` block, where a bare port is kept as `:53853`). Changing it restarts the GUI and logs everyone out, so you are asked to confirm."],
         ["Login group", "The operating-system group whose members may sign in (default `ddgw`)."],
         ["PAM service", "The `/etc/pam.d` service that checks passwords (default `ddgw`)."],
         ["Session idle timeout (min)", "From 1, default 30. A browser is signed out after this many idle minutes."],
@@ -214,7 +214,7 @@ const DDGW_HELP = {
       ]],
       ["h", "Cluster"],
       ["fields", [
-        ["Binding address", "`host:port` the cluster port listens on, which the other nodes connect to. Default `:53854` (all addresses); give an address, such as `10.0.0.5:53854`, to bind to one."],
+        ["Binding address", "The port the cluster listens on, which the other nodes connect to. Just the port (default `53854`) listens on all addresses; give an address with it, such as `10.0.0.5:53854`, to bind to one."],
         ["Advertised address", "`host:port` the other members use to reach this node. Empty means this host's name with the listen port."],
         ["Sync interval (s)", "1–3600, default 5. How often replicas pull state and members are polled."],
       ]],

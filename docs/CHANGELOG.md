@@ -1,5 +1,13 @@
 # Changelog
 
+## [v309] - 2026-10-10 — Listen addresses show just the port
+
+### Changed
+- Configure ▸ Web GUI ▸ Listen address and Configure ▸ Cluster ▸ Binding address no longer show a leading colon: a stored `:53853` is shown as `53853` and `:53854` as `53854`. Typing a bare port saves it as `:port` as before, so the files and the CLI are unchanged. An address that has a host (`10.0.0.5:53853`) is shown and saved as it is. The help text and hints say so.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. Not verified: the form in a browser.
+
 ## [v308] - 2026-10-10 — Statistics: Rename… on a client that has a host name
 
 ### Changed
