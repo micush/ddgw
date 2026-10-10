@@ -1,5 +1,29 @@
 # Changelog
 
+## [v314] - 2026-10-10 — Upload a release: the box is called Fetch from online
+
+### Changed
+- The tick box on Updates ▸ Upload a release is now called **Fetch from online** (it was Get Online). The text, tooltip, help and README follow.
+
+### Verified
+gofmt, vet, `node --check`, the help and route tests. Not verified: the page in a browser.
+
+## [v313] - 2026-10-10 — Upload a release: no banner at all
+
+### Changed
+- Errors on Updates ▸ Upload a release are now red text next to the Get Online box too, not a banner. This card shows no banner any more.
+
+### Verified
+gofmt, vet, `node --check`, the help and route tests. Not verified: the page in a browser.
+
+## [v312] - 2026-10-10 — Upload a release: status next to Get Online
+
+### Changed
+- Updates ▸ Upload a release no longer shows the blue banner while it works. Its status ("Downloading from GitHub…", "Staged vN (tag).", or the reminder to choose a file) is a line of small text next to the Get Online box. An uploaded file reports "Staged vN." the same way. Errors still showed as a red banner (changed in v313).
+
+### Verified
+gofmt, vet, `node --check`. Not verified: the page in a browser.
+
 ## [v311] - 2026-10-10 — Upload a release: the box is called Get Online
 
 ### Changed

@@ -553,3 +553,5 @@ table.qtop td:first-child { overflow: hidden; }
 .qfilter { width: 9rem; min-width: 0; flex: 0 1 9rem; }
 table.qtop .qlink { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
 table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bad-text { color: var(--bad); }

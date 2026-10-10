@@ -2726,27 +2726,29 @@
         dyn = h("div", {});
         stats = h("div", { class: "stats" });
         const file = h("input", { type: "file", accept: ".tgz,.tar.gz,.zip,application/gzip,application/zip", "aria-label": "Release archive" });
-        const online = h("input", { type: "checkbox", "aria-label": "Get Online", title: "Download the newest release from GitHub instead of using a file", onchange: () => { file.disabled = online.checked; } });
+        const note = h("span", { class: "muted small", role: "status", "aria-live": "polite" });
+        const online = h("input", { type: "checkbox", "aria-label": "Fetch from online", title: "Download the newest release from GitHub instead of using a file", onchange: () => { file.disabled = online.checked; note.textContent = ""; } });
         const up = h("button", { class: "btn primary hdr", type: "button", onclick: async (ev) => {
           const f = file.files[0];
-          if (!online.checked && !f) { say(status, "info", "Choose a release archive first, or tick Get Online."); return; }
+          if (!online.checked && !f) { note.textContent = "Choose a release archive first, or tick Fetch from online."; return; }
+          note.textContent = ""; note.classList.remove("bad-text"); clear(status);
           ev.target.disabled = true;
           try {
             if (online.checked) {
-              say(status, "info", "Downloading the newest release from GitHub…");
+              note.textContent = "Downloading from GitHub…";
               const r = await api("POST", "/api/update/fetch");
-              say(status, "ok", "Source v" + r.data.version + " (" + r.data.tag + " from GitHub) staged.");
+              note.textContent = "Staged v" + r.data.version + " (" + r.data.tag + ").";
             } else {
-              const r = await apiUpload("/api/update/upload", f); file.value = ""; say(status, "ok", "Source v" + r.data.version + " staged.");
+              const r = await apiUpload("/api/update/upload", f); file.value = ""; note.textContent = "Staged v" + r.data.version + ".";
             }
             await VIEWS.updates.poll();
-          } catch (e) { fail(status)(e); } finally { ev.target.disabled = false; }
+          } catch (e) { if (e.message !== "unauthenticated") { note.textContent = e.message; note.classList.add("bad-text"); } } finally { ev.target.disabled = false; }
         } }, "Upload");
         main.append(stats, status,
           h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Upload a release"), h("span", { class: "grow" }), up),
             h("div", { class: "body" },
               h("p", { class: "hint" }, "Select a release archive. It is checked and staged on this node; other cluster members pull it from here."),
-              h("div", { class: "toolbar tight" }, file, h("label", { class: "check" }, online, " Get Online")))),
+              h("div", { class: "toolbar tight" }, file, h("label", { class: "check" }, online, " Fetch from online"), note))),
           dyn);
       },
       async poll() { draw((await api("GET", "/api/update")).data); },
