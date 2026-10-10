@@ -73,6 +73,7 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/update", w.authed(w.op("update.status", nil)))
 	mux.HandleFunc("GET /api/update/history", w.authed(w.op("update.history", nil)))
 	mux.HandleFunc("POST /api/update/upload", w.authedCT(w.handleUpdateUpload, false))
+	mux.HandleFunc("POST /api/update/fetch", w.authedCT(w.handleUpdateFetch, false))
 	mux.HandleFunc("POST /api/update/apply", w.authed(w.op("update.apply", nil)))
 	mux.HandleFunc("POST /api/update/push", w.authed(w.op("update.push", nil)))
 	mux.HandleFunc("POST /api/update/cancel", w.authed(w.op("update.cancel", nil)))

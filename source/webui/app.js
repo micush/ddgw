@@ -2726,18 +2726,27 @@
         dyn = h("div", {});
         stats = h("div", { class: "stats" });
         const file = h("input", { type: "file", accept: ".tgz,.tar.gz,.zip,application/gzip,application/zip", "aria-label": "Release archive" });
+        const online = h("input", { type: "checkbox", "aria-label": "Get Online", title: "Download the newest release from GitHub instead of using a file", onchange: () => { file.disabled = online.checked; } });
         const up = h("button", { class: "btn primary hdr", type: "button", onclick: async (ev) => {
           const f = file.files[0];
-          if (!f) { say(status, "info", "Choose a release archive first."); return; }
+          if (!online.checked && !f) { say(status, "info", "Choose a release archive first, or tick Get Online."); return; }
           ev.target.disabled = true;
-          try { const r = await apiUpload("/api/update/upload", f); file.value = ""; say(status, "ok", "Source v" + r.data.version + " staged."); await VIEWS.updates.poll(); }
-          catch (e) { fail(status)(e); } finally { ev.target.disabled = false; }
+          try {
+            if (online.checked) {
+              say(status, "info", "Downloading the newest release from GitHub…");
+              const r = await api("POST", "/api/update/fetch");
+              say(status, "ok", "Source v" + r.data.version + " (" + r.data.tag + " from GitHub) staged.");
+            } else {
+              const r = await apiUpload("/api/update/upload", f); file.value = ""; say(status, "ok", "Source v" + r.data.version + " staged.");
+            }
+            await VIEWS.updates.poll();
+          } catch (e) { fail(status)(e); } finally { ev.target.disabled = false; }
         } }, "Upload");
         main.append(stats, status,
           h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, "Upload a release"), h("span", { class: "grow" }), up),
             h("div", { class: "body" },
               h("p", { class: "hint" }, "Select a release archive. It is checked and staged on this node; other cluster members pull it from here."),
-              h("div", { class: "toolbar tight" }, file))),
+              h("div", { class: "toolbar tight" }, file, h("label", { class: "check" }, online, " Get Online")))),
           dyn);
       },
       async poll() { draw((await api("GET", "/api/update")).data); },

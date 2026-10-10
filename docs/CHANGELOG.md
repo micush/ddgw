@@ -1,5 +1,29 @@
 # Changelog
 
+## [v311] - 2026-10-10 — Upload a release: the box is called Get Online
+
+### Changed
+- The tick box on Updates ▸ Upload a release that fetches the newest release from GitHub is now called **Get Online**; its tooltip and the help say what it does.
+
+### Verified
+gofmt, vet, `node --check` and the help/route tests only (a text change). Not verified: the box in a browser.
+
+## [v311] - 2026-10-10 — Upload a release: the box is called Get Online
+
+### Changed
+- The tick box on Updates ▸ Upload a release that fetches the newest release from GitHub is now called **Get Online** (it was "Get the newest release from GitHub instead"); its tooltip and the help say what it does.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. Not verified: the box in a browser.
+
+## [v310] - 2026-10-10 — Upload a release: get it from GitHub
+
+### Added
+- **Get the newest release from GitHub instead** tick box next to the file box on Updates ▸ Upload a release. With it ticked, **Upload** makes this node download the newest release of `micush/ddgw` (or, with no release, the highest `v<number>` tag, as `get.sh` does) and stage it exactly like an uploaded archive; the rest of the update process is unchanged. New endpoint `POST /api/update/fetch` (logged with the user's name; relayed to the picked node like the upload). Errors say whether GitHub could not be reached, no tag was found, the download failed or the archive was refused.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: tag ordering, release-then-tags lookup, a fake GitHub serving the archive, a missing archive, a junk archive, the route's session/CSRF checks), cgo-off and arm64 builds, `node --check`. Not verified: the real GitHub (this machine only reaches it through a proxy that blocks it), a node behind an HTTP proxy, and the box in a browser.
+
 ## [v309] - 2026-10-10 — Listen addresses show just the port
 
 ### Changed

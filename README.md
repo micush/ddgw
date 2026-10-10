@@ -923,7 +923,7 @@ ddgw --power cancel
 
 ## Upgrading a running cluster
 
-Upload a release archive (`ddgw_vN.tgz` or `.zip`, the same one you would install from) on the Upgrade tab, or with `ddgw --update-upload FILE`. The node checks it (safe extraction, module `ddgw`, integer `VERSION`), keeps the source under `/var/lib/ddgw/update/source` and offers it to its peers.
+Upload a release archive (`ddgw_vN.tgz` or `.zip`, the same one you would install from) on the Upgrade tab, or with `ddgw --update-upload FILE`. The node checks it (safe extraction, module `ddgw`, integer `VERSION`), keeps the source under `/var/lib/ddgw/update/source` and offers it to its peers. Instead of a file you can tick **Get Online** next to the file box: **Upload** then has this node download the newest release of `micush/ddgw` (or its highest `v<number>` tag when there is no release; the same lookup `get.sh` does) and stage it exactly like an uploaded archive. The node needs to reach api.github.com and github.com.
 
 ![Operate ▸ Upgrade: the update status, the nodes and a history of every update event](snaps/upgrade.png)
 

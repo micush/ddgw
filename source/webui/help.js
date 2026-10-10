@@ -380,6 +380,7 @@ const DDGW_HELP = {
       ["h", "Fields"],
       ["fields", [
         ["Release archive", "Select a `ddgw_vN.tgz` (or `.zip`) release archive. It is checked and staged on this node; the other members pull it from here."],
+        ["Get Online", "Tick it and **Upload** downloads the newest release of `micush/ddgw` from GitHub (or, when it has no releases, its highest `v<number>` tag) to this node and stages it, instead of using the file you chose. This node needs to reach api.github.com and github.com (a proxy set in its environment is used). The rest is the same as an upload: the version must be newer than the one running before it can be applied."],
         ["Select (tick box on each member row)", "Ticks a member for **Update N selected**. Disabled while auto-update is on (Configure ▸ General)."],
       ]],
       ["cli", "ddgw --update-status   (the 50 newest history events)\nddgw --update-history  (all of them)\nddgw --update-upload FILE\nddgw --update-apply\nddgw --update-push all|ADDR,...\nddgw --update-cancel all|ADDR,...\nddgw --update-auto on|off"],
