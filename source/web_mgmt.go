@@ -51,6 +51,10 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/dnslookup", w.authed(w.op("dns.lookup", []string{"lookup"})))
 	mux.HandleFunc("GET /api/whois", w.authed(w.op("whois.get", []string{"domain"})))
 	mux.HandleFunc("GET /api/qstats", w.authed(w.op("qstats.get", []string{"from", "to", "rcode", "client", "domain"})))
+	mux.HandleFunc("POST /api/qstats/clear", w.authed(w.op("qstats.clear", nil)))
+	mux.HandleFunc("POST /api/clusterstats/clear", w.authed(w.op("qstats.clear.cluster", nil)))
+	mux.HandleFunc("POST /api/scan", w.authed(w.op("scan.start", nil)))
+	mux.HandleFunc("GET /api/scan", w.authed(w.op("scan.get", []string{"client"})))
 	// the whole cluster's numbers added together (not relayable: the node asked does the asking of the others)
 	mux.HandleFunc("GET /api/clusterstats", w.authed(w.op("qstats.cluster", []string{"from", "to", "rcode", "client", "domain"})))
 	mux.HandleFunc("GET /api/clusterhost", w.authed(w.op("host.cluster", []string{"from", "to"})))
@@ -94,7 +98,7 @@ func (w *WebServer) op(cmd string, query []string) func(http.ResponseWriter, *ht
 			}
 			args = body
 		}
-		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" || strings.HasPrefix(cmd, "users.") && cmd != "users.list" {
+		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" || cmd == "qstats.clear" || cmd == "qstats.clear.cluster" || strings.HasPrefix(cmd, "users.") && cmd != "users.list" {
 			warnf("web: %q ran %s (from %s)", s.user, cmd, clientIP(r))
 		}
 		data, err := w.mg.Op(cmd, args, s.user)

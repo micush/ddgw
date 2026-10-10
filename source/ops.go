@@ -215,6 +215,34 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 			return j, nil
 		}
 		return map[string]any{"none": true}, nil
+	// clear this node's statistics, and the file they were saved to
+	case "qstats.clear":
+		qstats.Clear()
+		if err := savePersisted(m.stateDir); err != nil {
+			warnf("statistics: saving after clear: %v", err)
+		}
+		warnf("statistics: %q cleared the statistics of this node", actor)
+		return map[string]any{"cleared": true}, nil
+	// the same on every node of the cluster
+	case "qstats.clear.cluster":
+		parts, infos := clusterGatherReq(context.Background(), m, proxyReq{User: actor, Method: "POST", Path: "/api/qstats/clear", CT: "application/json", Body: []byte("{}")}, clusterStatsTimeout,
+			func() (*struct{ Cleared bool }, error) {
+				qstats.Clear()
+				if err := savePersisted(m.stateDir); err != nil {
+					warnf("statistics: saving after clear: %v", err)
+				}
+				warnf("statistics: %q cleared the statistics of this node", actor)
+				return &struct{ Cleared bool }{true}, nil
+			})
+		if len(parts) == 0 {
+			return nil, errors.New("no node answered")
+		}
+		return map[string]any{"cleared": true, "nodes": infos}, nil
+	// nmap of a client
+	case "scan.start":
+		return scanStart(a.QClient, actor)
+	case "scan.get":
+		return scanGet(a.QClient)
 	case "qstats.cluster":
 		from, to, err := qstatsRange(a.QFrom, a.QTo)
 		if err != nil {

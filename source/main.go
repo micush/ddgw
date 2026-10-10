@@ -127,6 +127,8 @@ the web GUI):
                    [--stats-rcode nxdomain|servfail|refused|noerror|other|update]
                    [--stats-client ADDR | --stats-domain NAME]
                    [--all-nodes]   (every cluster node's numbers added together)
+                   --stats-clear [--all-nodes]   (forget the counts and top lists, here or on every node)
+                   --scan ADDR   (nmap of a client, run from this node; needs the nmap package)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
   Capture          --capture IFACE [--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]

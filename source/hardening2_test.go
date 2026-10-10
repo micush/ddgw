@@ -85,13 +85,13 @@ func TestSessionsEndWhenTheAccountChanges(t *testing.T) {
 	now := time.Now()
 	add := func(tok, user string) {
 		ws.mu.Lock()
-		ws.sessions[tok] = &session{user: user, csrf: "c", created: now, last: now, checked: now}
+		ws.sessions[sessKey(tok)] = &session{user: user, csrf: "c", created: now, last: now, checked: now}
 		ws.mu.Unlock()
 	}
 	has := func(tok string) bool {
 		ws.mu.Lock()
 		defer ws.mu.Unlock()
-		return ws.sessions[tok] != nil
+		return ws.sessions[sessKey(tok)] != nil
 	}
 	reset := func() {
 		add("bob1", "bob")
@@ -133,7 +133,7 @@ func TestSessionsEndWhenTheAccountChanges(t *testing.T) {
 	m2, _ := usersFixture(t, fxGroup, fxPasswd, "")
 	ws2 := NewWebServer(m2, nil, &fakeAuth{})
 	ws2.mu.Lock()
-	ws2.sessions["b"] = &session{user: "bob", csrf: "c", created: now, last: now, checked: now}
+	ws2.sessions[sessKey("b")] = &session{user: "bob", csrf: "c", created: now, last: now, checked: now}
 	ws2.mu.Unlock()
 	if err := m2.usersPeer(usersMsg{Op: "apply", Name: "bob", Hash: testHash}, "node2"); err != nil {
 		t.Fatal(err)

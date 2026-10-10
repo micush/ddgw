@@ -18,25 +18,25 @@ import (
 // calls the same code), so the two always agree.
 
 type cliFlags struct {
-	versions, versionSnapshot, tlsStatus, tlsInstall, tlsCSR, tlsRevert, tlsRegenerate                                                                                                        *bool
-	clusterStatus, clusterToken, clusterPromote, clusterLeave, clusterSync                                                                                                                    *bool
-	updateStatus, updateApply, updateHistory, noWait, yes                                                                                                                                     *bool
-	versionShow, versionDiff, versionRestore, versionExport, configImport, note                                                                                                               *string
-	certFile, keyFile, cn, san                                                                                                                                                                *string
-	clusterJoin, clusterRemove, clusterUnremove                                                                                                                                               *string
-	users                                                                                                                                                                                     *bool
-	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires                                                                                                                  *string
-	power, powerAt                                                                                                                                                                            *string
-	powerIn                                                                                                                                                                                   *int
-	bgp, bgpDisable, bgpEnable, logShow, statsShow, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                            *bool
-	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile, tshootFile *string
-	asn, routerID, asPrepend, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                       *string
-	updateUpload, updatePush, updateCancel, updateAuto                                                                                                                                        *string
-	canvas, vmacTest, tshoot, tshootCapture                                                                                                                                                   *bool
-	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node, realMACs                       *string
-	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                             *int
-	serverStats, gatewayStats, spread, lbMode                                                                                                                                                 *string
-	latencyAlpha                                                                                                                                                                              *float64
+	versions, versionSnapshot, tlsStatus, tlsInstall, tlsCSR, tlsRevert, tlsRegenerate                                                                                                                  *bool
+	clusterStatus, clusterToken, clusterPromote, clusterLeave, clusterSync                                                                                                                              *bool
+	updateStatus, updateApply, updateHistory, noWait, yes                                                                                                                                               *bool
+	versionShow, versionDiff, versionRestore, versionExport, configImport, note                                                                                                                         *string
+	certFile, keyFile, cn, san                                                                                                                                                                          *string
+	clusterJoin, clusterRemove, clusterUnremove                                                                                                                                                         *string
+	users                                                                                                                                                                                               *bool
+	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires                                                                                                                            *string
+	power, powerAt                                                                                                                                                                                      *string
+	powerIn                                                                                                                                                                                             *int
+	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                          *bool
+	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, scanAddr, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile, tshootFile *string
+	asn, routerID, asPrepend, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                                 *string
+	updateUpload, updatePush, updateCancel, updateAuto                                                                                                                                                  *string
+	canvas, vmacTest, tshoot, tshootCapture                                                                                                                                                             *bool
+	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node, realMACs                                 *string
+	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                                       *int
+	serverStats, gatewayStats, spread, lbMode                                                                                                                                                           *string
+	latencyAlpha                                                                                                                                                                                        *float64
 }
 
 func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
@@ -63,7 +63,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
-		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
+		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsClear: b("stats-clear"), scanAddr: s("scan"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
 		bgp: b("bgp"), bgpDisable: b("bgp-disable"), bgpEnable: b("bgp-enable"), nbrDisable: s("bgp-neighbor-disable"), nbrEnable: s("bgp-neighbor-enable"), asn: s("asn"), routerID: s("router-id"), asPrepend: s("as-prepend"),
 		nbrAdd: s("bgp-neighbor-add"), nbrDel: s("bgp-neighbor-del"), remoteAS: s("remote-as"), descr: s("description"),
 		passwd:       s("password"),
@@ -124,7 +124,7 @@ func splitCSV(s string) []string { return splitList(s) }
 
 // run executes the management command named by the flags, if any.
 func (f *cliFlags) run(sock string) bool {
-	if *f.allNodes && !*f.statsShow && !*f.hostShow && *f.captureIface == "" && !*f.tshoot {
+	if *f.allNodes && !*f.statsShow && !*f.statsClear && !*f.hostShow && *f.captureIface == "" && !*f.tshoot {
 		fatalf("--all-nodes goes with --stats, --host or --capture (the cluster's numbers added together, or a capture on every node)")
 	}
 	switch {
@@ -358,6 +358,27 @@ func (f *cliFlags) run(sock string) bool {
 		printCaptureInterfaces(r)
 	case *f.captureIface != "":
 		runCapture(sock, f)
+	case *f.statsClear:
+		cmd := "qstats.clear"
+		if *f.allNodes {
+			cmd = "qstats.clear.cluster"
+		}
+		var r struct {
+			Nodes []ClusterNodeInfo `json:"nodes"`
+		}
+		decode(op(sock, cmd, map[string]string{}), &r)
+		if len(r.Nodes) == 0 {
+			fmt.Println("The statistics of this node are cleared.")
+		}
+		for _, n := range r.Nodes {
+			if n.OK {
+				fmt.Printf("  %s: cleared\n", n.Name)
+			} else {
+				fmt.Printf("  %s: %s\n", n.Name, n.Error)
+			}
+		}
+	case *f.scanAddr != "":
+		runScan(sock, *f.scanAddr)
 	case *f.whoisName != "":
 		var w WhoisInfo
 		decode(op(sock, "whois.get", map[string]string{"domain": *f.whoisName}), &w)
@@ -1265,4 +1286,19 @@ func runTshoot(sock string, all, capture bool, file string) {
 		fatal(err)
 	}
 	fmt.Printf("written to %s (%d bytes); secrets are removed, README.txt lists what is in it\n", file, len(b.TGZ))
+}
+
+// runScan asks this node for an nmap of addr and prints the report when it is done.
+func runScan(sock, addr string) {
+	var j ScanJob
+	decode(op(sock, "scan.start", map[string]string{"client": addr}), &j)
+	fmt.Fprintf(os.Stderr, "scanning %s with nmap…\n", j.Addr)
+	for j.State == "running" {
+		time.Sleep(2 * time.Second)
+		decode(op(sock, "scan.get", map[string]string{"client": addr}), &j)
+	}
+	fmt.Println(j.Text)
+	if j.State == "error" {
+		os.Exit(1)
+	}
 }

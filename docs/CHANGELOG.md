@@ -1,5 +1,56 @@
 # Changelog
 
+## [v300] - 2026-10-10 — A blocked client shows a 🚫
+
+### Added
+- In Top clients a client with a Block row has a 🚫 after its address (tooltip: why, and how to undo it). It goes when the row is removed, by Unblock or by editing the Policy-Based Resolution table.
+
+### Verified
+cgo build, `node --check`. In a browser: Block shows the icon, Unblock removes it, a row that was already there shows it. The Go tests were not re-run (only the web UI and docs changed).
+
+## [v299] - 2026-10-10 — Sign-in survives an upgrade, shorter scan results
+
+### Changed
+- A client scan now shows only what matters in the tooltip: up or down, the operating system, the MAC address with its maker, and the open ports with service and version (twelve at most, then "and N more"), instead of the whole nmap report. If nmap prints something else entirely, it is shown shortened to 600 characters.
+- Sessions were only in memory, so every restart of the daemon (an upgrade, a reboot) signed out everyone on that node; in a cluster you only noticed it on the node you were signed in to. They are now also saved to `<state-dir>/sessions.json` (mode 0600; only a SHA-256 of each cookie is stored, so the file cannot be used to take a session over) once a minute and at every sign-in and sign-out, and read back at start. The idle timeout and the 12 hour limit still apply to a restored session and the group is checked again on its first request. Still ending a session at once: sign-out, a changed or deleted account, a changed GUI listen address. The first upgrade to this version still signs you in again (the old version has nothing saved); the ones after it do not. Up to a minute of recent activity can be missing from the saved idle times after a crash.
+
+### Verified
+gofmt, vet, `go test -count=1` for the session tests (new: the scan summary, a session survives a restart, the file holds no cookie value, mode 0600, Stop keeps the file, sign-out removes it) and the full `go test -race -count=1 .`. Not verified: a real upgrade through the GUI, a real nmap run.
+
+## [v298] - 2026-10-10 — Statistics: Unblock
+
+### Changed
+- Right-click a client that is already blocked: the item reads **Unblock** and removes that client's Block row (this client, any name, NODATA) from the Policy-Based Resolution table. Other rows for the client are left alone.
+
+### Verified
+cgo build, `node --check`. In a browser: right-click shows Block, after Block it shows Unblock, Unblock removes the row and the menu reads Block again. The Go tests were not re-run (only the web UI and docs changed).
+
+## [v297] - 2026-10-10 — Statistics: client menu is Scan and Block, sidebar gateway Rename and Delete
+
+### Added
+- Right-click a gateway in the sidebar (under Topology) ▸ **Rename…** (a small form with just the name) and **Delete** (the same confirmation as deleting it from the drawing).
+
+### Changed
+- Right-click a client ▸ **Block** replaces the three "Create PBR … for all its queries" items: one NODATA row for that client (any name) at the top of the table. NXDOMAIN and REFUSED are gone from the client menu (the domain menu keeps all three).
+- Right-click a client ▸ **Scan** (was "Scan (nmap)"). Docs and help updated.
+
+### Verified
+gofmt, cgo-off and cgo builds, `node --check`. In a browser: right-click a gateway in the sidebar, Rename… (new name shown in the sidebar and on the drawing), Delete (confirmation shown, Cancel keeps it). The Go tests were not re-run (only the web UI and docs changed).
+
+## [v294] - 2026-10-10 — Statistics: Clear, silence a client, scan a client
+
+### Added
+- **Clear** next to the range buttons on the Statistics page: forgets the counts and top lists (every node's when the Node menu says Cluster) and rewrites `stats.json.gz` at once. CLI: `--stats-clear [--all-nodes]`. Written to the log with who did it.
+- Right-click a client in Top clients ▸ **Create PBR NODATA / NXDOMAIN / REFUSED for all its queries**: a row for that client (name `*`) at the top of the Policy-Based Resolution table. A row that already exists for the same client is left alone.
+- Right-click a client ▸ **Scan (nmap)**: nmap runs on the node you are looking at (`-Pn -T4 -F -sV --version-light -O`, 120 s host timeout, 150 s overall, two scans at a time, only an IP address is accepted and it follows `--`); the report shows in the client's tooltip. CLI: `--scan ADDR`. A node without nmap says so.
+- The installer installs **nmap** (a failure is a warning: only Scan needs it).
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new tests: address checking, the nmap command line, the report tidying, a fake nmap run end to end, no nmap, Clear), cgo-off and arm64 builds, `node --check`, `bash -n install.sh` and `install.sh --dry-run` (nmap listed). In a browser with a stand-in nmap: Clear, the client menu, a scan and its tooltip, and a client row written to the config. CLI: `--stats-clear`, `--stats-clear --all-nodes`, `--scan`, and a bad address refused.
+
+### Not verified
+A real nmap run (the test machine has none; the options are standard nmap options); Clear on a cluster of several nodes (one node tested); the installer's nmap step on a real package manager.
+
 ## [v293] - 2026-10-09 — Statistics: the tooltip bug, for real
 
 ### Fixed

@@ -105,7 +105,9 @@ type WebServer struct {
 	policy atomic.Pointer[WebConfig] // live: group, pam_service, session idle
 
 	mu       sync.Mutex
-	sessions map[string]*session
+	sessions map[string]*session // by sessKey(cookie)
+	stateDir string
+	noSave   atomic.Bool
 	fails    map[string]*failRec
 	loginQ   chan struct{} // bounds the logins waiting for PAM
 
@@ -123,6 +125,8 @@ func NewWebServer(mg *Mgmt, status *StatusServer, auth Authenticator) *WebServer
 	}
 	d := defaultWeb()
 	w.policy.Store(&d)
+	w.stateDir = mg.stateDir
+	w.loadSessions()
 	fn := w.endSessionsFor
 	mg.endSessions.Store(&fn)
 	return w
@@ -141,6 +145,7 @@ func (w *WebServer) endSessionsFor(user string) {
 	w.mu.Unlock()
 	if n > 0 {
 		infof("web: %d session(s) of %q ended (the account changed)", n, user)
+		w.saveSessions()
 	}
 }
 
@@ -160,6 +165,7 @@ func (w *WebServer) Apply(cfg WebConfig) {
 	}
 	if w.running != nil {
 		w.stopLocked()
+		w.saveSessions() // the listener changed: everyone signs in again, and the file says so
 	}
 	if !pamAvailable {
 		errorf("web: GUI not started — this build has no PAM support (build natively with cgo and libpam0g-dev)")
@@ -225,13 +231,14 @@ func (w *WebServer) stopLocked() {
 	}
 	w.srv, w.cancel, w.running = nil, nil, nil
 	w.mu.Lock()
-	w.sessions = map[string]*session{} // restart invalidates every session
+	w.sessions = map[string]*session{} // a change of listener ends every session (the daemon stopping does not: see Stop)
 	w.mu.Unlock()
 }
 
 func (w *WebServer) Stop() {
 	w.applyMu.Lock()
 	defer w.applyMu.Unlock()
+	w.noSave.Store(true) // the daemon is stopping, not signing anyone out: the file keeps the sessions
 	w.stopLocked()
 }
 
@@ -258,6 +265,7 @@ func (w *WebServer) janitor(ctx context.Context) {
 				}
 			}
 			w.mu.Unlock()
+			w.saveSessions() // the idle times move with every request, so it is written once a minute
 		}
 	}
 }
@@ -378,13 +386,14 @@ func (w *WebServer) lookup(r *http.Request) *session {
 	pol := w.policy.Load()
 	now := time.Now()
 	w.mu.Lock()
-	s := w.sessions[c.Value]
+	key := sessKey(c.Value)
+	s := w.sessions[key]
 	if s == nil {
 		w.mu.Unlock()
 		return nil
 	}
 	if now.Sub(s.last) > pol.sessionIdle() || now.Sub(s.created) > sessionMaxAge {
-		delete(w.sessions, c.Value)
+		delete(w.sessions, key)
 		w.mu.Unlock()
 		return nil
 	}
@@ -397,7 +406,7 @@ func (w *WebServer) lookup(r *http.Request) *session {
 		if ok, err := w.auth.InGroup(uname, pol.Group); err != nil || !ok {
 			warnf("web: session for %q ended — no longer in group %q", uname, pol.Group)
 			w.mu.Lock()
-			delete(w.sessions, c.Value)
+			delete(w.sessions, key)
 			w.mu.Unlock()
 			return nil
 		}
@@ -675,8 +684,9 @@ func (w *WebServer) handleLogin(rw http.ResponseWriter, r *http.Request) {
 	s := &session{user: req.Username, csrf: randToken(), created: now, last: now, checked: now}
 	tok := randToken()
 	w.mu.Lock()
-	w.sessions[tok] = s
+	w.sessions[sessKey(tok)] = s
 	w.mu.Unlock()
+	w.saveSessions()
 	http.SetCookie(rw, &http.Cookie{
 		Name: sessionCookie, Value: tok, Path: "/", HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteStrictMode, MaxAge: int(sessionMaxAge.Seconds()),
@@ -688,8 +698,9 @@ func (w *WebServer) handleLogin(rw http.ResponseWriter, r *http.Request) {
 func (w *WebServer) handleLogout(rw http.ResponseWriter, r *http.Request, s *session) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		w.mu.Lock()
-		delete(w.sessions, c.Value)
+		delete(w.sessions, sessKey(c.Value))
 		w.mu.Unlock()
+		w.saveSessions()
 	}
 	http.SetCookie(rw, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})

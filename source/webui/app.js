@@ -73,7 +73,7 @@
   // anything else a page asks goes to this node as before.
   const CLUSTER = "*cluster";
   const CLUSTER_TABS = ["stats", "host", "capture"];
-  const CLUSTER_API = [[/^\/api\/qstats(\?|$)/, "/api/clusterstats"], [/^\/api\/host(\?|$)/, "/api/clusterhost"]];
+  const CLUSTER_API = [[/^\/api\/qstats(\?|$)/, "/api/clusterstats"], [/^\/api\/host(\?|$)/, "/api/clusterhost"], [/^\/api\/qstats\/clear$/, "/api/clusterstats"]];
   function route(path) {
     if (state.target === CLUSTER) {
       for (const [re, to] of CLUSTER_API) if (re.test(path)) return path.replace(/^\/api\/[a-z]+/, to);
@@ -238,7 +238,9 @@
     const here = state.tab === "topology";
     clear(box).append(...state.topo.list.map((g) => h("button", { type: "button", class: "nav-item", title: g.title, "data-gw": g.id,
         "aria-current": here && g.id === state.topo.gid ? "page" : null,
-        onclick: () => { state.topo.gid = g.id; selectTab("topology"); } },
+        onclick: () => { state.topo.gid = g.id; selectTab("topology"); },
+        oncontextmenu: rowMenu([["Rename…", () => { state.topo.gid = g.id; state.topo.action = "rename"; selectTab("topology"); }],
+          ["Delete", () => { state.topo.gid = g.id; state.topo.action = "delete"; selectTab("topology"); }, "danger"]]) },
       h("span", { class: "dot st-" + g.status }), g.label)),
       h("button", { type: "button", class: "nav-item add", onclick: () => { state.topo.action = "new"; selectTab("topology"); } }, "＋ New gateway…"));
   }
@@ -1325,6 +1327,13 @@
       const own = els.lbmode.value === LB_OWN;
       for (const k of ["lb_spread", "lb_band", "lb_down", "lb_fail", "lb_attempts", "lb_alpha"]) els[k].closest("label").style.display = own ? "" : "none";
     }
+    function renameGateway(g) {
+      form("Rename gateway", [{ k: "name", l: "Name (optional)", v: g.name || "", ph: "e.g. Office DNS" }], (v) => {
+        if ((v.name || "").length > 40) return "The name can be at most 40 characters.";
+        if (v.name.trim()) g.name = v.name.trim(); else delete g.name;
+        return null;
+      }, "Rename");
+    }
     function gatewayForm(g) {
       const base = g || groups()[0];
       form(g ? "Edit gateway" : "New gateway", [
@@ -1641,6 +1650,8 @@
         load().then(() => {
           cv.loaded = true; refresh(); poll().catch(() => {});
           if (state.topo.action === "new") { state.topo.action = null; gatewayForm(null); }
+          else if (state.topo.action === "rename") { state.topo.action = null; const g = curGroup(); if (g) renameGateway(g); }
+          else if (state.topo.action === "delete") { state.topo.action = null; if (curGroup()) { cv.sel = { kind: "gw" }; delSel(); } }
         })
           .catch((ex) => { if (ex.message !== "unauthenticated") errorBox(msgEl, ex.message); });
       },
@@ -2932,19 +2943,85 @@
     // A row is a button: picking a client lists what it asked for in Top domains, picking a
     // domain lists who asked for it in Top clients.  o.picked is this list's picked row,
     // o.note says the list is filtered, o.onClear drops that filter.
+    // Clear: forget the counts and the top lists (of every node when the Node menu says Cluster)
+    async function clearStats() {
+      const all = state.target === CLUSTER;
+      if (!confirm("Clear the statistics" + (all ? " of every node in the cluster" : " of this node") + "?\n\nThe counts, the chart and the top lists start again from nothing. This cannot be undone.")) return;
+      try {
+        const r = (await api("POST", "/api/qstats/clear", {})).data || {};
+        const bad = (r.nodes || []).filter((n) => !n.ok);
+        await load();
+        if (bad.length) say(status, "warn", "Cleared, except on: " + bad.map((n) => n.name + " (" + n.error + ")").join(", "));
+        else say(status, "info", "The statistics are cleared.");
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not cleared: " + e.message); }
+    }
+
+    // Scan: an nmap of a client, run on the picked node; the report goes into the client's tooltip
+    const scanSeen = new Map();   // address → { state, text, at }
+    const scanKey = (a) => (state.target || "") + "|" + a;
+    function scanText(addr) {
+      const s = scanSeen.get(scanKey(addr));
+      if (!s) return "";
+      if (s.state === "running") return "nmap: scanning…";
+      const when = new Date((s.end || s.at) * 1000).toLocaleString();
+      return "nmap scan, " + when + (s.state === "error" ? " (failed)" : "") + ":\n" + (s.text.length > 2500 ? s.text.slice(0, 2500) + "\n…" : s.text);
+    }
+    async function scanClient(addr) {
+      try {
+        let j = (await api("POST", "/api/scan", { client: addr })).data;
+        scanSeen.set(scanKey(addr), j);
+        if (last) draw(last);   // (a redraw clears the message line, so the message comes after it)
+        say(status, "info", "Scanning " + addr + " with nmap… (up to two minutes; hover the client afterwards to read the result)");
+        while (j.state === "running") {
+          await new Promise((r) => setTimeout(r, 3000));
+          if (!bar.isConnected) return;   // the page was left
+          j = (await api("GET", "/api/scan?client=" + encodeURIComponent(addr))).data;
+        }
+        scanSeen.set(scanKey(addr), j);
+        if (last) draw(last);
+        say(status, j.state === "done" ? "info" : "warn", "The scan of " + addr + (j.state === "done" ? " is finished: hover the client to read it." : " failed: hover the client to read why."));
+      } catch (e) { scanSeen.delete(scanKey(addr)); if (last) draw(last); if (e.message !== "unauthenticated") say(status, "bad", "Scan of " + addr + ": " + e.message); }
+    }
+
     // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
-    async function addPolicyRow(name, keyword) {
+    async function addPolicyRow(name, keyword, client) {
+      client = client || "*";
       try {
         const cfg = (await api("GET", "/api/config")).config;
         cfg.dns = cfg.dns || {};
         const list = cfg.dns.policy || [];
-        const same = list.findIndex((r) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase());
-        if (same >= 0) { say(status, "warn", "There already is a policy row for " + name + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
-        list.unshift({ client: "*", name, servers: [keyword] });
+        const same = list.findIndex((r) => (r.client || "*") === client && String(r.name || "*").toLowerCase() === name.toLowerCase());
+        if (same >= 0) { say(status, "warn", "There already is a policy row for " + (client === "*" ? name : client + " asking for " + name) + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
+        list.unshift({ client, name, servers: [keyword] });
         cfg.dns.policy = list;
-        await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + keyword + " for " + name });
-        say(status, cfg.dns.policy_on === false ? "warn" : "info", "Added policy row 1: " + name + " → " + keyword + "." + (cfg.dns.policy_on === false ? " Policy-Based Resolution is switched off, so it does nothing until you switch it on (Configure ▸ DNS proxy ▸ Resolution)." : ""));
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + keyword + " for " + (client === "*" ? name : client + " / " + name) });
+        await load();
+        say(status, cfg.dns.policy_on === false ? "warn" : "info", "Added policy row 1: " + (client === "*" ? name : client + " asking for " + name) + " → " + keyword + "." + (cfg.dns.policy_on === false ? " Policy-Based Resolution is switched off, so it does nothing until you switch it on (Configure ▸ DNS proxy ▸ Resolution)." : ""));
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not added: " + e.message); }
+    }
+
+    // the row Block writes: this client, any name, answered NODATA
+    let blocked = new Set();   // clients with a Block row, for the icon after their name
+    const blockedOf = (cfg) => new Set(((cfg.dns || {}).policy || []).filter((r) => isBlockRow(r, r.client || "*") && (r.client || "*") !== "*").map((r) => r.client));
+    const isBlockRow = (r, client) => (r.client || "*") === client && String(r.name || "*") === "*" && (r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "nodata";
+    async function unblockClient(client) {
+      try {
+        const cfg = (await api("GET", "/api/config")).config;
+        const list = (cfg.dns && cfg.dns.policy) || [];
+        const keep = list.filter((r) => !isBlockRow(r, client));
+        if (keep.length === list.length) { say(status, "warn", client + " is not blocked any more."); return; }
+        cfg.dns.policy = keep;
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row removed from Statistics: unblock " + client });
+        await load();
+        say(status, "info", "Unblocked " + client + ": its policy row was removed.");
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not unblocked: " + e.message); }
+    }
+    async function clientMenu(e, addr) {
+      e.preventDefault(); e.stopPropagation();
+      let blocked = false;
+      try { const list = ((await api("GET", "/api/config")).config.dns || {}).policy || []; blocked = list.some((r) => isBlockRow(r, addr)); } catch (_) { /* offer Block */ }
+      rowMenu([["Scan", () => scanClient(addr)],
+        blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }
 
     function topTable(title, items, total, more, onMore, withHost, o) {
@@ -2957,21 +3034,24 @@
           ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
             h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
               // right-click a domain: add a Policy-Based Resolution row for it
-              oncontextmenu: !withHost && e.name !== "(others)" ? rowMenu([
+              oncontextmenu: e.name === "(others)" ? null : withHost ? (ev) => clientMenu(ev, e.name) : rowMenu([
                 ["Create PBR NODATA", () => addPolicyRow(e.name, "nodata")],
                 ["Create PBR NXDOMAIN", () => addPolicyRow(e.name, "nxdomain")],
-                ["Create PBR REFUSED", () => addPolicyRow(e.name, "refused")]]) : null },
+                ["Create PBR REFUSED", () => addPolicyRow(e.name, "refused")]]) },
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
-                  const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") : "";
+                  const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") + (scanText(e.name) ? "\n\n" + scanText(e.name) : "") : "";
                   // the handlers are properties of the new element, so that morphing the list into the old one gives the reused button
                   // this row's name (a listener added with addEventListener would stay on it and look up the name it had before)
                   const go = (ev) => whoisFor(ev.currentTarget, e.name, tail, head);
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
                     title: cachedWhois(e.name, head, tail) || (withHost ? (head + "\n" + e.name + tail) : "Hover for whois" + tail),
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name), onmouseenter: go, onfocus: go }, e.name);
-                  return b;
+                  return withHost && blocked.has(e.name)
+                    ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
+                      title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫"))
+                    : b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
               h("td", { class: "num" }, n0(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
@@ -3031,7 +3111,8 @@
       const my = ++seq;
       try {
         const wantUpd = sel === "update"; // the card of recent updates belongs to the Updates tile
-        const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null]);
+        const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null,
+          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); }, () => null)]);
         if (my !== seq) return;
         lastAt = Date.now();
         draw(d);
@@ -3058,7 +3139,8 @@
         toIn = h("input", { type: "datetime-local", "aria-label": "To" });
         customRow = h("span", { class: "qcustom hidden" }, fromIn, " to ", toIn,
           h("button", { class: "btn", type: "button", onclick: load }, "Apply"), h("span", { class: "muted small" }, " only the last 30 days exist"));
-        bar = h("div", { class: "toolbar qbar" }, h("span", { class: "segs", role: "group", "aria-label": "Time range" }, [...rangeBtns.values()]), customRow);
+        bar = h("div", { class: "toolbar qbar" }, h("span", { class: "segs", role: "group", "aria-label": "Time range" }, [...rangeBtns.values()]),
+          h("button", { class: "btn", type: "button", title: "Forget the counts and top lists", onclick: clearStats }, "Clear"), customRow);
         tiles = h("div", { class: "qtiles" });
         chartBox = h("div", { class: "card qchartcard" });
         pies = h("div", { class: "qpies" });

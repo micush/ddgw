@@ -547,5 +547,8 @@ table.qtop { table-layout: fixed; }
 table.qtop th.num:nth-child(2) { width: 6.5rem; }
 table.qtop th.num:nth-child(3) { width: 5rem; }
 table.qtop td:first-child { overflow: hidden; }
+.qname { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.qname .qlink { flex: 0 1 auto; min-width: 0; }
+.qblocked { flex: none; font-size: .85em; cursor: default; }
 table.qtop .qlink { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
 table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

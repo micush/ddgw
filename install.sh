@@ -321,6 +321,17 @@ install_frr() {
   return 0
 }
 
+# nmap runs the "Scan" of a client on the Statistics page.  Only that feature needs it, so a failure is a warning.
+install_nmap() {
+  if ! assumed_missing nmap && have nmap; then
+    info "nmap already present"
+    return 0
+  fi
+  info "installing nmap (Statistics ▸ right-click a client ▸ Scan)"
+  (pkg_install nmap) || warn "nmap could not be installed. Everything else works; install the 'nmap' package yourself before using Scan."
+  return 0
+}
+
 # ── Go toolchain (>= $GO_MIN) ────────────────────────────────────────────────
 go_ok() {
   local bin=$1 v
@@ -411,6 +422,7 @@ if [ "$SKIP_DEPS" = 1 ]; then
 else
   install_deps
   install_frr
+  install_nmap
 fi
 step "Go toolchain"
 if find_go; then info "using $GO ($("$GO" version | awk '{print $3}'))"

@@ -534,3 +534,42 @@ func newLocalListener() (string, error) {
 	defer l.Close()
 	return l.Addr().String(), nil
 }
+
+func TestSessionsSurviveARestart(t *testing.T) {
+	e := newWebEnv(t)
+	if r := e.login("alice", "pw"); r.code != 200 {
+		t.Fatalf("login: %d", r.code)
+	}
+	tok := strings.TrimPrefix(cookie, sessionCookie+"=")
+	if tok == "" {
+		t.Fatal("no session cookie")
+	}
+	f := filepath.Join(e.ws.stateDir, sessionsFile)
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), tok) {
+		t.Fatal("the cookie value itself must not be written to disk")
+	}
+	if fi, _ := os.Stat(f); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("sessions file mode %v", fi.Mode())
+	}
+	// a new process: a fresh WebServer over the same state dir
+	ws2 := NewWebServer(e.mg, nil, e.auth)
+	r := httptest.NewRequest("GET", "/api/session", nil)
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: tok})
+	if ws2.lookup(r) == nil {
+		t.Fatal("the session did not survive the restart")
+	}
+	// a stopping daemon leaves the file alone
+	ws2.Stop()
+	if _, err := os.Stat(f); err != nil {
+		t.Fatal("Stop removed the saved sessions")
+	}
+	// logout removes it
+	e.do("POST", "/api/logout", nil, withAuth(e, true))
+	if _, err := os.Stat(f); err == nil {
+		t.Fatal("no sessions left but the file is still there")
+	}
+}

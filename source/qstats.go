@@ -797,3 +797,15 @@ func qstatsFilter(rcode, client, domain string) (QFilter, error) {
 	f.Client, f.Domain = client, domain
 	return f, nil
 }
+
+// Clear forgets every count and top list (Statistics ▸ Clear).  The counting-since time starts again.
+func (s *QStats) Clear() {
+	s.flush()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mins = [qsMinSlots]qsMin{}
+	s.fine = [qsFineSlots]qsTop{}
+	s.coarse = [qsCoarseSlots]qsTop{}
+	s.who = nil
+	s.start = s.now()
+}

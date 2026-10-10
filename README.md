@@ -72,9 +72,9 @@ Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjar
 
 The installer builds Anyname from the source tree, installing only the prerequisites that are missing:
 
-- **gcc and the PAM headers**, **iproute2**, and **FRR** (for the Anycast pages).
+- **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) and **nmap** (for Scan on the Statistics page).
 - **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/ddgw/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
-- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page.
+- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap install is a warning too; only Scan needs it.
 
 It then installs `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw` systemd unit.
 
@@ -293,7 +293,7 @@ Probe domains can be set per server (`server_queries`), and a gateway can have i
 
 ## Topology
 
-The first page of the GUI is a drawing of your configuration. Each **gateway is an item under Topology** in the sidebar, with *＋ New gateway…* at the end.
+The first page of the GUI is a drawing of your configuration. Each **gateway is an item under Topology** in the sidebar (right-click it ▸ **Rename…** or **Delete**), with *＋ New gateway…* at the end.
 
 The drawing has three kinds of shape:
 
@@ -596,6 +596,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
 | `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
+| `--stats-clear` `[--all-nodes]`, `--scan ADDR` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report) |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
@@ -612,7 +613,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 
 **Exposure.** The GUI can reconfigure a daemon that runs as root and listens on all interfaces by default. Bind it to a management address (`"listen": "10.0.0.5:53853"`) or firewall the port.
 
-**Sessions and cookies.** Sessions are kept in memory, so they are lost on restart; a user's sessions also end when that user's password changes, the account is deleted or it expires. Cookies are HttpOnly, Secure and SameSite=Strict, named with the `__Host-` prefix. Every change carries a CSRF token, and a strict CSP (no inline script) is in force.
+**Sessions and cookies.** Sessions are kept in memory and saved to `sessions.json` in the state directory (mode 0600, only a SHA-256 of each cookie), so an upgrade or a restart of the daemon does not sign anyone out; the idle timeout and the 12 hour limit still apply. Changing the GUI listen address does sign everyone out. A user's sessions also end when that user's password changes, the account is deleted or it expires. Cookies are HttpOnly, Secure and SameSite=Strict, named with the `__Host-` prefix. Every change carries a CSRF token, and a strict CSP (no inline script) is in force.
 
 **Failed logins** are limited. By default, 3 wrong passwords within 1 minute lock that address, and that address together with that user name (never the user name alone), out for 15 minutes. All three numbers are on Configure ▸ Web GUI (`web.max_failed_logins`, `web.failed_login_window_minutes`, `web.lockout_minutes`). A failed login gets one message that does not say what was wrong, which group is needed, or how many tries are left, because that would give a guesser a target. Only once an address is locked out does the login page say "Too many failed attempts." and disable its form until the lockout ends.
 
@@ -767,6 +768,12 @@ The range is Last Hour, Last Day, Last Week, Last Month, or a custom start and e
 **Drilling down.** Click a tile (No Error, Server Failure, NX Domain, Refused) to limit the chart, the donuts and the top lists to that kind of answer, for example to see which domains get NXDOMAIN and who asks for them. Total Queries clears it. Click a client to list the domains it asked for, or a domain to list the clients that asked for it; this combines with the tiles.
 
 **Answering a name yourself.** Right-click a name in Top domains ▸ **Create PBR NODATA**, **Create PBR NXDOMAIN** or **Create PBR REFUSED** adds a row (any client, that exact name) at the top of the Policy-Based Resolution table and saves it, so the proxy answers that name itself from then on and no longer asks the servers. The statistics still count the answer under its kind (NX Domain, and so on). An existing row for the name is left alone.
+
+**Silencing a client.** Right-click a client in Top clients ▸ **Block** (a client that is blocked has a 🚫 after its name, and its item reads **Unblock**, which removes that row) puts a NODATA row for that client (any name) at the top of the table, so nothing it asks reaches the servers any more and it gets no answers.
+
+**Scanning a client.** Right-click a client ▸ **Scan** runs nmap on the node you are looking at (`-Pn -F -sV -O`, the 100 commonest ports with service and OS detection, at most two minutes; two scans at a time). When it is done the client's tooltip shows a short summary: whether the host is up, its operating system, the MAC address and its maker, and the open ports with the service and version on each (twelve at most). nmap is a prerequisite the installer adds; without it the scan says so.
+
+**Clearing the statistics.** **Clear** (next to the range buttons) forgets the counts and top lists of the node, or of every node when the Node menu says Cluster, and rewrites `stats.json.gz` at once.
 
 **Names and whois.** Client names come from a PTR lookup that asks the DNS servers Anyname forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file. A client with no name is asked again after 2 minutes, and a name is kept for 10.
 
