@@ -529,6 +529,7 @@
       const together = dual ? "IPv4: " + fam("v4") + "; IPv6: " + fam("v6") : null;
       return ["Gateway " + gwLabel(g), st.why && st.why !== together ? st.why : "", upText(st.uptime),
         ...(dual ? [["IPv4", "v4"], ["IPv6", "v6"]].map(([n, af]) => n + " — " + fam(af)) : []),
+        (g.more_vip4 || []).length + (g.more_vip6 || []).length ? "Also answers on " + [...(g.more_vip4 || []), ...(g.more_vip6 || [])].join(", ") : "",
         membersText(st.members), st.vmac && st.vmac.verdict !== "off" && !(st.why || "").startsWith("Virtual MACs:") ? vmacLine(st.vmac) : ""].filter(Boolean).join("\n");
     };
     const gwAddr = (g) => bareIP(g.vip4) || bareIP(g.vip6) || "gateway " + g.group_id;
@@ -1341,6 +1342,8 @@
         { k: "name", l: "Name (optional)", v: g ? (g.name || "") : "", ph: "e.g. Office DNS" },
         { k: "vip4", l: "Shared IPv4 address / prefix", v: g ? g.vip4 : "", ph: "10.0.0.1/24" },
         { k: "vip6", l: "Shared IPv6 address / prefix (optional)", v: g ? g.vip6 : "", ph: "2001:db8::1/64" },
+        { k: "more4", l: "More IPv4 addresses (same subnet, optional)", v: g ? (g.more_vip4 || []).join(", ") : "", ph: "10.0.0.2, 10.0.0.3" },
+        { k: "more6", l: "More IPv6 addresses (same subnet, optional)", v: g ? (g.more_vip6 || []).join(", ") : "", ph: "2001:db8::2" },
         { k: "iface", l: "Network interface", v: g ? g.interface : (base ? base.interface : "eth0") },
         { k: "ecs", l: "Tell the DNS servers which network the client is on (ECS)", v: ecsOn(g) ? "on" : "off", options: ["off", "on"] },
         { k: "fb", l: "Fallback DNS servers (optional)", v: fallbackOf(g).join(", "), ph: "e.g. 1.1.1.1, 9.9.9.9" },
@@ -1373,10 +1376,18 @@
         if (v.vip4 && !/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(v.vip4)) return "The IPv4 address needs a prefix length, e.g. 10.0.0.1/24.";
         if (v.vip6 && !(v.vip6.includes(":") && /^[0-9a-fA-F:.]+\/\d+$/.test(v.vip6))) return "The IPv6 address needs a prefix length, e.g. 2001:db8::1/64.";
         if (!v.iface) return "Choose the network interface the gateway runs on.";
+        const more4 = (v.more4 || "").split(/[\s,;]+/).filter(Boolean), more6 = (v.more6 || "").split(/[\s,;]+/).filter(Boolean);
+        if (more4.some((a) => !/^\d+\.\d+\.\d+\.\d+$/.test(a))) return "More IPv4 addresses are plain addresses without a prefix, e.g. 10.0.0.2, 10.0.0.3.";
+        if (more6.some((a) => !a.includes(":") || !/^[0-9a-fA-F:.]+$/.test(a))) return "More IPv6 addresses are plain addresses without a prefix, e.g. 2001:db8::2.";
+        if ((more4.length && !v.vip4) || (more6.length && !v.vip6)) return "Further addresses need the gateway's own address of the same kind first.";
+        const taken = groups().find((x) => x !== g && [x.vip4, x.vip6, ...(x.more_vip4 || []), ...(x.more_vip6 || [])].some((a) => a && [...more4, ...more6].includes(a.split("/")[0])));
+        if (taken) return "Gateway " + gwLabel(taken) + " already uses one of those addresses.";
         const clash = groups().find((x) => x !== g && [x.vip4, x.vip6].some((a) => a && [v.vip4, v.vip6].some((b) => b && a.split("/")[0] === b.split("/")[0])));
         if (clash) return "Gateway " + gwLabel(clash) + " already uses that address.";
         if (g) {
           g.vip4 = v.vip4; g.vip6 = v.vip6; g.interface = v.iface;
+          if (more4.length) g.more_vip4 = more4; else delete g.more_vip4;
+          if (more6.length) g.more_vip6 = more6; else delete g.more_vip6;
           if (v.name.trim()) g.name = v.name.trim(); else delete g.name;
           if ((v.ecs === "on") !== ecsOn(g)) { ensureDNS(g); g.dns.ecs = v.ecs === "on"; }
           if (fb.join(",") !== fallbackOf(g).join(",")) { ensureDNS(g); if (fb.length) g.dns.fallback_servers = fb; else delete g.dns.fallback_servers; }
@@ -1386,7 +1397,7 @@
         }
         const id = Number(v.id);
         if (!(id >= 1 && id <= 255) || groups().some((x) => x.group_id === id)) return "Pick an unused group number between 1 and 255.";
-        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, real_macs: true, dns: { servers: [], server_queries: {}, ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
+        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, ...(more4.length ? { more_vip4: more4 } : {}), ...(more6.length ? { more_vip6: more6 } : {}), real_macs: true, dns: { servers: [], server_queries: {}, ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
         setGid(id); cv.sel = { kind: "gw" };
         return null;
       }, g ? "Save" : "Add gateway");
@@ -1504,7 +1515,7 @@
         if (/^(127\.|0\.|22\d\.|23\d\.)/.test(a) || /^(::1?|fe80:|ff)/.test(a)) return "Loopback, link-local and multicast addresses cannot be used.";
         // the same anycast address on several gateways is how an anycast service is run; only this gateway's own list and every gateway's shared address are refused
         const own = (g.extra_vips || []).includes(a) && !(a === edit) ? g : null;
-        const shared = groups().find((x) => [x.vip4, x.vip6].some((z) => z && z.split("/")[0].toLowerCase() === a));
+        const shared = groups().find((x) => [x.vip4, x.vip6, ...(x.more_vip4 || []), ...(x.more_vip6 || [])].some((z) => z && z.split("/")[0].toLowerCase() === a));
         if (own || shared) return "Gateway " + gwLabel(own || shared) + " already uses that address.";
         g.extra_vips = g.extra_vips || [];
         if (edit) g.extra_vips[g.extra_vips.indexOf(edit)] = a; else g.extra_vips.push(a);
@@ -1792,6 +1803,8 @@
     { k: "interface", l: "Interface", t: "text" },
     { shared: true, k: "vip4", l: "IPv4 VIP/prefix", t: "text", hint: "e.g. 10.0.0.1/24 — empty to disable" },
     { shared: true, k: "vip6", l: "IPv6 VIP/prefix", t: "text", hint: "e.g. 2001:db8::1/64 — empty to disable" },
+    { shared: true, k: "more_vip4", l: "More IPv4 addresses", t: "list", hint: "Same subnet as the VIP, one per line, no prefix length." },
+    { shared: true, k: "more_vip6", l: "More IPv6 addresses", t: "list", hint: "Same subnet as the VIP, one per line, no prefix length." },
     { k: "priority", l: "Priority", t: "int", min: 0, max: 255 },
     { shared: true, k: "lb_method", l: "LB method", t: "select", options: LB },
     { k: "weight", l: "Weight", t: "int", min: 0, max: 255 },
@@ -1846,6 +1859,10 @@
     { shared: true, k: "probe_interval_ms", l: "Probe interval (ms)", t: "int", min: 1 },
     { shared: true, k: "probe_timeout_ms", l: "Probe timeout (ms)", t: "int", min: 1 },
     { shared: true, k: "query_timeout_ms", l: "Forward timeout (ms)", t: "int", min: 1 },
+    { section: "Client names", note: "Top clients ▸ right-click ▸ Name… sends a dynamic update (RFC 2136) for the name and its reverse record to the primary server of the zone." },
+    { shared: true, k: "register_key_name", l: "Registration key name", t: "text", hint: "optional TSIG key name, e.g. ddgw-key; empty sends the update unsigned" },
+    { shared: true, k: "register_key", l: "Registration key (base64)", t: "text", hint: "the key's secret as base64 (HMAC-SHA256)" },
+    { shared: true, k: "register_ttl", l: "Registered record TTL (s)", t: "int", min: 0, max: 604800, hint: "0 = 300" },
   ];
   const WEB_FIELDS = [
     { k: "listen", l: "Listen address", t: "text", hint: "host:port, default :53853" },
@@ -2757,13 +2774,13 @@
     const pct = (n, t) => (t <= 0 ? "–" : n === 0 ? "0%" : (100 * n / t).toFixed(n / t < 0.001 ? 2 : 1) + "%");
 
     let status, bar, cnote, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;
-    let range = "1h", qpsView = false, sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false;
+    let range = "1h", qpsView = false, sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false, cFilter = "", dFilter = "", filterTimer = 0;
 
     // ── fetching ──
     // the picked node (Node menu in the top bar) answers; pick another member there
     // sel: the answer kind a tile picked ("" = everything); the daemon limits the donuts and
     // top lists to it, the chart just shows that one line
-    const q = (from, to) => "/api/qstats?from=" + encodeURIComponent(from) + (to ? "&to=" + encodeURIComponent(to) : "") + (sel ? "&rcode=" + sel : "") + (pickClient ? "&client=" + encodeURIComponent(pickClient) : "") + (pickDomain ? "&domain=" + encodeURIComponent(pickDomain) : "");
+    const q = (from, to) => "/api/qstats?from=" + encodeURIComponent(from) + (to ? "&to=" + encodeURIComponent(to) : "") + (sel ? "&rcode=" + sel : "") + (pickClient ? "&client=" + encodeURIComponent(pickClient) : "") + (pickDomain ? "&domain=" + encodeURIComponent(pickDomain) : "") + (cFilter ? "&cmatch=" + encodeURIComponent(cFilter) : "") + (dFilter ? "&dmatch=" + encodeURIComponent(dFilter) : "");
     const KINDS = { no_error: "noerror", server_failure: "servfail", nx_domain: "nxdomain", refused: "refused", updates: "update" };
     async function fetchData() {
       let from = range, to = "";
@@ -2984,7 +3001,7 @@
     }
 
     // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
-    async function addPolicyRow(name, keyword, client) {
+    async function addPolicyRow(name, keyword, client, dest) {
       client = client || "*";
       try {
         const cfg = (await api("GET", "/api/config")).config;
@@ -2992,11 +3009,11 @@
         const list = cfg.dns.policy || [];
         const same = list.findIndex((r) => (r.client || "*") === client && String(r.name || "*").toLowerCase() === name.toLowerCase());
         if (same >= 0) { say(status, "warn", "There already is a policy row for " + (client === "*" ? name : client + " asking for " + name) + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
-        list.unshift({ client, name, servers: [keyword] });
+        list.unshift(dest ? { client, name, servers: [], dest } : { client, name, servers: [keyword] });
         cfg.dns.policy = list;
-        await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + keyword + " for " + (client === "*" ? name : client + " / " + name) });
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + (dest ? "rewrite to " + dest : keyword) + " for " + (client === "*" ? name : client + " / " + name) });
         await load();
-        say(status, cfg.dns.policy_on === false ? "warn" : "info", "Added policy row 1: " + (client === "*" ? name : client + " asking for " + name) + " → " + keyword + "." + (cfg.dns.policy_on === false ? " Policy-Based Resolution is switched off, so it does nothing until you switch it on (Configure ▸ DNS proxy ▸ Resolution)." : ""));
+        say(status, cfg.dns.policy_on === false ? "warn" : "info", "Added policy row 1: " + (client === "*" ? name : client + " asking for " + name) + " → " + (dest || keyword) + "." + (cfg.dns.policy_on === false ? " Policy-Based Resolution is switched off, so it does nothing until you switch it on (Configure ▸ DNS proxy ▸ Resolution)." : ""));
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not added: " + e.message); }
     }
 
@@ -3004,6 +3021,17 @@
     let blocked = new Set();   // clients with a Block row, for the icon after their name
     let blockedNames = new Map();   // domains answered by a keyword (any client): lower-case name -> keyword
     const KEYWORD_ROWS = ["null", "nxdomain", "nodata", "refused"];
+    let rewrittenNames = new Map();   // domains answered with a Destination name (any client): lower-case name -> destination
+    const isRewriteRow = (r, name) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase() && !!String(r.dest || "").trim() && String(r.dest).trim() !== "*" &&
+      ((r.servers || []).length === 0 || ((r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "pool"));
+    const rewrittenNamesOf = (cfg) => {
+      const m = new Map();
+      for (const r of ((cfg.dns || {}).policy || [])) {
+        const n = String(r.name || "").toLowerCase();
+        if (n && n !== "*" && !m.has(n) && isRewriteRow(r, n)) m.set(n, String(r.dest).trim());
+      }
+      return m;
+    };
     const blockedNamesOf = (cfg) => {
       const m = new Map();
       for (const r of ((cfg.dns || {}).policy || [])) {
@@ -3028,43 +3056,123 @@
     }
     // a domain: the rows that answer exactly this name with a keyword for every client
     const isNameRow = (r, name) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase() && (r.servers || []).length === 1 && KEYWORD_ROWS.includes(String(r.servers[0]).toLowerCase());
-    async function unblockName(name) {
+    async function unblockName(name, rewrite) {
       try {
         const cfg = (await api("GET", "/api/config")).config;
         const list = (cfg.dns && cfg.dns.policy) || [];
-        const keep = list.filter((r) => !isNameRow(r, name));
+        const keep = list.filter((r) => !(rewrite ? isRewriteRow(r, name) : isNameRow(r, name)));
         if (keep.length === list.length) { say(status, "warn", name + " has no such policy row any more."); return; }
         cfg.dns.policy = keep;
-        await api("PUT", "/api/config", { config: cfg, note: "Policy row removed from Statistics: unblock " + name });
+        await api("PUT", "/api/config", { config: cfg, note: "Policy row removed from Statistics: " + (rewrite ? "remove rewrite of " : "unblock ") + name });
         await load();
-        say(status, "info", "Unblocked " + name + ": its policy row was removed.");
+        say(status, "info", (rewrite ? "Rewrite of " + name + " removed" : "Unblocked " + name) + ": its policy row was removed.");
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not unblocked: " + e.message); }
+    }
+    // Rewrite…: a small dialog for the Destination name of the row (an address, records, or another name to ask for)
+    function askRewrite(name) {
+      const input = h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "10.5.5.5   or   other.example.com", "aria-label": "Answer with" });
+      const err = h("div", { "aria-live": "polite" });
+      const d = h("dialog", { class: "cv-dialog", "aria-label": "Rewrite " + name });
+      const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => d.remove());
+      d.append(h("h2", {}, "Rewrite " + name),
+        h("form", { onsubmit: (ev) => {
+          ev.preventDefault();
+          const v = input.value.trim();
+          if (!v) { errorBox(err, "Write an address, or the name to ask for instead."); return; }
+          if (v.length > 253 || /[\s]{2,}/.test(v)) { errorBox(err, "That is too long or not valid."); return; }
+          close(); addPolicyRow(name, "", "*", v);
+        } },
+        h("label", { class: "f wide" }, "Answer with", input,
+          h("span", { class: "hint" }, "An address (10.5.5.5, or 10.5.5.5, 2001:db8::5) makes the name that address. A name (other.example.com) asks the servers for that name instead and answers as if it were " + name + ". Records such as A 10.5.5.5; TTL 300 or CNAME host.example.com work too.")),
+        err,
+        h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Rewrite"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
+      root.append(d);
+      d.showModal();
+      input.focus();
     }
     async function domainMenu(e, name) {
       e.preventDefault(); e.stopPropagation();
-      let has = false;
-      try { has = (((await api("GET", "/api/config")).config.dns || {}).policy || []).some((r) => isNameRow(r, name)); } catch (_) { /* offer Block */ }
-      rowMenu([has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")]])(e);
+      let has = false, rewritten = false;
+      try {
+        const list = (((await api("GET", "/api/config")).config.dns || {}).policy || []);
+        has = list.some((r) => isNameRow(r, name)); rewritten = list.some((r) => isRewriteRow(r, name));
+      } catch (_) { /* offer Block and Rewrite */ }
+      rowMenu(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
+        : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])(e);
     }
-    async function clientMenu(e, addr) {
+    // Name…: give a client a name by hand (Settings ▸ client_names); an empty name removes it
+    async function setClientName(addr, name, old) {
+      try {
+        const cfg = (await api("GET", "/api/config")).config;
+        cfg.dns = cfg.dns || {};
+        const names = Object.assign({}, cfg.dns.client_names || {});
+        if (name) names[addr] = name; else delete names[addr];
+        if (Object.keys(names).length) cfg.dns.client_names = names; else delete cfg.dns.client_names;
+        await api("PUT", "/api/config", { config: cfg, note: "Client name from Statistics: " + addr + (name ? " is " + name : " name removed") });
+        await load();
+        if (!name) { say(status, "info", "The name of " + addr + " was removed (DNS was not changed)."); return; }
+        say(status, "info", addr + " is now named " + name + "; registering it in DNS…");
+        try {
+          const r = (await api("POST", "/api/regname", { client: addr, name, old: old || "" })).data || {};
+          say(status, r.ok ? "info" : "bad", (r.ok ? "Registered " + name + ": " : "The name is saved, but DNS registration failed: ") + (r.lines || []).join("; ") + (r.ok || !r.error || (r.lines || []).length ? "" : r.error));
+        } catch (e2) { if (e2.message !== "unauthenticated") say(status, "bad", "The name is saved, but DNS registration failed: " + e2.message); }
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Name not saved: " + e.message); }
+    }
+    function askName(addr, current) {
+      const input = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "64", value: current || "", placeholder: "e.g. ann-pc.corp.example", "aria-label": "Name" });
+      const err = h("div", { "aria-live": "polite" });
+      const d = h("dialog", { class: "cv-dialog", "aria-label": "Name " + addr });
+      const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => d.remove());
+      d.append(h("h2", {}, "Name " + addr),
+        h("form", { onsubmit: (ev) => {
+          ev.preventDefault();
+          const v = input.value.trim();
+          const lc = v.toLowerCase().replace(/\.$/, "");
+          if (v && !(lc.split(".").length >= 2 && lc.split(".").every((l) => /^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$/.test(l)))) { errorBox(err, "Give the full host name: at least two parts separated by dots, using letters, digits, - and _ (e.g. ann-pc.corp.example)."); return; }
+          close(); setClientName(addr, lc, current);
+        } },
+        h("label", { class: "f wide" }, "Name", input,
+          h("span", { class: "hint" }, "The full host name. It is shown under the address in Top clients instead of the reverse-DNS name, found by the Filter box, shared by the cluster, and registered in DNS: an update for its A/AAAA record and the PTR record of the address goes to the primary server of each zone. Renaming also removes the old name's record. Empty removes the name and leaves DNS as it is.")),
+        err,
+        h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Save"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
+      root.append(d);
+      d.showModal();
+      input.focus(); input.select();
+    }
+    async function clientMenu(e, addr, entry) {
       e.preventDefault(); e.stopPropagation();
       let blocked = false;
       try { const list = ((await api("GET", "/api/config")).config.dns || {}).policy || []; blocked = list.some((r) => isBlockRow(r, addr)); } catch (_) { /* offer Block */ }
+      const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
       rowMenu([["Scan", () => scanClient(addr)],
+        ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }
 
+    // the filter box of a top list: the server keeps only the names that contain the text (everything it counted, not only
+    // the ten shown), a moment after the typing stops
+    function onFilter(withHost, text) {
+      if (withHost) cFilter = text.trim().toLowerCase(); else dFilter = text.trim().toLowerCase();
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(load, 300);
+    }
     function topTable(title, items, total, more, onMore, withHost, o) {
-      const rows = (more ? items : items.slice(0, 10));
+      const filtered = !!(withHost ? cFilter : dFilter);
+      const rows = (more || filtered ? items : items.slice(0, 10));   // a filter lists every match
       const mine = withHost ? "Client" : "Domain";
       return h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, title), h("span", { class: "grow" }),
-        items.length > 10 ? h("button", { class: "btn", type: "button", onclick: onMore }, more ? "Fewer" : "More") : null),
+        h("input", { type: "text", class: "qfilter", placeholder: "Filter", "aria-label": "Filter " + (withHost ? "clients" : "domains"), autocomplete: "off", spellcheck: "false",
+          value: withHost ? cFilter : dFilter, oninput: (ev) => onFilter(withHost, ev.currentTarget.value),
+          onkeydown: (ev) => { if (ev.key === "Escape" && ev.currentTarget.value) { ev.currentTarget.value = ""; onFilter(withHost, ""); } } }),
+        items.length > 10 && !filtered ? h("button", { class: "btn", type: "button", onclick: onMore }, more ? "Fewer" : "More") : null),
         h("div", { class: "hint qnote" }, o.note ? [o.note, " ", h("button", { class: "qlink", type: "button", onclick: o.onClear }, "Show all")] : "\u00a0"),
         h("div", { class: "body flush" }, rows.length
           ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
             h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
               // right-click a domain: add a Policy-Based Resolution row for it
-              oncontextmenu: e.name === "(others)" ? null : (ev) => (withHost ? clientMenu(ev, e.name) : domainMenu(ev, e.name)) },
+              oncontextmenu: e.name === "(others)" ? null : (ev) => (withHost ? clientMenu(ev, e.name, e) : domainMenu(ev, e.name)) },
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
@@ -3076,16 +3184,19 @@
                     title: cachedWhois(e.name, head, tail) || (withHost ? (head + "\n" + e.name + tail) : "Hover for whois" + tail),
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name), onmouseenter: go, onfocus: go }, e.name);
                   const kw = withHost ? null : blockedNames.get(e.name.toLowerCase());
+                  const rw = withHost || kw ? null : rewrittenNames.get(e.name.toLowerCase());
                   return withHost && blocked.has(e.name)
                     ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
                       title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫"))
                     : kw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "in the Policy-Based Resolution table",
                       title: "Answered by the Policy-Based Resolution table: " + kw.toUpperCase() + " for every client. Edit it on Configure ▸ DNS proxy ▸ Resolution." }, "🚫"))
+                    : rw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "rewritten",
+                      title: "Rewritten by the Policy-Based Resolution table: answered with " + rw + " for every client. Right-click ▸ Remove rewrite to undo it." }, "✏️"))
                     : b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
               h("td", { class: "num" }, n0(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
-          : h("div", { class: "empty" }, "No queries in this range.")));
+          : h("div", { class: "empty" }, filtered ? "Nothing matches “" + (withHost ? cFilter : dFilter) + "”." : "No queries in this range.")));
     }
 
     const shareBase = (d) => { const k = Object.keys(KINDS).find((x) => KINDS[x] === sel); return k ? d.sums[k] : d.sums.total; };
@@ -3142,7 +3253,7 @@
       try {
         const wantUpd = sel === "update"; // the card of recent updates belongs to the Updates tile
         const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null,
-          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); blockedNames = blockedNamesOf(r.config); }, () => null)]);
+          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); blockedNames = blockedNamesOf(r.config); rewrittenNames = rewrittenNamesOf(r.config); }, () => null)]);
         if (my !== seq) return;
         lastAt = Date.now();
         draw(d);

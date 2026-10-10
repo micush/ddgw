@@ -30,6 +30,9 @@ type SharedGroup struct {
 	// ExtraVIPs are the anycast addresses (omitted when none, so the hash of a
 	// cluster without any is unchanged).
 	ExtraVIPs []string `json:"extra_vips,omitempty"`
+	// MoreVIP4 / MoreVIP6 are the further shared addresses in the subnet (omitted when none: the hash is unchanged).
+	MoreVIP4 []string `json:"more_vip4,omitempty"`
+	MoreVIP6 []string `json:"more_vip6,omitempty"`
 	// Neighbors are the unicast addresses of every node of the gateway, this one included (a node skips its own);
 	// omitted when empty (multicast), so the hash of a multicast cluster is unchanged.
 	Neighbors []string `json:"neighbors,omitempty"`
@@ -74,7 +77,7 @@ func sharedOf(dc *DaemonConfig) SharedConfig {
 		sc.Groups = append(sc.Groups, SharedGroup{
 			GroupID: g.GroupID, Name: g.Name, VIP4: g.VIP4, VIP6: g.VIP6, LBMethod: g.LBMethod,
 			HelloMS: g.HelloMS, HoldMS: g.HoldMS, MaxAFNs: g.MaxAFNs, Key: g.Key, DNSProxy: g.DNSProxy,
-			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors), RealMACs: g.RealMACs, ExcludedNodes: nonEmpty(g.ExcludedNodes),
+			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), MoreVIP4: nonEmpty(g.MoreVIP4), MoreVIP6: nonEmpty(g.MoreVIP6), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors), RealMACs: g.RealMACs, ExcludedNodes: nonEmpty(g.ExcludedNodes),
 		})
 	}
 	sort.Slice(sc.Groups, func(i, j int) bool { return sc.Groups[i].GroupID < sc.Groups[j].GroupID })
@@ -113,6 +116,8 @@ func applySharedGroup(gc *GroupConfig, g SharedGroup) {
 	gc.HelloMS, gc.HoldMS, gc.MaxAFNs, gc.Key, gc.DNSProxy = g.HelloMS, g.HoldMS, g.MaxAFNs, g.Key, g.DNSProxy
 	gc.DNS = cloneDNSPtr(g.DNS)
 	gc.ExtraVIPs = append([]string(nil), g.ExtraVIPs...)
+	gc.MoreVIP4 = append([]string(nil), g.MoreVIP4...)
+	gc.MoreVIP6 = append([]string(nil), g.MoreVIP6...)
 	gc.PausedVIPs = append([]string(nil), g.PausedVIPs...)
 	gc.PausedAll = g.PausedAll
 	gc.RealMACs = g.RealMACs
@@ -192,6 +197,15 @@ func cloneDNS(d DNSConfig) DNSConfig {
 	d.ClientExempt = append([]string(nil), d.ClientExempt...)
 	if len(d.ClientExempt) == 0 {
 		d.ClientExempt = nil
+	}
+	if len(d.ClientNames) > 0 {
+		m := make(map[string]string, len(d.ClientNames))
+		for k, v := range d.ClientNames {
+			m[k] = v
+		}
+		d.ClientNames = m
+	} else {
+		d.ClientNames = nil
 	}
 	d.PausedServers = append([]string(nil), d.PausedServers...)
 	if len(d.PausedServers) == 0 {

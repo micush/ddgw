@@ -174,7 +174,7 @@ func clusterGatherReq[T any](ctx context.Context, m *Mgmt, req proxyReq, timeout
 // clusterQStats is qstats.get for the whole cluster.
 func (m *Mgmt) clusterQStats(ctx context.Context, actor string, from, to time.Time, f QFilter) (*QStatsResult, error) {
 	q := url.Values{"from": {strconv.FormatInt(from.Unix(), 10)}, "to": {strconv.FormatInt(to.Unix(), 10)},
-		"rcode": {f.Rcode}, "client": {f.Client}, "domain": {f.Domain}}
+		"rcode": {f.Rcode}, "client": {f.Client}, "domain": {f.Domain}, "cmatch": {f.CMatch}, "dmatch": {f.DMatch}}
 	parts, infos := clusterGather(ctx, m, actor, "/api/qstats?"+q.Encode(), func() *QStatsResult { return qstats.Query(from, to, f) })
 	if len(parts) == 0 {
 		return nil, errors.New("no node answered")
@@ -259,6 +259,9 @@ func addCounts(dst map[string]*NameCount, src []NameCount) {
 			dst[e.Name] = d
 		}
 		d.Count += e.Count
+		if e.Manual && !d.Manual { // a name given by hand wins over a reverse-DNS one another node found first
+			d.Host, d.Hosts, d.Manual = e.Host, e.Hosts, true
+		}
 		if d.Host == "" {
 			d.Host = e.Host
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,10 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		QRcode   string   `json:"rcode"`
 		QClient  string   `json:"client"`
 		QDomain  string   `json:"domain"`
+		QName    string   `json:"name"`
+		QOld     string   `json:"old"`
+		QCMatch  string   `json:"cmatch"`
+		QDMatch  string   `json:"dmatch"`
 		Lookup   string   `json:"lookup"`
 		Paused   bool     `json:"paused"`
 		User     string   `json:"username"`
@@ -182,6 +187,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		f = f.withMatch(a.QCMatch, a.QDMatch)
 		return qstats.Query(from, to, f), nil
 	// the same for the whole cluster: every node's numbers added together (Node menu ▸ Cluster, --stats --all-nodes)
 	// packet capture: this node's Capture page, a timed capture (also what each node runs for the cluster-wide one), and
@@ -241,6 +247,32 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	// nmap of a client
 	case "scan.start":
 		return scanStart(a.QClient, actor)
+	case "clientname.register":
+		if m.regNameFn == nil {
+			return nil, errors.New("registration is not available on this node")
+		}
+		ad, err := netip.ParseAddr(a.QClient)
+		if err != nil {
+			return nil, errors.New("not an IP address: " + a.QClient)
+		}
+		name, err := validHostName(a.QName)
+		if err != nil {
+			return nil, err
+		}
+		old := ""
+		if strings.TrimSpace(a.QOld) != "" {
+			if old, err = validHostName(a.QOld); err != nil {
+				old = "" // a name that was not a host name has nothing in DNS to remove
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		lines, err := m.regNameFn(ctx, name, old, ad)
+		warnf("web: %q registered %s as %s in DNS: %s", actor, a.QClient, name, strings.Join(lines, "; "))
+		if err != nil {
+			return map[string]any{"ok": false, "lines": lines, "error": err.Error()}, nil
+		}
+		return map[string]any{"ok": true, "lines": lines}, nil
 	case "scan.get":
 		return scanGet(a.QClient)
 	case "qstats.cluster":
@@ -252,6 +284,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		f = f.withMatch(a.QCMatch, a.QDMatch)
 		return m.clusterQStats(context.Background(), actor, from, to, f)
 	case "host.cluster":
 		from, to, err := hostRange(a.QFrom, a.QTo)

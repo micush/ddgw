@@ -90,6 +90,7 @@ type Engine struct {
 	arp, ns *rawResponder
 
 	dnsFE      *DNSFrontend
+	dnsMore    []*DNSFrontend // listeners of the further shared addresses
 	dnsLoAdded bool
 
 	leaving bool // told the group we are going: no more hellos
@@ -847,13 +848,20 @@ func (e *Engine) becomeAFNLocked() {
 // listener never closes.  Taking everything down and building it again, as this used to, left the node without its MAC and
 // its DNS for a moment, which the clients saw as lost packets.  The VIP goes onto lo before it comes off the macvlan, so
 // the node answers for it at every instant; the MACs it covered are released after a grace (lingerLocked).
+// delVIPsLocked takes every shared address of this engine's family off the slot's macvlan.
+func (e *Engine) delVIPsLocked(slot int) {
+	for _, v := range e.cfg.vipsFor(e.af) {
+		delVIPFn(e.cfg.GroupID, slot, v)
+	}
+}
+
 func (e *Engine) leaveControllerLocked() {
 	e.stopRespondersLocked()
 	e.state = stateStandby
 	if e.vipSlot != 0 {
 		slot := e.vipSlot
 		e.setupDNSLocked(true) // the VIP onto lo (and ARP not answered for it), the listener untouched
-		delVIPFn(e.cfg.GroupID, slot, e.cfg.vipFor(e.af))
+		e.delVIPsLocked(slot)
 		e.vipSlot = 0
 	}
 	for slot := range e.takeover {
@@ -1067,14 +1075,15 @@ func (e *Engine) setupVmacsLocked() {
 		// Only the AGC holds the VIP on its macvlan.  AFNs own their macvlan
 		// but clients are steered to it by the AGC's ARP/NS responder.
 		if e.state == stateActive {
-			vip := e.cfg.vipFor(e.af)
-			addVIP(e.cfg.GroupID, e.afnID, vip)
-			e.vipSlot = e.afnID
-			if e.af == afIPv4 {
-				sendGratuitousARP(e.cfg.Interface, e.cfg.GroupID, e.afnID, vip)
-			} else {
-				sendUnsolicitedNA(e.cfg.Interface, e.cfg.GroupID, e.afnID, vip)
+			for _, vip := range e.cfg.vipsFor(e.af) {
+				addVIP(e.cfg.GroupID, e.afnID, vip)
+				if e.af == afIPv4 {
+					sendGratuitousARP(e.cfg.Interface, e.cfg.GroupID, e.afnID, vip)
+				} else {
+					sendUnsolicitedNA(e.cfg.Interface, e.cfg.GroupID, e.afnID, vip)
+				}
 			}
+			e.vipSlot = e.afnID
 		} else {
 			infof("AFN id=%d (%s): macvlan up, no VIP assigned (AGC handles ARP/NS for this slot)", e.afnID, e.tag())
 		}
@@ -1190,6 +1199,25 @@ func (e *Engine) releaseTakeoverLocked(slot int) {
 // to loopback as a host route and is told not to answer or advertise it in
 // ARP (arp_ignore/arp_announce) — the AGC stays the only ARP authority.
 
+// addLoVIPsLocked puts every shared address on lo (the node answers DNS for them without holding them on a macvlan); it
+// returns false if one could not be added.
+func (e *Engine) addLoVIPsLocked(where string) bool {
+	ok := true
+	for _, v := range e.cfg.vipsFor(e.af) {
+		if !runCmd("ip", "addr", "replace", hostCIDR(v), "dev", "lo") {
+			warnf("dns: could not add %s to lo%s (%s)", v, where, e.tag())
+			ok = false
+		}
+	}
+	return ok
+}
+
+func (e *Engine) delLoVIPsLocked() {
+	for _, v := range e.cfg.vipsFor(e.af) {
+		runCmd("ip", "addr", "del", hostCIDR(v), "dev", "lo")
+	}
+}
+
 func (e *Engine) setupDNSLocked(macvlanUp bool) {
 	vip := e.cfg.vipFor(e.af)
 	if e.cfg.RealMACs {
@@ -1204,15 +1232,13 @@ func (e *Engine) setupDNSLocked(macvlanUp bool) {
 					}
 				}
 			}
-			if runCmd("ip", "addr", "replace", hostCIDR(vip), "dev", "lo") {
+			if e.addLoVIPsLocked("") {
 				e.dnsLoAdded = true
-			} else {
-				warnf("dns: could not add %s to lo (%s)", vip, e.tag())
 			}
 		}
 	} else if e.state == stateActive {
 		if e.dnsLoAdded {
-			runCmd("ip", "addr", "del", hostCIDR(vip), "dev", "lo")
+			e.delLoVIPsLocked()
 			e.dnsLoAdded = false
 		}
 	} else if macvlanUp && !e.dnsLoAdded {
@@ -1224,39 +1250,77 @@ func (e *Engine) setupDNSLocked(macvlanUp bool) {
 				}
 			}
 		}
-		if runCmd("ip", "addr", "replace", hostCIDR(vip), "dev", "lo") {
+		if e.addLoVIPsLocked(" on AFN") {
 			e.dnsLoAdded = true
-		} else {
-			warnf("dns: could not add %s to lo on AFN (%s)", vip, e.tag())
 		}
 	}
 	if e.dnsFE != nil {
+		e.startMoreDNSLocked()
 		return
 	}
 	addr, err := vipAddr(vip)
 	if err != nil {
 		return
 	}
-	dc := e.dnsCfg()
-	fe := NewDNSFrontend(addr, dc.ListenPort, e.pool)
-	fe.gw = srvhist.series(gwKey(e.cfg.GroupID))
-	fe.dotPort = dc.DoTPort
-	fe.dohPort = dc.DoHPort
+	fe := e.newDNSFrontendLocked(addr)
 	if err := fe.Start(); err != nil {
 		errorf("dns: cannot listen on %s: %v", fe.listenAddr(), err)
 		return
 	}
 	e.dnsFE = fe
+	e.startMoreDNSLocked()
+}
+
+func (e *Engine) newDNSFrontendLocked(addr netip.Addr) *DNSFrontend {
+	dc := e.dnsCfg()
+	fe := NewDNSFrontend(addr, dc.ListenPort, e.pool)
+	fe.gw = srvhist.series(gwKey(e.cfg.GroupID))
+	fe.dotPort = dc.DoTPort
+	fe.dohPort = dc.DoHPort
+	return fe
+}
+
+// startMoreDNSLocked opens a listener for each further shared address that has none yet.
+func (e *Engine) startMoreDNSLocked() {
+	have := map[netip.Addr]bool{}
+	for _, f := range e.dnsMore {
+		have[f.addr] = true
+	}
+	for _, v := range e.cfg.vipsFor(e.af)[1:] {
+		addr, err := vipAddr(v)
+		if err != nil || have[addr] {
+			continue
+		}
+		fe := e.newDNSFrontendLocked(addr)
+		if err := fe.Start(); err != nil {
+			errorf("dns: cannot listen on %s: %v", fe.listenAddr(), err)
+			continue
+		}
+		e.dnsMore = append(e.dnsMore, fe)
+	}
+}
+
+func (e *Engine) stopMoreDNSLocked(wait bool) {
+	more := e.dnsMore
+	e.dnsMore = nil
+	for _, f := range more {
+		if wait {
+			f.Stop()
+		} else {
+			go f.Stop()
+		}
+	}
 }
 
 func (e *Engine) teardownDNSLocked() {
+	e.stopMoreDNSLocked(false)
 	if e.dnsFE != nil {
 		fe := e.dnsFE
 		e.dnsFE = nil
 		go fe.Stop() // Stop waits for in-flight queries; never block the engine
 	}
 	if e.dnsLoAdded {
-		runCmd("ip", "addr", "del", hostCIDR(e.cfg.vipFor(e.af)), "dev", "lo")
+		e.delLoVIPsLocked()
 		e.dnsLoAdded = false
 	}
 	e.restoreSysctls() // real-MAC mode changed the real interface's ARP settings: put them back
@@ -1272,6 +1336,7 @@ func (e *Engine) RestartDNS() {
 	fe := e.dnsFE
 	e.dnsFE = nil
 	fe.Stop()
+	e.stopMoreDNSLocked(true)
 	e.setupDNSLocked(true)
 }
 

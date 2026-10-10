@@ -853,7 +853,7 @@ func (c *Cluster) sharedAddrs() map[string]bool {
 		return out
 	}
 	for _, g := range dc.Groups {
-		for _, v := range []string{g.VIP4, g.VIP6} {
+		for _, v := range append(g.vipsFor(afIPv4), g.vipsFor(afIPv6)...) {
 			if a, err := vipAddr(v); err == nil {
 				out[a.String()] = true
 			}

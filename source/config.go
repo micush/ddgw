@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,13 +89,18 @@ func migrateLegacyConfig(dst, legacy string) (moved bool, err error) {
 type GroupConfig struct {
 	// Name is an optional label shown instead of the address in the GUI and CLI.
 	// Shared across the cluster.
-	Name      string   `json:"name,omitempty"`
-	GroupID   int      `json:"group_id"`
-	Interface string   `json:"interface"`
-	VIP4      string   `json:"vip4"`
-	VIP6      string   `json:"vip6"`
-	Priority  int      `json:"priority"`
-	LBMethod  LBMethod `json:"lb_method"`
+	Name      string `json:"name,omitempty"`
+	GroupID   int    `json:"group_id"`
+	Interface string `json:"interface"`
+	VIP4      string `json:"vip4"`
+	VIP6      string `json:"vip6"`
+	// MoreVIP4 and MoreVIP6 are further shared addresses inside the subnet of VIP4 / VIP6 (bare addresses, no prefix length:
+	// they take the primary's).  They move with the gateway like the primary does and answer DNS the same way; the
+	// primary stays the one in the hello packets.  Omitted when none, so older versions read the same file.
+	MoreVIP4 []string `json:"more_vip4,omitempty"`
+	MoreVIP6 []string `json:"more_vip6,omitempty"`
+	Priority int      `json:"priority"`
+	LBMethod LBMethod `json:"lb_method"`
 	// RealMACs turns the virtual MACs off: no macvlan interfaces, and the controller answers ARP and neighbor
 	// solicitations for the VIP with the real MAC address of the node it picks.  Every node then holds the VIP on lo.  For
 	// where virtual MACs cannot work (a VMware port group that is not promiscuous, a cloud that allows one MAC per
@@ -222,6 +228,87 @@ func (g *GroupConfig) vipFor(af AF) string {
 	return g.VIP6
 }
 
+// maxMoreVIPs is how many further addresses a gateway may hold per family.
+const maxMoreVIPs = 32
+
+func (g *GroupConfig) moreFor(af AF) []string {
+	if af == afIPv4 {
+		return g.MoreVIP4
+	}
+	return g.MoreVIP6
+}
+
+// vipsFor is every shared address of the family with its prefix length, the primary first.
+func (g *GroupConfig) vipsFor(af AF) []string {
+	p := g.vipFor(af)
+	if p == "" {
+		return nil
+	}
+	out := []string{p}
+	pfx, err := netip.ParsePrefix(p)
+	if err != nil {
+		return out
+	}
+	for _, a := range g.moreFor(af) {
+		out = append(out, fmt.Sprintf("%s/%d", a, pfx.Bits()))
+	}
+	return out
+}
+
+// cleanMoreVIPs checks the further addresses of one family against the primary: right family, inside its subnet, not the
+// primary itself, not listed twice.  It returns them in canonical form.
+func cleanMoreVIPs(list []string, primary string, v6 bool, pre, field string) ([]string, error) {
+	if len(list) == 0 {
+		return nil, nil
+	}
+	fam := map[bool]string{false: "IPv4", true: "IPv6"}[v6]
+	if primary == "" {
+		return nil, fmt.Errorf("%s: %s needs the gateway's %s address first", pre, field, fam)
+	}
+	if len(list) > maxMoreVIPs {
+		return nil, fmt.Errorf("%s: %s holds at most %d addresses", pre, field, maxMoreVIPs)
+	}
+	pfx, err := netip.ParsePrefix(primary)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s: the gateway's address %q is not valid", pre, field, primary)
+	}
+	seen := map[netip.Addr]bool{pfx.Addr(): true}
+	out := make([]string, 0, len(list))
+	for _, s := range list {
+		a, err := netip.ParseAddr(strings.TrimSpace(s))
+		if err != nil || a.Is6() != v6 || a.Is4In6() {
+			return nil, fmt.Errorf("%s: %s: %q is not an %s address", pre, field, s, fam)
+		}
+		if !pfx.Contains(a) {
+			return nil, fmt.Errorf("%s: %s: %s is not in the gateway's subnet %s", pre, field, a, pfx.Masked())
+		}
+		if a == pfx.Masked().Addr() || (!v6 && a == lastV4(pfx)) {
+			return nil, fmt.Errorf("%s: %s: %s is the subnet's network or broadcast address", pre, field, a)
+		}
+		if a.IsMulticast() || a.IsUnspecified() {
+			return nil, fmt.Errorf("%s: %s: %s cannot be used", pre, field, a)
+		}
+		if seen[a] {
+			return nil, fmt.Errorf("%s: %s: %s is listed twice or is the gateway's own address", pre, field, a)
+		}
+		seen[a] = true
+		out = append(out, a.String())
+	}
+	return out, nil
+}
+
+// lastV4 is the broadcast address of an IPv4 prefix (only for a prefix short enough to have one).
+func lastV4(p netip.Prefix) netip.Addr {
+	if p.Bits() >= 31 {
+		return netip.Addr{}
+	}
+	b := p.Masked().Addr().As4()
+	for i := p.Bits(); i < 32; i++ {
+		b[i/8] |= 1 << (7 - uint(i%8))
+	}
+	return netip.AddrFrom4(b)
+}
+
 func (g *GroupConfig) wants(af AF) bool { return g.vipFor(af) != "" }
 
 // unicastMode is true when explicit neighbors are configured.
@@ -249,6 +336,13 @@ func (g *GroupConfig) Validate() error {
 		if err != nil || !p.Addr().Is6() {
 			return fmt.Errorf("%s: vip6 %q must be IPv6 address/prefix, e.g. 2001:db8::1/64", pre, g.VIP6)
 		}
+	}
+	var err error
+	if g.MoreVIP4, err = cleanMoreVIPs(g.MoreVIP4, g.VIP4, false, pre, "more_vip4"); err != nil {
+		return err
+	}
+	if g.MoreVIP6, err = cleanMoreVIPs(g.MoreVIP6, g.VIP6, true, pre, "more_vip6"); err != nil {
+		return err
 	}
 	for i, a := range g.ExtraVIPs {
 		n, err := normalizeAnycast(a)
@@ -292,6 +386,7 @@ func (g *GroupConfig) Validate() error {
 // restartDiffers reports whether a change between a and b needs an engine restart.
 func restartDiffers(a, b *GroupConfig) bool {
 	return a.Paused != b.Paused || a.Interface != b.Interface || a.VIP4 != b.VIP4 || a.VIP6 != b.VIP6 ||
+		!sameList(a.MoreVIP4, b.MoreVIP4) || !sameList(a.MoreVIP6, b.MoreVIP6) ||
 		a.Key != b.Key || a.RealMACs != b.RealMACs || // the MAC mode changes what the node sets up: restart the gateway
 		!reflect.DeepEqual(a.Neighbors, b.Neighbors)
 }
@@ -442,6 +537,14 @@ type DNSConfig struct {
 	ClientBurst  int      `json:"client_burst,omitempty"`
 	ClientAction string   `json:"client_action,omitempty"`
 	ClientExempt []string `json:"client_exempt,omitempty"`
+	// ClientNames are names given to clients by hand (Statistics ▸ Top clients ▸ right-click ▸ Name…): address -> name.  They are
+	// shown instead of the reverse-DNS name and can be filtered on.  Only the shared Settings' copy is used.
+	ClientNames map[string]string `json:"client_names,omitempty"`
+	// RegisterKeyName and RegisterKey (base64) are the hmac-sha256 TSIG key that signs the update sent when a client is named, and
+	// RegisterTTL the TTL of the records it writes (default 300).  Without a key the update is sent unsigned.
+	RegisterKeyName string `json:"register_key_name,omitempty"`
+	RegisterKey     string `json:"register_key,omitempty"`
+	RegisterTTL     int    `json:"register_ttl,omitempty"`
 	// ForwardUpdates relays dynamic DNS updates (RFC 2136, opcode UPDATE) to the primary
 	// server named in the zone's SOA record, unchanged, and hands the answer back.  With it
 	// off an update is answered REFUSED.  On by default.
@@ -776,6 +879,9 @@ func (d *DNSConfig) Validate() error {
 	if d.SpreadBand < 1 || d.SpreadBand > 1000 {
 		return errors.New("dns: spread_band must be 1-1000 percent")
 	}
+	if err := d.validateClientNames(); err != nil {
+		return err
+	}
 	if err := d.validateClients(); err != nil {
 		return err
 	}
@@ -948,7 +1054,7 @@ func (dc *DaemonConfig) Validate() error {
 		return v
 	}
 	for _, g := range dc.Groups {
-		for _, v := range []string{g.VIP4, g.VIP6} {
+		for _, v := range append(append([]string{g.VIP4, g.VIP6}, g.MoreVIP4...), g.MoreVIP6...) {
 			if v == "" {
 				continue
 			}
@@ -1380,6 +1486,58 @@ func validGatewayName(n string) error {
 			return errors.New("name must not contain control characters")
 		}
 	}
+	return nil
+}
+
+const (
+	maxClientNames   = 5000
+	maxClientNameLen = 64
+)
+
+// validateClientNames checks the hand-given client names and writes the addresses in their canonical form (in place).
+func (d *DNSConfig) validateClientNames() error {
+	d.RegisterKeyName = strings.TrimSpace(d.RegisterKeyName)
+	d.RegisterKey = strings.TrimSpace(d.RegisterKey)
+	if (d.RegisterKeyName == "") != (d.RegisterKey == "") {
+		return errors.New("dns: register_key_name and register_key go together")
+	}
+	if d.RegisterKey != "" {
+		if _, err := base64.StdEncoding.DecodeString(d.RegisterKey); err != nil {
+			return errors.New("dns: register_key must be base64")
+		}
+		if _, err := validHostName(d.RegisterKeyName); err != nil {
+			return fmt.Errorf("dns: register_key_name: %v", err)
+		}
+	}
+	if d.RegisterTTL < 0 || d.RegisterTTL > 86400 {
+		return errors.New("dns: register_ttl is 0-86400 seconds (0: 300)")
+	}
+	if len(d.ClientNames) == 0 {
+		d.ClientNames = nil
+		return nil
+	}
+	if len(d.ClientNames) > maxClientNames {
+		return fmt.Errorf("dns: client_names holds at most %d names", maxClientNames)
+	}
+	out := make(map[string]string, len(d.ClientNames))
+	for k, v := range d.ClientNames {
+		a, err := netip.ParseAddr(strings.TrimSpace(k))
+		if err != nil {
+			return fmt.Errorf("dns: client_names: %q is not an address", k)
+		}
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue // an empty name is no name
+		}
+		if len(v) > maxClientNameLen || strings.IndexFunc(v, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
+			return fmt.Errorf("dns: client_names: the name of %s is too long (at most %d characters) or has control characters", a, maxClientNameLen)
+		}
+		out[a.Unmap().String()] = v
+	}
+	if len(out) == 0 {
+		out = nil
+	}
+	d.ClientNames = out
 	return nil
 }
 

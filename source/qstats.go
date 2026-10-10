@@ -132,6 +132,7 @@ type QStats struct {
 	coarse     [qsCoarseSlots]qsTop
 
 	rmu   sync.Mutex
+	names map[string]string // names given by hand (Settings), under rmu
 	rdns  map[string]rdnsEntry
 	rwork map[string]bool
 	// ptrVia asks the DNS servers ddgw forwards to for the names of an address (rdns.go); set by the daemon.
@@ -439,10 +440,11 @@ func bump(m map[string]uint32, k string, limit int) {
 
 // NameCount is one row of a top list.
 type NameCount struct {
-	Name  string   `json:"name"`
-	Count uint64   `json:"count"`
-	Host  string   `json:"host,omitempty"`  // reverse-DNS name of a client, when known
-	Hosts []string `json:"hosts,omitempty"` // every reverse-DNS name it has, for the tooltip
+	Name   string   `json:"name"`
+	Count  uint64   `json:"count"`
+	Host   string   `json:"host,omitempty"`   // reverse-DNS name of a client, when known
+	Hosts  []string `json:"hosts,omitempty"`  // every reverse-DNS name it has, for the tooltip
+	Manual bool     `json:"manual,omitempty"` // Host is a name given by hand (Name…), not a reverse-DNS one
 }
 
 // QStatsResult is the answer to a query: parallel series, one point per Step seconds
@@ -622,8 +624,8 @@ func (s *QStats) Query(from, to time.Time, f QFilter) *QStatsResult {
 	if f.Domain != "" {
 		clients = withRest(pairClients, domains[f.Domain])
 	}
-	r.Clients = topList(clients, qsKeepResult)
-	r.Domains = topList(domains, qsKeepResult)
+	r.Clients = topList(s.keepMatchingClients(clients, f.CMatch), qsKeepResult)
+	r.Domains = topList(keepMatching(domains, f.DMatch), qsKeepResult)
 	s.fillHosts(r.Clients)
 	return r
 }
@@ -674,6 +676,15 @@ func (s *QStats) fillHosts(cl []NameCount) {
 			continue
 		}
 		e, ok := s.rdns[ip]
+		if n := s.names[ip]; n != "" { // a name given by hand comes first, ahead of what reverse DNS says
+			cl[i].Host, cl[i].Manual = n, true
+			cl[i].Hosts = append([]string{n}, e.names...)
+			if !ok && !s.rwork[ip] {
+				s.rwork[ip] = true
+				go s.lookup(ip) // the reverse names still go in the tooltip
+			}
+			continue
+		}
 		if ok && time.Since(e.at) < qsRDNSTTL && (len(e.names) > 0 || time.Since(e.at) < qsRDNSNegTTL) {
 			setHosts(&cl[i], e.names)
 			continue
@@ -686,6 +697,17 @@ func (s *QStats) fillHosts(cl []NameCount) {
 			setHosts(&cl[i], e.names) // stale beats nothing while the refresh runs
 		}
 	}
+}
+
+// SetNames sets the names given to clients by hand (address -> name); the daemon calls it with every configuration it loads.
+func (s *QStats) SetNames(m map[string]string) {
+	c := make(map[string]string, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	s.rmu.Lock()
+	s.names = c
+	s.rmu.Unlock()
 }
 
 func setHosts(c *NameCount, names []string) {
@@ -770,6 +792,91 @@ type QFilter struct {
 	Rcode  string // an answer kind, see qcNames
 	Client string // an address as listed in Top clients
 	Domain string // a name as listed in Top domains
+	// CMatch and DMatch keep only the clients / domains whose name contains the text (any case): the filter boxes of the
+	// two top lists.  They look through everything the counters kept, not only the entries the reply lists.
+	CMatch string
+	DMatch string
+}
+
+// withMatch adds the two filter-box texts (trimmed, lower case, at most 100 characters) to a filter.
+func (f QFilter) withMatch(client, domain string) QFilter {
+	clean := func(s string) string {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if len(s) > 100 {
+			s = s[:100]
+		}
+		return s
+	}
+	f.CMatch, f.DMatch = clean(client), clean(domain)
+	return f
+}
+
+// qsHostLookups is how many clients without a host name yet are looked up in the background when a filter that looks like a
+// host name is typed (their names are there on a later refresh).
+const qsHostLookups = 200
+
+// keepMatchingClients is keepMatching for the client list: a client is kept when its address or any of its reverse-DNS
+// host names contains the text.  Only the names already looked up can match; a text that is not just digits, a-f, dots and
+// colons (so it can be part of a host name) starts the lookups of the busiest clients that have none yet.
+func (s *QStats) keepMatchingClients(m map[string]uint64, text string) map[string]uint64 {
+	if text == "" {
+		return m
+	}
+	hostLike := strings.Trim(text, "0123456789abcdef:.") != ""
+	out := make(map[string]uint64, len(m))
+	var todo []NameCount
+	s.rmu.Lock()
+	for k, v := range m {
+		if k == qsOthers {
+			continue
+		}
+		if strings.Contains(strings.ToLower(k), text) {
+			out[k] = v
+			continue
+		}
+		if strings.Contains(strings.ToLower(s.names[k]), text) {
+			out[k] = v
+			continue
+		}
+		e, seen := s.rdns[k]
+		for _, n := range e.names {
+			if strings.Contains(strings.ToLower(n), text) {
+				out[k] = v
+				break
+			}
+		}
+		if hostLike && !seen && !s.rwork[k] {
+			if _, err := netip.ParseAddr(k); err == nil {
+				todo = append(todo, NameCount{Name: k, Count: v})
+			}
+		}
+	}
+	if len(todo) > 0 {
+		sort.Slice(todo, func(i, j int) bool { return todo[i].Count > todo[j].Count })
+		if len(todo) > qsHostLookups {
+			todo = todo[:qsHostLookups]
+		}
+		for _, c := range todo {
+			s.rwork[c.Name] = true
+			go s.lookup(c.Name)
+		}
+	}
+	s.rmu.Unlock()
+	return out
+}
+
+// keepMatching drops the entries whose name does not contain text; "(others)" goes too, as it stands for names not kept.
+func keepMatching(m map[string]uint64, text string) map[string]uint64 {
+	if text == "" {
+		return m
+	}
+	out := make(map[string]uint64, len(m))
+	for k, v := range m {
+		if k != qsOthers && strings.Contains(strings.ToLower(k), text) {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // qstatsFilter checks and normalises the rcode, client and domain arguments of the API and CLI.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -65,20 +66,25 @@ func (e *Engine) startARPResponderLocked() {
 	}
 	r := &rawResponder{fd: fd}
 	e.arp = r
-	vip4 := vip.As4()
+	vip4s := [][4]byte{vip.As4()}
+	for _, v := range e.cfg.vipsFor(afIPv4)[1:] {
+		if a, err := vipAddr(v); err == nil {
+			vip4s = append(vip4s, a.As4())
+		}
+	}
 	// The answer names the slot's MAC in its payload (a virtual MAC, or in real-MAC mode the real MAC of the node that has
 	// the slot), but is sent from this node's own MAC.  With the slot's virtual MAC as the Ethernet source, every answer
 	// made the switch learn that MAC on the controller's port, and the queries sent to the forwarder that really owns it
 	// were then delivered to the wrong node until it next spoke.
 	selfMAC := ifaceMAC(e.cfg.Interface)
 	go r.loop(func(fd int, frame []byte) {
-		if out := e.arpAnswer(frame, selfMAC, vip4); out != nil {
+		if out := e.arpAnswerAny(frame, selfMAC, vip4s); out != nil {
 			if _, err := syscall.Write(fd, out); err != nil {
 				debugf("ARP reply send failed: %v", err)
 			}
 		}
 	})
-	infof("ARP responder started (group=%d vip=%s)", e.cfg.GroupID, e.cfg.VIP4)
+	infof("ARP responder started (group=%d vip=%s%s)", e.cfg.GroupID, e.cfg.VIP4, moreNote(e.cfg.MoreVIP4))
 }
 
 // ── NS (IPv6) ────────────────────────────────────────────────────────────────
@@ -98,16 +104,21 @@ func (e *Engine) startNSResponderLocked() {
 	}
 	r := &rawResponder{fd: fd}
 	e.ns = r
-	vip6 := vip.As16()
+	vip6s := [][16]byte{vip.As16()}
+	for _, v := range e.cfg.vipsFor(afIPv6)[1:] {
+		if a, err := vipAddr(v); err == nil {
+			vip6s = append(vip6s, a.As16())
+		}
+	}
 	selfMAC := ifaceMAC(e.cfg.Interface) // see the ARP responder: the answer is sent from this node's own MAC
 	go r.loop(func(fd int, frame []byte) {
-		if out := e.nsAnswer(frame, selfMAC, vip6); out != nil {
+		if out := e.nsAnswerAny(frame, selfMAC, vip6s); out != nil {
 			if _, err := syscall.Write(fd, out); err != nil {
 				debugf("NA reply send failed: %v", err)
 			}
 		}
 	})
-	infof("NS responder started (group=%d vip=%s)", e.cfg.GroupID, e.cfg.VIP6)
+	infof("NS responder started (group=%d vip=%s%s)", e.cfg.GroupID, e.cfg.VIP6, moreNote(e.cfg.MoreVIP6))
 }
 
 // ethSource is the Ethernet source of an answer sent on behalf of a slot: this node's own MAC, or the slot's MAC
@@ -132,4 +143,12 @@ func buildARPReply(reqMAC, self, mac [6]byte, vip4, reqIP [4]byte) []byte {
 	out = append(out, reqMAC[:]...)
 	out = append(out, reqIP[:]...)
 	return out
+}
+
+// moreNote is " +a, b" for the log line of a gateway with further shared addresses, or "".
+func moreNote(more []string) string {
+	if len(more) == 0 {
+		return ""
+	}
+	return " +" + strings.Join(more, ", ")
 }

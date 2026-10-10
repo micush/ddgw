@@ -62,7 +62,7 @@ func (e *Engine) releaseVmacLocked(slot int) {
 		return
 	}
 	if e.vipSlot == slot {
-		delVIPFn(e.cfg.GroupID, slot, e.cfg.vipFor(e.af))
+		e.delVIPsLocked(slot)
 		e.vipSlot = 0
 	}
 	k := vmacKey{e.cfg.GroupID, slot}

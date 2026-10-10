@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -38,14 +39,15 @@ type Mgmt struct {
 	// endSessions signs a user out of the web GUI sessions of this node (set by the web server)
 	endSessions atomic.Pointer[func(user string)]
 
-	reloadFn  func() error          // re-read the config file and apply it
-	restartFn func()                // gracefully re-exec this process
-	gwFn      func() []GwState      // which gateways this node is serving right now
-	gwIPsFn   func() []string       // the addresses this node uses in the gateway protocol, one per family of each group
-	pausedFn  func() bool           // whether this whole node is paused (Operate ▸ Node)
-	anycastFn func() []AnycastState // the anycast addresses and whether each is announced now
-	tshootFn  func() map[string]any // what only the status server knows, for the troubleshooting bundle (see tshoot.go)
-	poolOf    func(gid int) *Pool   // the DNS pool serving a gateway on this node (the cache warm start, cachewarm.go)
+	reloadFn  func() error                                                                   // re-read the config file and apply it
+	restartFn func()                                                                         // gracefully re-exec this process
+	gwFn      func() []GwState                                                               // which gateways this node is serving right now
+	gwIPsFn   func() []string                                                                // the addresses this node uses in the gateway protocol, one per family of each group
+	pausedFn  func() bool                                                                    // whether this whole node is paused (Operate ▸ Node)
+	anycastFn func() []AnycastState                                                          // the anycast addresses and whether each is announced now
+	tshootFn  func() map[string]any                                                          // what only the status server knows, for the troubleshooting bundle (see tshoot.go)
+	regNameFn func(ctx context.Context, name, old string, addr netip.Addr) ([]string, error) // sends the dynamic update that registers a client name (regname.go)
+	poolOf    func(gid int) *Pool                                                            // the DNS pool serving a gateway on this node (the cache warm start, cachewarm.go)
 	servMu    sync.Mutex
 	servSince map[int]time.Time // when each gateway started being served continuously
 	bgp       *BGPManager       // keeps FRR in line with the BGP settings

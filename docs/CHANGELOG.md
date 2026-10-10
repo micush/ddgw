@@ -1,5 +1,57 @@
 # Changelog
 
+## [v308] - 2026-10-10 — Statistics: Rename… on a client that has a host name
+
+### Changed
+- A client that has a reverse-DNS host name (for example `ns2-lo.cush.local`) but no name given by hand got **Name…** in the right-click menu, because only a hand-given name counted as a name. It now gets **Rename…**: the dialog starts with that host name, and saving registers the new name and removes the old name's address record for this client (an exact match on the client's address, so other records of that name stay). **Remove name** is offered only for a name given by hand; **Name…** only for a client with no host name at all.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. Not verified: the menu in a browser.
+
+## [v307] - 2026-10-10 — Statistics: Name… a client, registered in DNS
+
+### Added
+- Right-click a client in Top clients ▸ **Name…**: a small dialog gives the client a name (up to 64 characters). It is shown under the address in place of the reverse-DNS name (the reverse names stay in the tooltip), the Filter box finds it, and it is saved in the shared Settings as `client_names` (address → name), so every node of a cluster shows it and it is in the configuration history. A named client's menu has **Rename…** and **Remove name** (an empty name in the dialog removes it too).
+- **Name… and Rename… register the name in DNS.** The name must now be a full host name (`ann-pc.corp.example`). After saving it, this node sends RFC 2136 dynamic updates, found the way forwarded updates are: the SOA of the name gives the zone and its primary (MNAME). Each record is replaced with a delete update first (the name's existing A or AAAA records) and then an update that adds the client's address; the same two steps replace the PTR record of the client's address on the reverse zone's primary, so reverse DNS is registered too. **Rename…** adds the deletion of the old name's address record (same zone) to the first delete. **Remove name** only removes the stored name and leaves DNS alone. The result of each step is shown in the status line; a failed registration keeps the saved name. New Settings (DNS proxy ▸ Servers ▸ Client names): `register_key_name` and `register_key` (optional TSIG, HMAC-SHA256; unsigned when empty) and `register_ttl` (default 300). Endpoint `POST /api/regname`; logged with the user's name.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. New tests: the checks on `client_names`, host-name validation, the four updates a fake primary receives (delete then add, for the address and the PTR record: zone, classes, TTL, rename), TSIG signing (also checked against dnspython: a message signed here verifies there and fails with another key), and a missing zone. In a browser, before the registration was added: Name… on a client with no name, the name under the address, the Filter finding it, Rename… and Remove name, and removing it.
+Not verified: a real DNS server (BIND, Windows DNS) accepting the updates, the dialog and status line in a browser after the registration was added, secure dynamic updates (GSS-TSIG), and the name on a second node of a cluster.
+
+## [v306] - 2026-10-10 — Statistics: the Top clients filter matches host names
+
+### Changed
+- The Filter box of Top clients also matches a client's reverse-DNS host name. The names already looked up are matched at once; a text that can be part of a host name (not only digits, a-f, dots and colons) starts the lookups of up to 200 of the busiest clients that have none yet, so more of them match on the next refresh a few seconds later. Domains match on the name only.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: matching by host name, and an address-like text starting no lookups), cgo-off and arm64 builds, `node --check`. In a browser (names from a hosts file): filtering by part of a host name found the two clients, and by a domain suffix the one client.
+
+## [v305] - 2026-10-10 — Statistics: a filter box on the top lists
+
+### Added
+- **Filter** box in the headers of Top clients and Top domains. It lists every client or domain whose name contains the text (any case), looked up in everything the counters kept for the range (the server does the matching, so it is not limited to the ten shown or the hundred sent) and is listed in full while a filter is on (no More button). Esc empties it. It works with the Node menu's Cluster too (`cmatch` and `dmatch` of `/api/qstats`). Matching is on the address or the domain, not on the reverse-DNS host name of a client.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: the matching), cgo-off and arm64 builds, `node --check`. In a browser: filtering both lists (the other list untouched, typing keeps the focus), Esc, a filter with no match. Not verified: the cluster-wide filter on more than one node.
+
+## [v304] - 2026-10-10 — Statistics: Rewrite… on a domain
+
+### Added
+- Right-click a domain in Top domains ▸ **Rewrite…**: a small dialog asks for the Destination name (an address, records such as `A 10.5.5.5; TTL 300`, or another name to ask the servers for) and adds a row (any client, that exact name, no servers) at the top of the Policy-Based Resolution table. The same rules as in the table apply to what is written; a name that already has a row of its own is left alone and named in the message.
+
+- A rewritten name (a row of its own with a Destination name, any client) has a ✏️ after it in Top domains, and its menu item reads **Remove rewrite**, which removes that row.
+
+### Verified
+cgo build, `node --check`. In a browser: Rewrite… on a domain with an address adds the row and the ✏️ appears (a row already in the table shows it too); Remove rewrite removes both. The Go tests were not re-run (only the web UI and docs changed). Not checked: that the proxy answers the rewritten name with the address (same row as one typed in the table). Not verified: rewriting to another name or to records from this dialog (the same cell as in the table, so the same code), and an invalid Destination name (the server answers with its message).
+
+## [v303] - 2026-10-10 — More than one address per family on a gateway
+
+### Added
+- A gateway can hold further shared addresses in the subnet of its VIP: Edit gateway ▸ **More IPv4 addresses** / **More IPv6 addresses** (also Configure ▸ Gateways, `more_vip4` / `more_vip6` in the file; bare addresses, up to 32 per family, checked to be inside the VIP's subnet, not the network or broadcast address, not repeated and not used by another gateway). They fail over with the VIP: put on the active node's macvlan (on `lo` in real-MAC mode, and on `lo` of the other nodes), announced by gratuitous ARP / unsolicited neighbor advertisement, answered in ARP and neighbor discovery with the same slot MAC as the VIP, and each has its own DNS / DoT / DoH listener on the same pool. The hello packets still carry the VIP only, so the election and the protocol are unchanged and a node of an older version keeps electing with the others (it just does not answer for the further addresses). The gateway's tooltip lists them. Replicated in the cluster; the hash of a cluster that uses none is unchanged. Changing the list restarts that gateway's engines.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: the checks on the list, the addresses with prefix, ARP answered for every address and not for others, a clash between gateways). In a browser against real-MAC mode: adding two addresses put them on `lo`, started a listener for each and answered DNS on them; removing them took them off again. Not verified: virtual-MAC mode (macvlan, gratuitous ARP and the answers on a real network), IPv6 neighbor discovery on a network, a failover between two nodes.
+
 ## [v302] - 2026-10-10 — Domains: same menu and 🚫 as clients
 
 ### Changed

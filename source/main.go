@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/signal"
 	"runtime"
@@ -437,6 +438,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	sup.StartAll()
 	memguard.caches = sup.allCaches
 	qstats.ptrVia = sup.ptrViaPools
+	qstats.SetNames(dc.DNS.ClientNames)
 	addrVia = sup.addrViaPools
 	go memguard.Run(ctx.Done())
 
@@ -480,6 +482,9 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	mg.pausedFn = func() bool { return sup.config().NodePaused }
 	mg.anycastFn = sup.AllAnycastStates
 	mg.poolOf = sup.poolFor
+	mg.regNameFn = func(ctx context.Context, name, old string, addr netip.Addr) ([]string, error) {
+		return sup.registerClientName(ctx, sup.config().DNS, name, old, addr)
+	}
 	mg.tshootFn = func() map[string]any {
 		return map[string]any{"canvas": st.canvasGroups(), "dns-pools": st.dnsStatus(), "gateway-snapshot": st.snapshot()}
 	}
@@ -499,6 +504,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 		}
 		infof("Config file changed — reloading")
 		sup.Reload(nu)
+		qstats.SetNames(nu.DNS.ClientNames)
 		mg.OnConfigLoaded(nu)
 		if web != nil {
 			go web.Apply(nu.Web) // async: a listener restart must not wait on the request that triggered it

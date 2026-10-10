@@ -152,11 +152,12 @@ func (e *Engine) repointVIPLocked() {
 		return
 	}
 	send := func() {
-		vip := e.cfg.vipFor(e.af)
-		if e.af == afIPv4 {
-			sendGratuitousARPMAC(e.cfg.Interface, self, vip)
-		} else {
-			sendUnsolicitedNAMAC(e.cfg.Interface, self, vip)
+		for _, vip := range e.cfg.vipsFor(e.af) {
+			if e.af == afIPv4 {
+				sendGratuitousARPMAC(e.cfg.Interface, self, vip)
+			} else {
+				sendUnsolicitedNAMAC(e.cfg.Interface, self, vip)
+			}
 		}
 	}
 	send()
@@ -185,6 +186,26 @@ func (e *Engine) setupRealLocked() {
 }
 
 // ── what the responders do with a frame (separate from the socket so they can be tested) ──
+
+// arpAnswerAny answers a request for any of the gateway's shared addresses (the first that matches).
+func (e *Engine) arpAnswerAny(frame []byte, selfMAC [6]byte, vips [][4]byte) []byte {
+	for _, v := range vips {
+		if out := e.arpAnswer(frame, selfMAC, v); out != nil {
+			return out
+		}
+	}
+	return nil
+}
+
+// nsAnswerAny is arpAnswerAny for IPv6.
+func (e *Engine) nsAnswerAny(frame []byte, selfMAC [6]byte, vips [][16]byte) []byte {
+	for _, v := range vips {
+		if out := e.nsAnswer(frame, selfMAC, v); out != nil {
+			return out
+		}
+	}
+	return nil
+}
 
 // arpAnswer is the reply to an ARP request for the VIP, or nil for any other frame.  It also learns the real MAC of the
 // node that sent an ARP (real-MAC mode).
