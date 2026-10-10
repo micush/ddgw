@@ -1,5 +1,13 @@
 # Changelog
 
+## [v319] - 2026-10-10 — Topology: the nodes keep their places
+
+### Changed
+- The cluster's nodes drawn beside a gateway are listed by name (ns1, ns2, ns10 in number order), not with the node you are looking through first, so picking another node in the Node menu no longer moves them around.
+
+### Verified
+`node --check`, vet, the Go tests that read the page source. Not verified: in a browser.
+
 ## [v318] - 2026-10-10 — Topology: the gateway is amber when only one node serves it
 
 ### Changed

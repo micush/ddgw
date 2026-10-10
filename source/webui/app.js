@@ -653,7 +653,7 @@
         if (!w) return n;
         if (!!n.node_paused === w.want || Date.now() > w.until) { delete waiting[n.addr]; return n; }
         return { ...n, status: w.want ? "paused" : "idle", label: w.want ? "pausing…" : "resuming…" };
-      }), NW = 190, NSL = 14;      // a node is a parallelogram: its name and what it is doing
+      }).sort((a, b) => String(a.name || a.addr).localeCompare(String(b.name || b.addr), undefined, { numeric: true }) || String(a.node_id || "").localeCompare(String(b.node_id || ""))), NW = 190, NSL = 14;   // by name, so picking another node in the Node menu does not move them      // a node is a parallelogram: its name and what it is doing
       // each side is four rows tall, or three when a four-row side would have a server's line run through a box; the next ones go in a new column further out
       const CG = 25, SIDE_GAP = 70;   // SIDE_GAP: room between the circle and the nodes on its left, the anycast pills on its right
       const SH = servers.some((a) => srvName(g, a)) ? 62 : 46;   // a named server has a third line, so every square in the row is taller
