@@ -18,7 +18,9 @@ func TestClusterGatewayStatus(t *testing.T) {
 		status string
 	}{
 		{"two serve, two are on another subnet", gws("ok", "ok", "notserving", "notserving"), "ok"},
-		{"one serves, the rest down", gws("ok", "down", "paused"), "ok"},
+		{"one serves of three, the rest down", gws("ok", "down", "paused"), "warn"},
+		{"one serves of two", gws("ok", "notserving"), "ok"},
+		{"two serve of four", gws("ok", "ok", "paused", "paused"), "ok"},
 		{"served only degraded", gws("degraded", "notserving"), "warn"},
 		{"a degraded one does not hide a good one", gws("degraded", "ok"), "ok"},
 		{"nothing serves", gws("notserving", "notserving"), "bad"},
@@ -28,6 +30,7 @@ func TestClusterGatewayStatus(t *testing.T) {
 		{"all starting", gws("starting", "starting"), "idle"},
 		{"one starting, one broken", gws("starting", "bad"), "bad"},
 		{"removed nodes do not count", gws("ok", "removed", "removed"), "ok"},
+		{"removed nodes do not count towards several", gws("ok", "notserving", "removed", "removed"), "ok"},
 		{"only the removed", gws("removed"), "idle"},
 		{"an old node that reports nothing counts as serving", gws(""), "ok"},
 	} {

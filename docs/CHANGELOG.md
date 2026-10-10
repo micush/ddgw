@@ -1,5 +1,13 @@
 # Changelog
 
+## [v318] - 2026-10-10 — Topology: the gateway is amber when only one node serves it
+
+### Changed
+- Like the servers (v317): with three or more nodes on a gateway (nodes removed from it do not count), the gateway's circle and its cluster status in the sidebar are amber, not green, when only one node is serving it: "Served by only 1 of N nodes — the others are paused, not serving or not answering". Two serving nodes, or one of two, stay green as before. The tests that said one of three was fine now say amber.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (changed and new cases of the cluster status), cgo-off and arm64 builds, `node --check`. Not verified: a real cluster with nodes paused, and the Topology page in a browser.
+
 ## [v317] - 2026-10-10 — Topology: the gateway is amber when only one server is left
 
 ### Changed
