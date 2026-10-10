@@ -480,7 +480,7 @@
     const CV_ZOOM_MIN = 0.2, CV_ZOOM_MAX = 3;   // what the mouse wheel can zoom the drawing to
     const CV_MIN_SCALE = 0.65;   // the drawing shrinks to fit the window down to this, then scrolls
     const cv = { cfg: null, orig: null, gid: null, sel: null, view: [], loaded: false, drawn: null, ro: null };
-    let svgHost, noteEl, msgEl, pending = 0;
+    let svgHost, noteEl, msgEl, legendEl, pending = 0;
 
     const normAddr = (a) => {
       a = a.trim().toLowerCase();
@@ -1596,7 +1596,7 @@
     let queue = Promise.resolve();
     function commit() { refresh(); pending++; queue = queue.then(save); }
 
-    function refresh() { draw(); }
+    function refresh() { draw(); if (legendEl) legendEl.classList.toggle("hidden", !groups().length); }
 
     async function load() {
       const r = await api("GET", "/api/config");
@@ -1634,7 +1634,7 @@
           oncontextmenu: (e) => { cv.sel = null; refresh(); const g = curGroup();
             openMenu(e, [["New gateway…", () => gatewayForm(null)]].concat(g ? [["Add DNS server…", () => serverForm(g)]] : [])); } });
         msgEl = h("div", { "aria-live": "polite" });
-        const legend = h("div", { class: "cv-legend muted small" },
+        const legend = legendEl = h("div", { class: "cv-legend muted small" },
           h("span", { class: "dot st-ok" }), "working ", h("span", { class: "dot st-warn" }), "degraded ", h("span", { class: "dot st-bad" }), "down ", h("span", { class: "dot st-idle" }), "not yet known ", h("span", { class: "dot st-paused" }), "paused ", h("span", { class: "dot line-spread" }), "active");
         main.append(msgEl, noteEl, svgHost, legend);
         cv.loaded = false;
@@ -1878,7 +1878,7 @@
     const empty = h("div", { class: "policy-empty" }, "");
     const wrap = h("div", { class: "policy-wrap" }, tbl, empty);
 
-    const filter = h("input", { type: "search", class: "policy-filter", placeholder: "Filter rows…", "aria-label": "Filter policy rows", autocomplete: "off", spellcheck: "false" });
+    const filter = h("input", { type: "text", class: "policy-filter", placeholder: "Filter rows…", "aria-label": "Filter policy rows", autocomplete: "off", spellcheck: "false" });
     const count = h("span", { class: "policy-count muted" }, "");
     const sizeSel = h("select", { "aria-label": "Rows per page" }, [25, 50, 100, 250, 500].map((n) => h("option", { value: String(n) }, n + " per page")));
     sizeSel.value = String(size);
@@ -3678,103 +3678,118 @@
 
   // ── Users  (CLI: --users, --user-add, --user-passwd, --user-expiry, --user-del) ──
   VIEWS.users = (() => {
-    let status, box, users = [], others = [], group = "", editing = false, otherList = null;
+    // Layout: the accounts in a list on the left, the chosen one (or the "new user" / "existing account" form) on the right.
+    let status, listBox, detail, filterIn, users = [], others = [], group = "", sel = null, mode = "user", otherList = null;
     const dateText = (u) => (u.expires ? new Date(u.expires * 1000).toISOString().slice(0, 10) : "never");
     const toUnix = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? Math.floor(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10), 12) / 1000) : 0);
     const me = () => (state.session && state.session.user) || "";
+    const current = () => users.find((u) => u.name === sel) || null;
 
     async function call(path, body, done) {
       try {
         const r = (await api("POST", "/api/users/" + path, body)).data;
-        editing = false;
         if (r.partial) say(status, "warn", r.message); else clear(status); // success shows in the list; only a node that missed it is worth saying
         if (done) done();
-        await VIEWS.users.poll(true);
+        await VIEWS.users.poll();
       } catch (e) { fail(status)(e); }
     }
 
-    function editor(td, u, kind) {
-      editing = true;
-      clear(td);
-      const cancel = h("button", { class: "btn small", type: "button", onclick: () => { editing = false; draw(); } }, "Cancel");
-      if (kind === "password") {
-        const pw = h("input", { type: "password", class: "inline", autocomplete: "new-password", "aria-label": "New password for " + u.name });
-        const go = () => call("password", { username: u.name, password: pw.value });
-        pw.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); if (e.key === "Escape") cancel.click(); });
-        td.append(pw, " ", h("button", { class: "btn small primary", type: "button", onclick: go }, "Save"), " ", cancel);
-        pw.focus();
-      } else {
-        const d = h("input", { type: "date", value: u.expires ? dateText(u) : "", "aria-label": "Expiry date for " + u.name });
-        td.append(d, " ", h("button", { class: "btn small primary", type: "button", onclick: () => {
-          if (!d.value) { say(status, "warn", "Choose a date, or use Never expires."); return; }
-          call("expiry", { username: u.name, expires: toUnix(d.value) });
-        } }, "Save"), " ",
-        h("button", { class: "btn small", type: "button", onclick: () => call("expiry", { username: u.name, expires: 0 }) }, "Never expires"), " ", cancel);
-        d.focus();
-      }
+    function drawList() {
+      const real = listBox; listBox = h("div", { class: "ulist" });
+      try {
+        const q = filterIn ? filterIn.value.trim().toLowerCase() : "";
+        const shown = users.filter((u) => !q || u.name.toLowerCase().includes(q));
+        if (!users.length) listBox.append(h("div", { class: "empty" }, "Nobody is in the " + group + " group, so nobody can sign in."));
+        else if (!shown.length) listBox.append(h("div", { class: "empty" }, "No user matches."));
+        shown.forEach((u) => {
+          const on = mode === "user" && u.name === sel;
+          listBox.append(h("button", { type: "button", class: "uitem" + (on ? " on" : ""), "data-user": u.name,
+            onclick: () => { sel = u.name; mode = "user"; drawList(); drawDetail(); } },
+            h("span", { class: "uname" }, u.name, u.name === me() ? h("span", { class: "pill info tiny" }, "you") : null),
+            u.expired ? h("span", { class: "usub bad" }, "expired " + dateText(u)) : h("span", { class: "usub" }, u.expires ? "expires " + dateText(u) : "never expires")));
+        });
+      } finally { morph(real, listBox); listBox = real; }
     }
 
-    function draw() { const real = box; box = h("div", {}); try { build(); } finally { morph(real, box); box = real; } }
-    // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
-    function build() {
-      if (!users.length) {
-        box.append(h("div", { class: "empty" }, "No account is in the " + group + " group, so nobody can sign in. Add one above."));
+    function drawDetail() {
+      clear(detail);
+      if (mode === "new") {
+        const name = h("input", { type: "text", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
+        const pw = h("input", { type: "password", autocomplete: "new-password" });
+        const exp = h("input", { type: "date" });
+        const add = () => call("add", { username: name.value.trim(), password: pw.value, expires: toUnix(exp.value) }, () => { sel = name.value.trim(); mode = "user"; });
+        pw.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+        detail.append(h("header", {}, h("h2", {}, "New user")), h("div", { class: "body" },
+          h("div", { class: "grid c3" }, h("label", { class: "f" }, "Name", name), h("label", { class: "f" }, "Password", pw), h("label", { class: "f" }, "Expires (blank = never)", exp)),
+          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: add }, "Add user"))));
+        name.focus();
         return;
       }
-      box.append(h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, h("th", {}, "User"), h("th", {}, "Expires"), h("th", {}, ""))),
-        h("tbody", {}, users.map((u) => {
-          const act = h("td", {});   // the password / expiry editor opens here
-          const self = u.name === me();
-          const items = [["Password", () => editor(act, u, "password")], ["Expiry", () => editor(act, u, "expiry")]];
-          if (!self) {
-            items.push(["Remove from group", () => {
-              if (confirm("Remove " + u.name + " from the " + group + " group?\n\nThe account is kept; it just cannot sign in here any more.")) call("revoke", { username: u.name });
-            }]);
-            items.push(["Delete", () => {
-              if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
-            }, "danger"]);
-          }
-          const row = h("tr", { tabindex: "0", oncontextmenu: rowMenu(items) },
-            h("td", {}, u.name, self ? h("span", { class: "pill info tiny" }, "you") : null),
-            h("td", {}, u.expired ? h("span", { class: "pill bad" }, "expired " + dateText(u)) : dateText(u)),
-            act);
-          return row;
-        })))));
+      if (mode === "existing") {
+        const who = h("input", { type: "text", list: "users-others", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
+        const grant = () => call("grant", { username: who.value.trim() }, () => { sel = who.value.trim(); mode = "user"; });
+        who.addEventListener("keydown", (e) => { if (e.key === "Enter") grant(); });
+        detail.append(h("header", {}, h("h2", {}, "Add an existing account")), h("div", { class: "body" },
+          h("p", { class: "muted small" }, "An account that already exists on this host can be allowed to sign in here by adding it to the " + group + " group."),
+          h("div", { class: "grid c3" }, h("label", { class: "f" }, "Name", who, otherList)),
+          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: grant }, "Add to group"))));
+        who.focus();
+        return;
+      }
+      const u = current();
+      if (!u) { detail.append(h("div", { class: "empty" }, users.length ? "Choose a user on the left." : "Add a user to get started.")); return; }
+      const self = u.name === me();
+      const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "New password for " + u.name });
+      const pwNote = h("span", { class: "usaved", "aria-live": "polite" }), dNote = h("span", { class: "usaved", "aria-live": "polite" });
+      const saved = (el) => { el.textContent = "Saved"; setTimeout(() => { if (el.textContent === "Saved") el.textContent = ""; }, 2500); };
+      // both fields save by themselves: the password when the field is left or Enter is pressed, the date as soon as one is chosen
+      const setPw = () => { if (!pw.value) return; call("password", { username: u.name, password: pw.value }, () => { pw.value = ""; saved(pwNote); }); };
+      pw.addEventListener("change", setPw);
+      const d = h("input", { type: "date", value: u.expires ? dateText(u) : "", "aria-label": "Expiry date for " + u.name });
+      d.addEventListener("change", () => call("expiry", { username: u.name, expires: d.value ? toUnix(d.value) : 0 }, () => saved(dNote)));   // blank = never expires
+      const body = h("div", { class: "body ubody" },
+        h("div", { class: "urow" }, h("label", { class: "f grow" }, "New password", pw), pwNote),
+        h("div", { class: "urow" }, h("label", { class: "f grow" }, "Expires (blank = never)", d), dNote));
+      if (!self) {
+        body.append(h("div", { class: "urow end" },
+          h("button", { class: "btn", type: "button", onclick: () => {
+            if (confirm("Disable " + u.name + "?\n\nThe account is kept; it just cannot sign in here any more.")) call("revoke", { username: u.name });
+          } }, "Disable"),
+          h("button", { class: "btn danger", type: "button", onclick: () => {
+            if (confirm("Delete the account " + u.name + "?")) call("delete", { username: u.name });
+          } }, "Delete")));
+      }
+      detail.append(h("header", {}, h("h2", {}, u.name)), body);
     }
 
     return {
       mount(main) {
         status = h("div", { "aria-live": "polite" });
-        box = h("div", {});
-        const name = h("input", { type: "text", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
-        const pw = h("input", { type: "password", autocomplete: "new-password" });
-        const exp = h("input", { type: "date" });
-        const add = () => call("add", { username: name.value.trim(), password: pw.value, expires: toUnix(exp.value) }, () => { name.value = ""; pw.value = ""; exp.value = ""; });
-        const who = h("input", { type: "text", list: "users-others", autocomplete: "off", spellcheck: "false", autocapitalize: "none", maxlength: "32" });
+        listBox = h("div", { class: "ulist" });
+        detail = h("div", { class: "card udetail" });
         otherList = h("datalist", { id: "users-others" });
-        const grant = () => call("grant", { username: who.value.trim() }, () => { who.value = ""; });
-        who.addEventListener("keydown", (e) => { if (e.key === "Enter") grant(); });
-        main.append(status,
-          section("Add existing user",
-            h("div", { class: "grid c3" }, h("label", { class: "f" }, "Name", who, otherList)),
-            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: grant }, "Add to group"))),
-          section("Add user",
-            h("div", { class: "grid c3" },
-              h("label", { class: "f" }, "Name", name),
-              h("label", { class: "f" }, "Password", pw),
-              h("label", { class: "f" }, "Expires", exp)),
-            h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: add }, "Add user"))),
-          section("Users", box));
+        filterIn = h("input", { type: "text", class: "ufilter", placeholder: "Filter", "aria-label": "Filter users", autocomplete: "off", spellcheck: "false", oninput: drawList });
+        sel = null; mode = "user";
+        const left = h("div", { class: "card ulistcard" },
+          h("header", { class: "bar" }, h("h2", {}, "Users"), h("span", { class: "grow" }),
+            h("button", { class: "btn primary small", type: "button", onclick: () => { mode = "new"; drawList(); drawDetail(); } }, "+ New")),
+          h("div", { class: "ufilterbar" }, filterIn),
+          listBox,
+          h("div", { class: "ufoot" }, h("button", { class: "btn", type: "button", onclick: () => { mode = "existing"; drawList(); drawDetail(); } }, "Add an existing account…")));
+        main.append(status, h("div", { class: "usersplit" }, left, detail));
       },
-      async poll(force) {
-        if (editing && force !== true) return;
+      async poll() {
         const r = (await api("GET", "/api/users")).data;
         users = r.users || [];
         others = r.others || [];
         group = r.group;
         if (otherList) clear(otherList).append(...others.map((n) => h("option", { value: n })));
-        draw();
+        const first = !current() && mode === "user";
+        if (first) sel = users.length ? users[0].name : null;
+        drawList();
+        // the detail panel is left alone on a poll so what is being typed survives; it is redrawn when it first has something to show
+        if (first || !detail.firstChild) drawDetail();
+        else if (mode === "user" && !current()) drawDetail();
       },
     };
   })();

@@ -512,8 +512,31 @@ table.policy tr.drop-below td { box-shadow: inset 0 -3px 0 var(--accent); }
 .policy-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .6rem; }
 .policy-bar .grow { flex: 1 1 0; }
 .policy-bar input.policy-filter { width: 16rem; max-width: 100%; }
+.policy-bar select { width: auto; flex: 0 0 auto; }
 .policy-bar input.policy-page { width: 4.5rem; }
 .policy-pager { display: inline-flex; align-items: center; gap: .35rem; }
 .policy-pager[hidden], .policy-empty[hidden] { display: none; }
 .policy-box .policy-wrap { margin-top: .4rem; }
 table.policy .rownum { display: block; font-size: .7rem; color: var(--muted); text-align: center; padding-top: .3rem; }
+
+/* Users: list on the left, the chosen account on the right */
+.usersplit { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.ulistcard { flex: 0 0 18rem; max-width: 100%; }
+.udetail { flex: 1 1 22rem; min-width: 0; }
+.ulistcard > header .grow { flex: 1; }
+.ufilterbar { padding: .6rem .75rem 0; }
+.ufilterbar input { width: 100%; box-sizing: border-box; }
+.ulist { padding: .5rem .4rem; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.uitem { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; text-align: left; width: 100%; padding: .5rem .7rem; border: 0; border-left: 3px solid transparent; border-radius: 6px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.uitem:hover { background: rgba(255, 255, 255, .05); }
+.uitem.on { background: rgba(122, 162, 247, .16); border-left-color: var(--accent, #7aa2f7); }
+.uitem .uname { display: flex; align-items: center; gap: .4rem; }
+.uitem .usub { font-size: .8rem; color: var(--muted); }
+.uitem .usub.bad { color: var(--bad); }
+.ufoot { padding: .6rem .75rem; border-top: 1px solid var(--border); }
+.ufoot .btn { width: 100%; }
+.ubody { display: flex; flex-direction: column; gap: 1.2rem; }
+.urow { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
+.urow .grow { flex: 1 1 12rem; }
+.urow.end { justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 1rem; }
+.usaved { color: var(--ok); font-size: .85rem; align-self: center; min-width: 3rem; }

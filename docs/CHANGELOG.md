@@ -1,5 +1,47 @@
 # Changelog
 
+## [v285] - 2026-10-09 — Users page: list and detail
+
+### Changed
+- Users page redesigned: the accounts in a list on the left (with a filter box), the chosen account on the right. **+ New** and **Add an existing account…** open their forms in the right-hand panel.
+- New password and Expires save by themselves (the password when the field is left or Enter is pressed, the date when it is picked); a blank date means the account never expires. The Set password, Save and Never expires buttons are gone.
+- "Remove from group" is now **Disable**. Help and README follow.
+- The Users screenshot in the README is retaken.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check` (app.js, help.js). In a browser: selecting a user, saving a password with Enter, picking and clearing a date, a poll not clearing what is being typed.
+
+### Not verified
++ New, Add an existing account, Disable and Delete in a browser (code paths unchanged; only the buttons that call them moved).
+
+## [v284] - 2026-10-09 — Users menu fix; no legend on an empty Topology
+
+### Fixed
+- Users page: right-click > Password and Expiry did nothing (the menu edited a copy of the row that had been replaced by the live one); the editor now opens in the live row.
+- Topology page: the colour legend is hidden while no gateway is defined.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`. In a browser: right-click > Password and > Expiry on a Users row open the password and date fields.
+
+### Not verified
+The empty-Topology legend in a browser (small change: toggles a `hidden` class once the config has loaded).
+
+## [v283] - 2026-10-09 — README rewritten, with screenshots
+
+### Changed
+- README.md rewritten to read as plain prose, with 18 screenshots of the matching GUI pages (Topology, DNS proxy, Policy, Gateways, Statistics, Host, Capture, Log, Cluster, Anycast, Users, History, Web certificate, Node, Upgrade, login) in `snaps/`. The old `topology.png` and `statistics.png` (v170, old branding) are replaced.
+- "Build from source" moved to the end, just before "License".
+- "A web GUI (PAM login)" is now "A web GUI".
+
+### Fixed
+- Policy table toolbar: the per-page select was full width and the filter box unstyled; both now match the rest of the bar.
+
+### Verified
+gofmt, vet, `go test -race -count=1 .`, cgo-off and arm64 builds, `node --check`; every image link and contents anchor in the README resolves.
+
+### Not verified
+Screenshots come from a demo setup (stub servers on this sandbox), not a production node.
+
 ## [v282] - 2026-10-09 — Paused probe domains: amber with one left, down with none
 
 ### Changed
