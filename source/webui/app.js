@@ -456,16 +456,17 @@
   });
 
   // right-click menu items are written plain: no … after a label that opens a dialog
-  // the canary soak: a node that took a new update first shows an hourglass until the others are let go (sec = seconds left)
   // 2,710,532 -> 2.71M, 100,555,111 -> 100.5M: cut (not rounded) to two decimals below 100 of a unit, one from there; below a million in full
   const shortCount = (v) => {
-    if (v < 1e6) return n0(v);
+    v = Number(v || 0);
+    if (v < 1e6) return Number(v).toLocaleString();
     const units = ["M", "B", "T"];
     let i = 0, x = v / 1e6;
     while (x >= 1000 && i < units.length - 1) { x /= 1000; i++; }
     const d = x >= 100 ? 10 : 100;
     return String(Math.floor(x * d) / d) + units[i];
   };
+  // the canary soak: a node that took a new update first shows an hourglass until the others are let go (sec = seconds left)
   const soakTip = (sec) => "soaking: " + sec + "s remaining";
   const soakMark = (sec) => (sec > 0 ? [" ", h("span", { class: "soak", title: soakTip(sec), "aria-label": soakTip(sec) }, "⏳")] : null);
   function plain(l) { return typeof l === "string" ? l.replace(/…(?=$| \()/, "") : l; }

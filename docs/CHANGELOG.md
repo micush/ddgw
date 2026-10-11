@@ -1,5 +1,13 @@
 # Changelog
 
+## [v340] - 2026-10-11 — Fix: Statistics page failed with "n0 is not defined"
+
+### Fixed
+- v339 broke the Statistics page: the new short-number function (2.71M) used a helper that only exists further down in that page's code, so the page showed `n0 is not defined` and no tiles. The function no longer depends on it and also treats a missing count as 0. v339 should not be used.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. This time the real `app.js` ran in headless Chromium with the API mocked: the Statistics tiles show 2.71M (tooltip 2,710,532) and 100.5M (100,555,111), QPS 45,301, no label cut off, no page errors from the tiles. The mock's chart and top lists were incomplete, so those are not verified.
+
 ## [v339] - 2026-10-11 — Statistics tiles: numbers and labels never cut off
 
 ### Fixed
