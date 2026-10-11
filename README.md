@@ -113,11 +113,11 @@ In the GUI, the DNS proxy settings are under Configure ▸ DNS proxy, on six tab
 - **Truncated answers.** A truncated (TC) UDP answer is relayed so the client retries over TCP, which the proxy forwards over TCP.
 - **Loops.** A query is never sent back to the server it came from. Without that, a server of the gateway whose own forwarder points at the gateway (or at an anycast address) would make every such query go round until it timed out, and the server would show as down. The log names such a server once a minute.
 
-**Where the load-balancing settings live.** Spread, spread band, down at, failures before down, max servers tried and latency smoothing are the Settings values for every gateway, including one drawn on the Topology page with its own servers. A gateway can have its own instead: Topology ▸ right-click the gateway ▸ *Edit gateway…* ▸ **Load balancing** ▸ *own values* (`"lb": {…}` in the gateway's `dns` block, or `--canvas-set gateway --group N --spread-band 200`; `--lb settings` goes back).
+**Where the load-balancing settings live.** Spread, spread band, down at, failures before down, max servers tried and latency smoothing are the Settings values for every gateway, including one drawn on the Topology page with its own servers. A gateway can have its own instead: Topology ▸ right-click the gateway ▸ *Edit gateway* ▸ **Load balancing** ▸ *own values* (`"lb": {…}` in the gateway's `dns` block, or `--canvas-set gateway --group N --spread-band 200`; `--lb settings` goes back).
 
 ### Fallback servers
 
-`fallback_servers` in the `dns` block lists upstreams that are used **only while no normal server is in service**: every one down or paused, or none listed. Only a paused or stopped gateway serves nothing at all. Set them in the shared block or in a gateway's own (Configure ▸ DNS proxy ▸ Servers ▸ Fallback servers, *Edit gateway…* on the Topology page, or `--canvas-add fallback --group N --server ADDR` and `--canvas-del fallback …`).
+`fallback_servers` in the `dns` block lists upstreams that are used **only while no normal server is in service**: every one down or paused, or none listed. Only a paused or stopped gateway serves nothing at all. Set them in the shared block or in a gateway's own (Configure ▸ DNS proxy ▸ Servers ▸ Fallback servers, *Edit gateway* on the Topology page, or `--canvas-add fallback --group N --server ADDR` and `--canvas-del fallback …`).
 
 Fallbacks are **never probed** and always count as up, because the domains the normal servers are tested with may be internal names that a public resolver knows nothing about, so probing a fallback with them would only mislead. While no normal server is in service, only the fallbacks take queries. As soon as a normal server passes a probe again, the pool goes back to the normal servers and the fallbacks get nothing.
 
@@ -268,7 +268,7 @@ These settings are in the top-level `dns` block (Configure ▸ DNS proxy ▸ Cli
 - **`client_rate`** is the queries per second one client (an IPv4 address, or an IPv6 /64) may send; 0, the default, means no limit. **`client_burst`** is how many at once (0 means twice the rate, at least 10).
 - **`client_action`** is what a client over its rate gets. `drop` (the default) sends nothing, so a forged source cannot be used to bounce answers at a victim. `truncate` sends a short UDP answer with the TC bit, so a real resolver retries over TCP. `refused` sends REFUSED. Over TCP, DoT and DoH the address is real, and the answer is always REFUSED.
 - **`client_exempt`** lists networks that are never rate limited (they stay subject to `allowed_clients`).
-- **`client_limits`** gives a client or network a rate of its own, one `"ADDRESS RATE"` entry each (`"192.168.1.5 50"`: 50 queries a second, burst twice that, at least 10). It applies even when `client_rate` is 0 and even to a network in `client_exempt`; the first entry that contains the client wins. Statistics ▸ Top clients ▸ right-click ▸ **Limit…** adds and removes entries (Configure ▸ DNS proxy ▸ Clients ▸ **Per-client limits** is the same list). Shared by the cluster, counted per node.
+- **`client_limits`** gives a client or network a rate of its own, one `"ADDRESS RATE"` entry each (`"192.168.1.5 50"`: 50 queries a second, burst twice that, at least 10). It applies even when `client_rate` is 0 and even to a network in `client_exempt`; the first entry that contains the client wins. Statistics ▸ Top clients ▸ right-click ▸ **Limit** adds and removes entries (Configure ▸ DNS proxy ▸ Clients ▸ **Per-client limits** is the same list). Shared by the cluster, counted per node.
 
 The node itself (loopback) is always allowed and never limited. Both checks run before the cache. The DNS page and `--show-dns` show the limit and how many queries were refused or turned away, and the log says so at most once a minute.
 
@@ -294,7 +294,7 @@ Probe domains can be set per server (`server_queries`), and a gateway can have i
 
 ## Topology
 
-The first page of the GUI is a drawing of your configuration. Each **gateway is an item under Topology** in the sidebar (right-click it ▸ **Rename…** or **Delete**), with *＋ New gateway…* at the end.
+The first page of the GUI is a drawing of your configuration. Each **gateway is an item under Topology** in the sidebar (right-click it ▸ **Rename** or **Delete**), with *＋ New gateway…* at the end.
 
 The drawing has three kinds of shape:
 
@@ -338,15 +338,15 @@ A node whose **CPU, memory or fullest disk is over 85%** is **solid yellow** (de
 
 Hover a node for its address, role, last-seen time, version, whether it has caught up with the primary's settings, and any update under way. Right-click a reachable node for:
 
-- *Pause node…* or *Resume node* (another node is paused through the cluster, like the Node page does with the Node menu; its shape reads "pausing…" until it reports back),
-- *Remove from this gateway…* (see below),
-- *Host statistics…*, and, for another node, *Open this node* (the same as the Node menu, top right).
+- *Pause node* or *Resume node* (another node is paused through the cluster, like the Node page does with the Node menu; its shape reads "pausing…" until it reports back),
+- *Remove from this gateway* (see below),
+- *Host statistics*, and, for another node, *Open this node* (the same as the Node menu, top right).
 
-For an unreachable node the menu offers *Cluster page…*. Nodes are read-only here; add or remove them on the Cluster page. `ddgw --canvas` lists them as `/_/ cluster node` lines.
+For an unreachable node the menu offers *Cluster page*. Nodes are read-only here; add or remove them on the Cluster page. `ddgw --canvas` lists them as `/_/ cluster node` lines.
 
 ### Which nodes serve a gateway
 
-Every node that is in the cluster serves every gateway unless it is removed from it. To change that, right-click a node ▸ *Remove from this gateway…*, or right-click the gateway ▸ *Add node* ▸ the node. On the command line, use `--canvas-del node --group N --node NODE` and `--canvas-add node --group N --node NODE`, where NODE is the node's address or host name.
+Every node that is in the cluster serves every gateway unless it is removed from it. To change that, right-click a node ▸ *Remove from this gateway*, or right-click the gateway ▸ *Add node* ▸ the node. On the command line, use `--canvas-del node --group N --node NODE` and `--canvas-add node --group N --node NODE`, where NODE is the node's address or host name.
 
 The removal is **shared** (`excluded_nodes` in the gateway's block, a list of node IDs, absent while empty so older versions still read the file). Any node can change it, every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives up the address, and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any node (`ddgw --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node* on the gateway lists the removed nodes by name.
 
@@ -360,7 +360,7 @@ The anycast addresses (right of the circle) and the cluster nodes (left) stand f
 
 ### Editing the drawing
 
-**Right-click** anything. The circle offers *Edit gateway…*, *Add DNS server…*, *Add anycast address…*, *Add node*, *Pause*, *Statistics…* and *Delete gateway*. A square offers *Statistics…*, *Edit server…*, *Add domain…*, *Pause* and *Delete server*. A trapezoid offers *Edit domain…*, *Add domain…*, *Pause* and *Delete domain*. The empty drawing offers *New gateway…* and *Add DNS server…*. Add and Edit open a popup form; deleting something with things under it asks first and says how many. Left-click selects a shape, and the Delete key deletes it. There is no button row; the right-click menu is the one place for these actions.
+**Right-click** anything. The circle offers *Edit gateway*, *Add DNS server*, *Add anycast address*, *Add node*, *Pause*, *Statistics* and *Delete gateway*. A square offers *Statistics*, *Edit server*, *Add domain*, *Pause* and *Delete server*. A trapezoid offers *Edit domain*, *Add domain*, *Pause* and *Delete domain*. The empty drawing offers *New gateway* and *Add DNS server*. Add and Edit open a popup form; deleting something with things under it asks first and says how many. Left-click selects a shape, and the Delete key deletes it. There is no button row; the right-click menu is the one place for these actions.
 
 **Add DNS server** looks things up for you. Fill in the IP address and the **Name** is filled in from its reverse (PTR) record; fill in a host name as the Name and the address is looked up (IPv4 preferred). The lookup is made once by the node being configured, when you leave the field, and only fills a field that is empty or still holds an earlier lookup. A name or address you typed yourself is never overwritten, and you can change a looked-up name to anything (it is saved as typed). CLI: `ddgw --dns-lookup IP|NAME`. A domain name too long for its trapezoid is cut with "…" so it stays well inside the shape, and so is a long server address or name inside its box (hover for the full text).
 
@@ -385,7 +385,7 @@ CLI: `--canvas-pause|--canvas-resume gateway|server|domain|anycast --group 1 [--
 
 ### Statistics from the drawing
 
-Right-click a square, a trapezoid or the circle ▸ *Statistics…* for graphs over the last hour, day or week (per minute for the hour, per 5 minutes for a day, per 30 minutes for a week). CLI: `ddgw --server-stats ADDR [--stats-range 1h|1d|7d]`, `ddgw --server-stats ADDR --name DOMAIN [--type T]`, `ddgw --gateway-stats GROUP`.
+Right-click a square, a trapezoid or the circle ▸ *Statistics* for graphs over the last hour, day or week (per minute for the hour, per 5 minutes for a day, per 30 minutes for a week). CLI: `ddgw --server-stats ADDR [--stats-range 1h|1d|7d]`, `ddgw --server-stats ADDR --name DOMAIN [--type T]`, `ddgw --gateway-stats GROUP`.
 
 ![Statistics for a gateway: answer time, errors, availability and queries per second](snaps/gateway-stats.png)
 
@@ -441,7 +441,7 @@ Groups without their own `dns` block use the top-level one, and `server_queries`
 
 ### Anycast addresses
 
-A gateway can carry extra addresses of **any subnet** next to its shared address (`extra_vips`). In the GUI, right-click the gateway circle ▸ *Add anycast address…*; each address becomes a pill beside the circle with its own menu. On the command line, use `--canvas-add anycast --group 1 --address 203.0.113.53`, `--canvas-del anycast …`, or `--canvas-set gateway --group 1 --anycast A,B` to replace the whole list.
+A gateway can carry extra addresses of **any subnet** next to its shared address (`extra_vips`). In the GUI, right-click the gateway circle ▸ *Add anycast address*; each address becomes a pill beside the circle with its own menu. On the command line, use `--canvas-add anycast --group 1 --address 203.0.113.53`, `--canvas-del anycast …`, or `--canvas-set gateway --group 1 --anycast A,B` to replace the whole list.
 
 Anycast addresses are not checked against the interface and do not take part in the election. **Every** node running the gateway puts them on `lo` and answers DNS on them, with the same servers, domains and failover as the shared address, on `listen_port`. They are shared across the cluster and need DNS servers on the gateway.
 
@@ -580,12 +580,12 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | CLI | Web GUI |
 | --- | --- |
 | `--canvas`, `--canvas-add`, `--canvas-del` | Topology page (draw gateways, servers, domains; live colours) |
-| `--canvas-add node` / `--canvas-del node` `--group N` `--node NODE` | Topology page: right-click the gateway ▸ **Add node** / right-click a node ▸ **Remove from this gateway…** |
-| `--server-stats ADDR` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click a server ▸ **Statistics…** (latency and loss graphs) |
+| `--canvas-add node` / `--canvas-del node` `--group N` `--node NODE` | Topology page: right-click the gateway ▸ **Add node** / right-click a node ▸ **Remove from this gateway** |
+| `--server-stats ADDR` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click a server ▸ **Statistics** (latency and loss graphs) |
 | `--canvas-move server\|domain\|anycast` `--group N` `--server ADDR` `[--name DOMAIN \| --address ADDR]` `--to N` | Topology page: drag a server left/right, a domain or an anycast address up/down |
 | `--dns-lookup IP\|NAME` | Add DNS server form: the Name is filled in from the address (reverse DNS), or the address from a name |
-| `--server-stats ADDR --name DOMAIN` `[--type T]` | Topology page: right-click a domain ▸ **Statistics…** |
-| `--gateway-stats GROUP` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click the gateway circle ▸ **Statistics…** (answer time, errors, availability, queries) |
+| `--server-stats ADDR --name DOMAIN` `[--type T]` | Topology page: right-click a domain ▸ **Statistics** |
+| `--gateway-stats GROUP` `[--stats-range 1h\|1d\|7d]` | Topology page: right-click the gateway circle ▸ **Statistics** (answer time, errors, availability, queries) |
 | `--show-gateways`, `--show-neighbors` | Gateways page (roles, slots, vMACs, DNS listener state) |
 | `--assert-agc` | Operate ▸ Node ▸ **Gateway controller**: "Make this node the gateway controller" (asks to confirm) |
 | `--cluster-status` | Monitor ▸ Cluster (the members) |
@@ -598,7 +598,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
 | `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
-| `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); a client's **Limit…** is the `client_limits` setting, **Copy** has no command |
+| `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); a client's **Limit** is the `client_limits` setting, **Copy** has no command |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); `--whois` is right-click ▸ **Whois**; the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
@@ -769,15 +769,15 @@ The range is Last Hour, Last Day, Last Week, Last Month, or a custom start and e
 
 **Drilling down.** Click a tile (No Error, Server Failure, NX Domain, Refused) to limit the chart, the donuts and the top lists to that kind of answer, for example to see which domains get NXDOMAIN and who asks for them. Total Queries clears it. Click a client to list the domains it asked for, or a domain to list the clients that asked for it; this combines with the tiles.
 
-**Naming a client.** Right-click a client in Top clients ▸ **Name…** gives it a name by hand (up to 64 characters), shown under its address instead of the reverse-DNS name, found by the Filter box, and shared by the cluster (`client_names` in the DNS block: address to name). A named client's menu has **Rename…** and **Remove name** instead. Name… asks for a full host name (`ann-pc.corp.example`) and, after saving it, registers it in DNS with RFC 2136 dynamic updates (a delete of the old records, then an add) sent by the node you are connected to: the A/AAAA record to the primary of the name's zone and the PTR record of the client's address to the primary of the reverse zone (found from the SOA records). Rename… does the same and removes the old name's address record; Remove name leaves DNS alone. Optional TSIG (HMAC-SHA256) signing and the record TTL are in Settings (`register_key_name`, `register_key`, `register_ttl`); without a key the update is unsigned, so the zone must allow updates from this node.
+**Naming a client.** Right-click a client in Top clients ▸ **Name** gives it a name by hand (up to 64 characters), shown under its address instead of the reverse-DNS name, found by the Filter box, and shared by the cluster (`client_names` in the DNS block: address to name). A named client's menu has **Rename** and **Remove name** instead. Name… asks for a full host name (`ann-pc.corp.example`) and, after saving it, registers it in DNS with RFC 2136 dynamic updates (a delete of the old records, then an add) sent by the node you are connected to: the A/AAAA record to the primary of the name's zone and the PTR record of the client's address to the primary of the reverse zone (found from the SOA records). Rename… does the same and removes the old name's address record; Remove name leaves DNS alone. Optional TSIG (HMAC-SHA256) signing and the record TTL are in Settings (`register_key_name`, `register_key`, `register_ttl`); without a key the update is unsigned, so the zone must allow updates from this node.
 
 **Filtering the lists.** The Filter box of Top clients and Top domains lists every client address or domain that contains what you type (any case, from everything counted in the range, not just the ten shown; a client also matches by its reverse-DNS host name, which fills in over the next refreshes for clients that have not been looked up yet); Esc empties it. The box on one list does not change the other.
 
-**Answering a name yourself.** Right-click a name in Top domains ▸ **Block** adds a NODATA row (any client, that exact name) at the top of the Policy-Based Resolution table and saves it, so the proxy answers that name itself from then on and no longer asks the servers (to answer NXDOMAIN or REFUSED instead, change the row on Configure ▸ DNS proxy ▸ Resolution). The statistics still count the answer under its kind. A name that already has such a row shows a 🚫, and its menu item reads **Unblock**, which removes the row. **Rewrite…** next to it (a rewritten name shows a ✏️ and its item reads **Remove rewrite**) asks what to answer the name with (an address, records such as `A 10.5.5.5; TTL 300` or `CNAME host.example.com`, or another name to ask the servers for) and adds that as a row (any client, that exact name) at the top of the table; change or delete it on Configure ▸ DNS proxy ▸ Resolution.
+**Answering a name yourself.** Right-click a name in Top domains ▸ **Block** adds a NODATA row (any client, that exact name) at the top of the Policy-Based Resolution table and saves it, so the proxy answers that name itself from then on and no longer asks the servers (to answer NXDOMAIN or REFUSED instead, change the row on Configure ▸ DNS proxy ▸ Resolution). The statistics still count the answer under its kind. A name that already has such a row shows a 🚫, and its menu item reads **Unblock**, which removes the row. **Rewrite** next to it (a rewritten name shows a ✏️ and its item reads **Remove rewrite**) asks what to answer the name with (an address, records such as `A 10.5.5.5; TTL 300` or `CNAME host.example.com`, or another name to ask the servers for) and adds that as a row (any client, that exact name) at the top of the table; change or delete it on Configure ▸ DNS proxy ▸ Resolution.
 
 **Silencing a client.** Right-click a client in Top clients ▸ **Block** (a client that is blocked, and a domain that has such a row of its own, have a 🚫 after the name, and its item reads **Unblock**, which removes that row) puts a NODATA row for that client (any name) at the top of the table, so nothing it asks reaches the servers any more and it gets no answers.
 
-**Lookup, Flush, Limit and Copy.** Right-click a client or a domain ▸ **Lookup** opens a popup with what this node's resolver says: the reverse (PTR) names of an address, or the A, AAAA, CNAME, MX, NS and TXT records of a name (asked once, nothing stored). Right-click a domain ▸ **Flush** drops that name, every type and every client network, from the answer cache of **every node** and says how many answers went; a node that cannot be reached is named in the popup. Right-click a client ▸ **Limit…** sets that client's own rate in queries per second (the item shows it, **Remove limit** clears it; see `client_limits`), and **Copy** (on clients and domains) puts the address or the name on the clipboard.
+**Lookup, Flush, Limit and Copy.** Right-click a client or a domain ▸ **Lookup** opens a popup with what this node's resolver says: the reverse (PTR) names of an address, or the A, AAAA, CNAME, MX, NS and TXT records of a name (asked once, nothing stored). Right-click a domain ▸ **Flush** drops that name, every type and every client network, from the answer cache of **every node** and says how many answers went; a node that cannot be reached is named in the popup. Right-click a client ▸ **Limit** sets that client's own rate in queries per second (the item shows it, **Remove limit** clears it; see `client_limits`), and **Copy** (on clients and domains) puts the address or the name on the clipboard.
 
 **Ping and traceroute of a client or a domain.** Right-click a client or a domain ▸ **Ping** or **Traceroute** opens a popup with the output of `ping -n -c 4 -W 2` or of `mtr -n --raw -c 10` (shown as the usual table, growing hop by hop), run on the node you are looking at and shown as it comes in (four pings, at most 15 seconds; mtr at most two minutes; four at a time). For a domain the node looks the name up first (IPv4 preferred) and probes that address. **Run again** repeats it. Closing the popup does not stop the command, which ends by itself. Both programs are prerequisites the installer adds; without them the popup says so.
 

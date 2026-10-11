@@ -1,5 +1,13 @@
 # Changelog
 
+## [v334] - 2026-10-11 — No … on menu items
+
+### Changed
+- Right-click menu items no longer end with …: Rename, Edit gateway, Add DNS server, Statistics, Limit and the rest read as plain words (the item still opens its dialog). It applies to every right-click menu (the Topology drawing, the Top clients and Top domains lists, the cluster node menus). Dialog titles and buttons are unchanged. Help and README name the items without the … too.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. Not verified: the menus in a browser.
+
 ## [v333] - 2026-10-11 — Top clients / Top domains menus: grouped
 
 ### Changed

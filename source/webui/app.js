@@ -455,6 +455,8 @@
     if (!document.hidden && state.timer && VIEWS[state.tab].poll) VIEWS[state.tab].poll().catch(() => {});
   });
 
+  // right-click menu items are written plain: no … after a label that opens a dialog
+  function plain(l) { return typeof l === "string" ? l.replace(/…(?=$| \()/, "") : l; }
   function errorBox(el, msg) {
     clear(el).append(h("div", { class: "notice bad", role: "alert" }, msg));
   }
@@ -1055,14 +1057,15 @@
         menuEl.querySelectorAll("button.open").forEach((b) => b.classList.remove("open"));
         btn.classList.add("open");
         subEl = h("div", { class: "cv-menu cv-sub", role: "menu" }, subs.map(([label, fn]) =>
-          h("button", { type: "button", role: "menuitem", onclick: () => { closeMenu(); fn(); } }, label)));
+          h("button", { type: "button", role: "menuitem", onclick: () => { closeMenu(); fn(); } }, plain(label))));
         root.append(subEl);
         const pr = menuEl.getBoundingClientRect(), br = btn.getBoundingClientRect(), sr = subEl.getBoundingClientRect();
         const left = pr.right + sr.width + 4 <= window.innerWidth ? pr.right - 2 : Math.max(4, pr.left - sr.width + 2);
         subEl.style.left = left + "px";
         subEl.style.top = Math.max(4, Math.min(br.top - 4, window.innerHeight - sr.height - 4)) + "px";
       };
-      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label, fn, cls, subs, off]) => {
+      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label0, fn, cls, subs, off]) => {
+        const label = plain(label0);
         if (!subs) {
           if (off) return h("button", { type: "button", role: "menuitem", class: cls || "", disabled: true, title: off, onmouseenter: closeSub }, label);
           return h("button", { type: "button", role: "menuitem", class: cls || "", onmouseenter: closeSub, onclick: () => { closeMenu(); fn(); } }, label);
@@ -2350,7 +2353,7 @@
     e.preventDefault(); e.stopPropagation();
     closeRowMenu();
     // "-" between items draws a line between groups
-    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => it === "-" ? h("div", { class: "sep", role: "separator" }) : h("button", { type: "button", role: "menuitem", class: it[2] || "", onclick: () => { closeRowMenu(); it[1](); } }, it[0])));
+    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => it === "-" ? h("div", { class: "sep", role: "separator" }) : h("button", { type: "button", role: "menuitem", class: it[2] || "", onclick: () => { closeRowMenu(); it[1](); } }, plain(it[0]))));
     document.body.append(rowMenuEl);
     const r = rowMenuEl.getBoundingClientRect(), b = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 0, bottom: 0 };
     const x = e.clientX || b.left, y = e.clientY || b.bottom;
