@@ -155,11 +155,11 @@ table.dns td:nth-child(3) { overflow-wrap: anywhere; }
 table.dns td.sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 
-.notice { padding: .7rem .9rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid transparent; }
-.notice.info { background: var(--info-bg); color: var(--info); }
-.notice.ok { background: var(--ok-bg); color: var(--ok); }
-.notice.warn { background: var(--warn-bg); color: var(--warn); }
-.notice.bad { background: var(--bad-bg); color: var(--bad); }
+.notice { padding: 0; margin: 0 0 .5rem; font-size: .85rem; background: none; border: 0; }
+.notice.info { color: var(--info); }
+.notice.ok { color: var(--ok); }
+.notice.warn { color: var(--warn); }
+.notice.bad { color: var(--bad); }
 .notice ul { margin: .25rem 0 0; padding-left: 1.2rem; }
 .empty { padding: 2rem 1rem; text-align: center; color: var(--muted); }
 
@@ -559,3 +559,6 @@ table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; wh
 label.check { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 0 1.5rem; color: var(--text); }
 label.check input { margin: 0; }
 .cv-menu button:disabled, .cv-menu button:disabled:hover { background: transparent; }
+
+dialog.nt-dialog { width: min(48rem, calc(100vw - 2rem)); }
+.nt-out { margin: 0; padding: .6rem .75rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; max-height: 60vh; overflow: auto; white-space: pre; }

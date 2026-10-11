@@ -238,8 +238,8 @@ README), so the version and changelog describe the final tree.
 - **NO BANNERS. Ever.** Never add a banner, notice bar or status message line to the GUI: not for
   progress ("Scanning…"), not for success ("Saved", "finished"), not for info or warnings. State goes
   in the control itself (tooltip, button label, a few words of small text beside it, a row's colour).
-  Do not call `say(status, "info"|"warn", …)` in new code. Only a failure the person must act on may
-  show, as red text beside the control that failed. When touching a page, remove any banner you find
+  Do not call `say(status, "info"|"warn", …)` in new code. Not even a red one: no box, no bar, no background,
+  no border. A failure the person must act on is plain red text (no box) beside the control that failed, and nothing else. When touching a page, remove any banner you find
   in the code you are changing. The owner has repeated this many times; do not make him say it again.
 
 - **GUI text: keep it short.** Don't add explanatory paragraphs, hints or notes to pages, forms or tables.

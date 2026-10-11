@@ -72,9 +72,9 @@ Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjar
 
 The installer builds Anyname from the source tree, installing only the prerequisites that are missing:
 
-- **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) and **nmap** (for Scan on the Statistics page).
+- **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) **nmap**, **ping** and **mtr** (for Scan, Ping and Traceroute on the Statistics page).
 - **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/ddgw/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
-- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap install is a warning too; only Scan needs it.
+- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap, ping or mtr install is a warning too; only Scan, Ping and Traceroute need them.
 
 It then installs `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw` systemd unit.
 
@@ -597,7 +597,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
 | `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
-| `--stats-clear` `[--all-nodes]`, `--scan ADDR` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report) |
+| `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR`, `--traceroute ADDR` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report), **Ping**, **Traceroute** (the popup's output, printed when done) |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
@@ -775,6 +775,8 @@ The range is Last Hour, Last Day, Last Week, Last Month, or a custom start and e
 **Answering a name yourself.** Right-click a name in Top domains ▸ **Block** adds a NODATA row (any client, that exact name) at the top of the Policy-Based Resolution table and saves it, so the proxy answers that name itself from then on and no longer asks the servers (to answer NXDOMAIN or REFUSED instead, change the row on Configure ▸ DNS proxy ▸ Resolution). The statistics still count the answer under its kind. A name that already has such a row shows a 🚫, and its menu item reads **Unblock**, which removes the row. **Rewrite…** next to it (a rewritten name shows a ✏️ and its item reads **Remove rewrite**) asks what to answer the name with (an address, records such as `A 10.5.5.5; TTL 300` or `CNAME host.example.com`, or another name to ask the servers for) and adds that as a row (any client, that exact name) at the top of the table; change or delete it on Configure ▸ DNS proxy ▸ Resolution.
 
 **Silencing a client.** Right-click a client in Top clients ▸ **Block** (a client that is blocked, and a domain that has such a row of its own, have a 🚫 after the name, and its item reads **Unblock**, which removes that row) puts a NODATA row for that client (any name) at the top of the table, so nothing it asks reaches the servers any more and it gets no answers.
+
+**Ping and traceroute of a client.** Right-click a client ▸ **Ping** or **Traceroute** opens a popup with the output of `ping -n -c 10 -W 2` or of `mtr -n -r -w -c 10`, run on the node you are looking at and shown as it comes in (at most 30 seconds for ping, two minutes for mtr; four at a time). **Run again** repeats it. Closing the popup does not stop the command, which ends by itself. Both programs are prerequisites the installer adds; without them the popup says so.
 
 **Scanning a client.** Right-click a client ▸ **Scan** runs nmap on the node you are looking at (`-Pn -F -sV -O`, the 100 commonest ports with service and OS detection, at most two minutes; two scans at a time). When it is done the client's tooltip shows a short summary: whether the host is up, its operating system, the MAC address and its maker, and the open ports with the service and version on each (twelve at most). nmap is a prerequisite the installer adds; without it the scan says so.
 

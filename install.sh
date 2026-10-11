@@ -332,6 +332,21 @@ install_nmap() {
   return 0
 }
 
+# ping and mtr run the "Ping" and "Traceroute" of a client on the Statistics page.  Only those need them, so a failure is a warning.
+install_nettools() {
+  local want=() ping_pkg=iputils-ping
+  case $PM in dnf|yum|pacman) ping_pkg=iputils;; esac
+  if assumed_missing ping || ! have ping; then want+=("$ping_pkg"); fi
+  if assumed_missing mtr || ! have mtr; then want+=(mtr); fi
+  if [ ${#want[@]} -eq 0 ]; then
+    info "ping and mtr already present"
+    return 0
+  fi
+  info "installing ${want[*]} (Statistics ▸ right-click a client ▸ Ping, Traceroute)"
+  (pkg_install "${want[@]}") || warn "${want[*]} could not be installed. Everything else works; install them yourself before using Ping and Traceroute."
+  return 0
+}
+
 # ── Go toolchain (>= $GO_MIN) ────────────────────────────────────────────────
 go_ok() {
   local bin=$1 v
@@ -423,6 +438,7 @@ else
   install_deps
   install_frr
   install_nmap
+  install_nettools
 fi
 step "Go toolchain"
 if find_go; then info "using $GO ($("$GO" version | awk '{print $3}'))"

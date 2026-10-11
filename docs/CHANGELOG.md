@@ -1,5 +1,18 @@
 # Changelog
 
+## [v326] - 2026-10-11 — Top clients: Ping and Traceroute popups
+
+### Added
+- Statistics ▸ Top clients ▸ right-click a client ▸ **Ping** opens a popup with the output of `ping -n -c 10 -W 2`, and **Traceroute** one with an `mtr -n -r -w -c 10` report, both run on the node picked in the Node menu. The output is shown as it comes in; **Run again** repeats it. Closing the popup does not stop the command; it ends by itself (30 s for ping, 120 s for mtr, four jobs at a time, one per kind and address).
+- `ddgw --ping ADDR` and `ddgw --traceroute ADDR` print the same output; the API is `POST/GET /api/nettool` (relayable to the picked node).
+- The address is the only input: it is checked to be one host's address and goes after `--`; the tool and its options are fixed.
+- install.sh installs `ping` (iputils-ping, or iputils on the RHEL family and Arch) and `mtr`; a failure is only a warning. Help and README updated.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...` (new: `nettool_test.go`, with stand-in programs: arguments, bad addresses refused, ping's exit 1 shown as output, output readable while running, missing program message, relay), cgo-off vet and test, cross-compiles for amd64, arm64, arm, 386, riscv64. A real daemon here ran `--ping 127.0.0.1` and `--traceroute 127.0.0.1` with the real ping and mtr, and refused `127.0.0.1; id`. install.sh `--dry-run` for ubuntu, fedora and arch picks the right package names.
+### Not verified
+The popup in a browser (light and dark), IPv6, a real multi-hop trace, and the relay to another cluster node.
+
 ## [v325] - 2026-10-11 — No banners anywhere
 
 ### Changed
@@ -8,6 +21,7 @@
 - Removed outright: "certificate expires in N day(s)" (an expired one is still red), the instruction text above a pending certificate request, the "Capturing… N s left" bar.
 - Plain small grey text instead of a box: "BGP is off / disabled on this node", the BGP notes, and "A restart is scheduled for … Cancel it".
 - Scan: no banner at all; the client's tooltip says "nmap: scanning…", then the result or "(failed)" and why.
+- Errors (the red ones) are no longer boxes either: `.notice` has no background, border or padding, so a failure is a line of plain coloured text beside the control. Nothing in the GUI is drawn as a banner.
 - `CLAUDE.md` now has a standing "no banners, ever" rule.
 
 ### Verified

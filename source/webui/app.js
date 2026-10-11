@@ -3042,6 +3042,40 @@
       } catch (e) { scanSeen.delete(scanKey(addr)); if (last) draw(last); if (e.message !== "unauthenticated") say(status, "bad", "Scan of " + addr + ": " + e.message); }
     }
 
+    // Ping / Traceroute: a popup with the output of ping or mtr of a client, run on the picked node and shown as it grows
+    function netTool(kind, addr) {
+      const title = (kind === "ping" ? "Ping " : "Traceroute ") + addr;
+      const out = h("pre", { class: "nt-out", tabindex: "0", "aria-live": "off" }, "…");
+      const again = h("button", { class: "btn", type: "button", disabled: true }, "Run again");
+      const d = h("dialog", { class: "cv-dialog nt-dialog", "aria-label": title });
+      let alive = true, run = 0;
+      const close = () => { alive = false; try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => { alive = false; d.remove(); });
+      d.append(h("button", { class: "dlg-x", type: "button", "aria-label": "Close", title: "Close", onclick: close }, "✕"), h("h2", {}, title), out,
+        h("div", { class: "toolbar" }, again, h("button", { class: "btn", type: "button", onclick: close }, "Close")));
+      root.append(d);
+      d.showModal();
+      const go = async () => {
+        const me = ++run;
+        again.disabled = true;
+        out.textContent = "…";
+        const q = "?kind=" + kind + "&client=" + encodeURIComponent(addr);
+        try {
+          let j = (await api("POST", "/api/nettool", { kind, client: addr })).data;
+          while (alive && me === run) {
+            if (j.text) { const end = out.scrollTop + out.clientHeight >= out.scrollHeight - 4; out.textContent = j.text; if (end) out.scrollTop = out.scrollHeight; }
+            if (j.state !== "running") break;
+            await new Promise((r) => setTimeout(r, 1000));
+            if (!alive || me !== run) return;
+            j = (await api("GET", "/api/nettool" + q)).data;
+          }
+        } catch (e) { if (alive && me === run && e.message !== "unauthenticated") out.textContent = e.message; }
+        if (alive && me === run) again.disabled = false;
+      };
+      again.addEventListener("click", go);
+      go();
+    }
+
     // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
     async function addPolicyRow(name, keyword, client, dest) {
       client = client || "*";
@@ -3188,7 +3222,7 @@
       let blocked = false;
       try { const list = ((await api("GET", "/api/config")).config.dns || {}).policy || []; blocked = list.some((r) => isBlockRow(r, addr)); } catch (_) { /* offer Block */ }
       const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
-      rowMenu([["Scan", () => scanClient(addr)],
+      rowMenu([["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Scan", () => scanClient(addr)],
         ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }

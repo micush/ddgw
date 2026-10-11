@@ -43,6 +43,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		QTo      string   `json:"to"`
 		QRcode   string   `json:"rcode"`
 		QClient  string   `json:"client"`
+		NetKind  string   `json:"kind"`
 		QDomain  string   `json:"domain"`
 		QName    string   `json:"name"`
 		QOld     string   `json:"old"`
@@ -247,6 +248,8 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	// nmap of a client
 	case "scan.start":
 		return scanStart(a.QClient, actor)
+	case "nettool.start":
+		return netToolStart(a.NetKind, a.QClient, actor)
 	case "clientname.register":
 		if m.regNameFn == nil {
 			return nil, errors.New("registration is not available on this node")
@@ -275,6 +278,8 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		return map[string]any{"ok": true, "lines": lines}, nil
 	case "scan.get":
 		return scanGet(a.QClient)
+	case "nettool.get":
+		return netToolGet(a.NetKind, a.QClient)
 	case "qstats.cluster":
 		from, to, err := qstatsRange(a.QFrom, a.QTo)
 		if err != nil {
