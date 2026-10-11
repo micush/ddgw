@@ -2832,16 +2832,13 @@
     const RANGES = [["1h", "Last Hour"], ["1d", "Last Day"], ["7d", "Last Week"], ["30d", "Last Month"], ["custom", "Custom"]];
     const REFRESH_MS = 10000;
     const n0 = (n) => Number(n || 0).toLocaleString();
-    // a share never rounds to 100% unless it is all of them, and never to 0% unless it is none: more decimals until it shows
+    // a share is rounded to two decimals at most, but never to 100% unless it is all of them (99.99%) or to 0% unless it is none (<0.01%)
     const pct = (n, t) => {
       if (t <= 0) return "–";
       if (n === 0) return "0%";
-      const v = 100 * n / t;
-      for (let d = v < 0.1 ? 2 : 1; d < 8; d++) {
-        const s = v.toFixed(d), x = Number(s);
-        if (x > 0 && (n >= t || x < 100)) return s + "%";
-      }
-      return v.toFixed(8) + "%";
+      if (n >= t) return "100%";
+      const x = Math.round((100 * n) / t * 100) / 100;
+      return x >= 100 ? "99.99%" : x <= 0 ? "<0.01%" : String(x) + "%";
     };
 
     let status, bar, cnote, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;

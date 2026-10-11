@@ -1,5 +1,14 @@
 # Changelog
 
+## [v343] - 2026-10-11 — Statistics tiles: two decimals at most, numbers on one line
+
+### Fixed
+- A share could show three or more decimals (Cache Hits `99.999%`). Shares are now rounded to two decimals at most (93.91%, 6.09%), never 100% unless the count is all of them (99.99%) and never 0% unless none (`<0.01%`); a whole 100% is written `100%`. This applies to the tiles, the donut lists and the top lists.
+- The numbers sat at different heights from tile to tile: a tile you can click is a button, and a button centres its content vertically, so it differed from the plain tiles whenever a label wrapped to two lines. Every tile now starts at the top, so the number, the small line and the label line up across the row.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. The real `app.js` in headless Chromium at 1040 px with the API mocked: numbers aligned, Cache Hits `99.99%`; `pct` run on 3886/4138, 252/4138, 3159999/3160000, 1/3160000.
+
 ## [v342] - 2026-10-11 — A node that is updating is not shown as down
 
 ### Changed

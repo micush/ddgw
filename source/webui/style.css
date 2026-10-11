@@ -409,6 +409,7 @@ td input[type=date] { width: 11rem; }
 /* the tiles share one row; a label may wrap to two lines in a narrow window, a number never does; below the widest word the row scrolls */
 .qtiles { display: flex; flex-wrap: nowrap; gap: .6rem; margin-bottom: 1rem; overflow-x: auto; }
 .qtile { flex: 1 1 0; min-width: min-content; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 6px; padding: .55rem .7rem; box-shadow: var(--shadow); }
+.qtile { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; text-align: left; }  /* a button centres its content: every tile starts at the top, so the numbers line up */
 .qtile.pick { font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .qtile.pick:hover { border-color: var(--c); }
 .qtile.pick[aria-pressed="true"] { outline: 2px solid var(--c); outline-offset: -1px; }
