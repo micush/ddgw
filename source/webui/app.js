@@ -67,7 +67,7 @@
   // Everything follows the node picked in the top bar (relayed through the node
   // you are logged in to) except the login itself.  The picker's own list of
   // nodes is asked of the login node explicitly (api(..., true)).
-  const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download)(\/|\?|$)/;
+  const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download|cache\/flush)(\/|\?|$)/;
   // The Node menu's "Cluster" entry: Monitor ▸ Statistics and Monitor ▸ Host show every node's numbers added together
   // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
   // anything else a page asks goes to this node as before.
@@ -1878,6 +1878,7 @@
     { shared: true, k: "client_rate", l: "Queries per second", t: "int", min: 0, max: 10000000, hint: "0 = no limit. A client is one IPv4 address or one IPv6 /64." },
     { shared: true, k: "client_burst", l: "Burst (queries at once)", t: "int", min: 0, max: 100000000, hint: "0 = twice the rate, at least 10." },
     { shared: true, k: "client_action", l: "Over the limit", t: "select", options: ["drop", "truncate", "refused"] },
+    { shared: true, k: "client_limits", l: "Per-client limits", t: "list", wide: true, hint: "One per line: an address or network, then queries per second (192.168.1.5 50)." },
     { shared: true, k: "client_exempt", l: "Never limited", t: "list", wide: true, hint: "Networks exempt from the rate limit (not from the allowed list), same forms." },
     { section: "Client network (ECS)" },
     { shared: true, k: "ecs", l: "Pass the client's network to the servers", t: "bool" },
@@ -2818,7 +2819,17 @@
     const RANGES = [["1h", "Last Hour"], ["1d", "Last Day"], ["7d", "Last Week"], ["30d", "Last Month"], ["custom", "Custom"]];
     const REFRESH_MS = 10000;
     const n0 = (n) => Number(n || 0).toLocaleString();
-    const pct = (n, t) => (t <= 0 ? "–" : n === 0 ? "0%" : (100 * n / t).toFixed(n / t < 0.001 ? 2 : 1) + "%");
+    // a share never rounds to 100% unless it is all of them, and never to 0% unless it is none: more decimals until it shows
+    const pct = (n, t) => {
+      if (t <= 0) return "–";
+      if (n === 0) return "0%";
+      const v = 100 * n / t;
+      for (let d = v < 0.1 ? 2 : 1; d < 8; d++) {
+        const s = v.toFixed(d), x = Number(s);
+        if (x > 0 && (n >= t || x < 100)) return s + "%";
+      }
+      return v.toFixed(8) + "%";
+    };
 
     let status, bar, cnote, tiles, chartBox, pies, tops, upds, foot, rangeBtns, fromIn, toIn, customRow;
     let range = "1h", qpsView = false, sel = "", pickClient = "", pickDomain = "", hidden = new Set(), last = null, lastAt = 0, seq = 0, clientsMore = false, domainsMore = false, cFilter = "", dFilter = "", filterTimer = 0;
@@ -2862,7 +2873,7 @@
         (() => { const huge = typeof value !== "string" && value >= 1e12, text = typeof value === "string" ? value : huge ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value), qv = h("div", { class: "qv", title: huge ? n0(value) : null }, text); qv.style.setProperty("--len", String(Math.max(1, text.length - (text.match(/[,.\s]/g) || []).length / 2))); return qv; })(), // CSSOM, allowed by the CSP
         qfit("qs", sub || "\u00a0"), qfit("ql", label));
       clear(tiles).append(
-        tile("q-total", "Total Queries", t, t ? "100%" : "", ""),
+        tile("q-total", "Total Queries", t, "", ""),
         // queries per second: now = the last finished bucket (the newest one is still filling), with the average and the peak over the range
         (() => { const b = d.total || [], st = d.step || 60, f = (v) => (v >= 100 ? n0(Math.round(v)) : v.toFixed(1)),
             rate = b.map((v) => v / st), cur = rate.length > 1 ? rate[rate.length - 2] : rate.length ? rate[0] : 0,
@@ -2877,7 +2888,7 @@
         tile("q-clients", "Clients", d.sums.clients, ""),
         // answers served from the cache, out of the lookups that could be cached (the cache's own hit rate, over the chosen range)
         (() => { const hit = d.sums.cache_hits || 0, look = hit + (d.sums.cache_misses || 0);
-          return tile("q-cache", "Cache Hits", look ? pct(hit, look) : "–", look ? n0(hit) + " of " + n0(look) : "off or unused", undefined, "Answered from the cache, out of the lookups that could be cached in this range"); })());
+          return tile("q-cache", "Cache Hits", look ? pct(hit, look) : "–", look ? "" : "off or unused", undefined, "Answered from the cache, out of the lookups that could be cached in this range" + (look ? ": " + n0(hit) + " of " + n0(look) : "")); })());
     }
 
     function drawChart(d) {
@@ -3063,6 +3074,57 @@
       textPopup("Whois " + name, async (put) => put(whoisText((await api("GET", "/api/whois?domain=" + encodeURIComponent(name))).data)));
     }
 
+    // Lookup: what this node's resolver says about a client address (its reverse names) or a domain (addresses, CNAME, MX, NS, TXT)
+    function lookupPopup(name) {
+      textPopup("Lookup " + name, async (put) => put((await api("GET", "/api/dnslookup/full?lookup=" + encodeURIComponent(name))).data.text));
+    }
+    // Flush: drop a domain from the answer cache of every node (whatever the Node menu says); the popup says how many answers went
+    function flushPopup(name) {
+      textPopup("Flush " + name, async (put) => {
+        const r = (await api("POST", "/api/cache/flush", { domain: name })).data || {};
+        const bad = (r.nodes || []).filter((n) => !n.ok);
+        put(r.flushed + " cached answer" + (r.flushed === 1 ? "" : "s") + " for " + (r.name || name) + " dropped on " + ((r.nodes || []).length > 1 ? "every node" : "this node") +
+          (bad.length ? "\nNot reached: " + bad.map((n) => n.name + " (" + n.error + ")").join(", ") : ""));
+      });
+    }
+    // Copy: the address to the clipboard
+    async function copyAddr(text) {
+      try { await navigator.clipboard.writeText(text); } catch (_) { /* no permission: nothing copied */ }
+    }
+    // Limit…: a rate of its own for one client (Settings ▸ client_limits, "ADDRESS RATE"); 0 removes it
+    async function setClientLimit(addr, rate) {
+      try {
+        const cfg = (await api("GET", "/api/config")).config;
+        cfg.dns = cfg.dns || {};
+        const list = (cfg.dns.client_limits || []).filter((x) => x.trim().split(/\s+/)[0] !== addr);
+        if (rate > 0) list.push(addr + " " + rate);
+        if (list.length) cfg.dns.client_limits = list; else delete cfg.dns.client_limits;
+        await api("PUT", "/api/config", { config: cfg, note: "Client limit from Statistics: " + addr + (rate > 0 ? " " + rate + " queries/s" : " removed") });
+        await load();
+      } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Limit not saved: " + e.message); }
+    }
+    function askLimit(addr, current) {
+      const input = h("input", { type: "text", inputmode: "numeric", autocomplete: "off", spellcheck: "false", value: current ? String(current) : "", placeholder: "queries per second", "aria-label": "Queries per second" });
+      const err = h("div", { "aria-live": "polite" });
+      const d = h("dialog", { class: "cv-dialog", "aria-label": "Limit " + addr });
+      const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => d.remove());
+      d.append(h("h2", {}, "Limit " + addr),
+        h("form", { onsubmit: (ev) => {
+          ev.preventDefault();
+          const v = input.value.trim();
+          if (!/^\d+$/.test(v) || Number(v) < 1 || Number(v) > 10000000) { errorBox(err, "Write a number of queries per second, 1 to 10000000."); return; }
+          close(); setClientLimit(addr, Number(v));
+        } },
+        h("label", { class: "f wide" }, "Queries per second", input), err,
+        h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Save"),
+          current ? h("button", { class: "btn", type: "button", onclick: () => { close(); setClientLimit(addr, 0); } }, "Remove limit") : null,
+          h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
+      root.append(d);
+      d.showModal();
+      input.focus(); input.select();
+    }
+
     // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
     async function addPolicyRow(name, keyword, client, dest) {
       client = client || "*";
@@ -3161,7 +3223,8 @@
         const list = (((await api("GET", "/api/config")).config.dns || {}).policy || []);
         has = list.some((r) => isNameRow(r, name)); rewritten = list.some((r) => isRewriteRow(r, name));
       } catch (_) { /* offer Block and Rewrite */ }
-      const tools = [["Whois", () => whoisPopup(name)], ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)]];
+      const tools = [["Whois", () => whoisPopup(name)], ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)],
+        ["Lookup", () => lookupPopup(name)], ["Flush", () => flushPopup(name)]];
       rowMenu([...tools, ...(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
         : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])])(e);
     }
@@ -3207,10 +3270,16 @@
     }
     async function clientMenu(e, addr, entry) {
       e.preventDefault(); e.stopPropagation();
-      let blocked = false;
-      try { const list = ((await api("GET", "/api/config")).config.dns || {}).policy || []; blocked = list.some((r) => isBlockRow(r, addr)); } catch (_) { /* offer Block */ }
+      let blocked = false, limit = 0;
+      try {
+        const dns = (await api("GET", "/api/config")).config.dns || {};
+        blocked = (dns.policy || []).some((r) => isBlockRow(r, addr));
+        const own = (dns.client_limits || []).map((x) => x.trim().split(/\s+/)).find((f) => f[0] === addr);
+        limit = own ? Number(own[1]) || 0 : 0;
+      } catch (_) { /* offer Block */ }
       const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
-      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Scan", () => scanClient(addr)],
+      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Lookup", () => lookupPopup(addr)], ["Scan", () => scanClient(addr)],
+        ["Limit…" + (limit ? " (" + limit + "/s)" : ""), () => askLimit(addr, limit)], ["Copy", () => copyAddr(addr)],
         ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }

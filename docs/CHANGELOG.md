@@ -1,5 +1,23 @@
 # Changelog
 
+## [v330] - 2026-10-11 — Right-click: Lookup, Flush, Limit, Copy
+
+### Changed
+- The Total Queries tile no longer says 100% under the number.
+- A share on the Statistics tiles never rounds up to 100% (171,530,417 of 171,549,076 is 99.99%, not 100.0%) and never down to 0.00% when there is any (8 of 171 million shows 0.000005%): it gets more decimals until it shows.
+- The Cache Hits tile shows only the percentage: the "X of Y" line under it is gone (the counts are in its tooltip).
+
+### Added
+- **Top clients** right-click: **Lookup** (a popup with the reverse (PTR) names this node's resolver finds for the address), **Limit…** (that client's own rate in queries per second; the item shows the current one, the dialog has **Remove limit**) and **Copy** (the address to the clipboard).
+- **Top domains** right-click: **Lookup** (addresses, CNAME, MX, name servers and text records of the name, asked of this node's resolver, once) and **Flush**, which drops the name (every type, every client network, negative answers too) from the answer cache of **every node**, whatever the Node menu says; the popup says how many answers went and names a node it could not reach.
+- New setting `dns.client_limits` (shared by the cluster, counted per node): `"ADDRESS RATE"` entries such as `"192.168.1.5 50"`. A listed client or network gets that rate (burst twice the rate, at least 10) instead of `client_rate`, also when `client_rate` is 0 and even inside `client_exempt`; the first entry that contains the client wins. Entries are validated and written normalised (a single address without `/32`), duplicates are refused. Also on Configure ▸ DNS proxy ▸ Clients ▸ **Per-client limits**.
+- `ddgw --lookup ADDR|NAME` and `ddgw --cache-flush NAME` (every node); API `GET /api/dnslookup/full`, `POST /api/cache/flush` (asks every node) and `POST /api/cache/flush-node` (this node only).
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...` (new: a client's own limit alone, over the pool's rate, past an exemption; validation and normalisation; flushing by name leaves subdomains and similar names; names checked; lookup), cgo-off vet and test, cross-compiles. A real daemon here ran `--lookup` and `--cache-flush`. (Lookup listed an IPv4 address as `::ffff:127.0.0.1`; it is now shown as `127.0.0.1`.)
+### Not verified
+The menus and dialogs in a browser, a flush across a real cluster, and a limit under real query load on a live gateway.
+
 ## [v329] - 2026-10-11 — Statistics tiles keep one height
 
 ### Fixed

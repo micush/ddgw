@@ -131,6 +131,8 @@ the web GUI):
                    --stats-clear [--all-nodes]   (forget the counts and top lists, here or on every node)
                    --scan ADDR   (nmap of a client, run from this node; needs the nmap package)
                    --ping ADDR|NAME  --traceroute ADDR|NAME   (ping / mtr of a client or domain, run from this node; needs ping and mtr)
+                   --lookup ADDR|NAME   (what this node's resolver says: PTR of an address; A, AAAA, CNAME, MX, NS, TXT of a name)
+                   --cache-flush NAME   (drop a name from the answer cache of every node)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
   Capture          --capture IFACE [--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]
@@ -185,6 +187,8 @@ DNS proxy ("dns" block at the top level of the config):
   client_action      what a client over its rate gets: drop (default; nothing is sent), truncate (UDP: a short answer
                      with the TC bit, so a real client retries over TCP) or refused. Over TCP/DoT/DoH: always REFUSED
   client_exempt      networks never rate limited (still subject to allowed_clients)
+  client_limits      a rate of its own for one client or network, one entry each: "192.168.1.5 50" (queries per second;
+                     burst twice that, at least 10). Applies even when client_rate is 0 or the network is in client_exempt
   sortlist_on        true (default) uses sortlist; false keeps the list but does not sort
   sortlist           per-client-network order of the A/AAAA records in answers, one entry each:
                      "client-network: preferred-network, ...", e.g. ["10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"];
@@ -483,6 +487,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	mg.pausedFn = func() bool { return sup.config().NodePaused }
 	mg.anycastFn = sup.AllAnycastStates
 	mg.poolOf = sup.poolFor
+	mg.flushFn = sup.flushCache
 	mg.regNameFn = func(ctx context.Context, name, old string, addr netip.Addr) ([]string, error) {
 		return sup.registerClientName(ctx, sup.config().DNS, name, old, addr)
 	}

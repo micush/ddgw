@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net/netip"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,6 +18,9 @@ import (
 //	                 sources), truncate (UDP only: a short answer with the TC bit that makes a real client retry
 //	                 over TCP) or refused. Over TCP, DoT and DoH the address is real, so REFUSED is answered.
 //	client_exempt    networks that are never limited (still subject to allowed_clients).
+//	client_limits    "NETWORK RATE" lines: that client or network has its own rate (queries per second, its burst
+//	                 twice the rate, at least 10) instead of client_rate, and is limited even when client_rate is 0 or
+//	                 the network is in client_exempt. The first line that contains the client applies.
 //
 // The node itself (loopback) is always allowed and never limited. A client is one IPv4 address or one IPv6 /64.
 // The counters are per node: with several nodes answering, a client may reach each of them in turn.
@@ -41,6 +46,14 @@ const (
 type bucket struct {
 	tokens float64
 	last   time.Time
+	rate   float64 // what this client refills at: the pool's rate, or its own from client_limits
+	burst  float64
+}
+
+// limOverride is one client_limits line.
+type limOverride struct {
+	net         netip.Prefix
+	rate, burst float64
 }
 
 type limShard struct {
@@ -51,6 +64,7 @@ type limShard struct {
 type clientLimits struct {
 	allow  []netip.Prefix
 	exempt []netip.Prefix
+	over   []limOverride
 	rate   float64
 	burst  float64
 	action string
@@ -100,9 +114,30 @@ func effectiveBurst(rate, burst int) float64 {
 	return b
 }
 
-// newClientLimits is nil when neither a list nor a rate is configured, so the common case costs nothing.
+// parseClientLimits reads client_limits lines ("192.168.1.5 50", "10.2.0.0/16 200").
+func parseClientLimits(list []string) ([]limOverride, error) {
+	out := make([]limOverride, 0, len(list))
+	for _, line := range list {
+		f := strings.Fields(line)
+		if len(f) != 2 {
+			return nil, fmt.Errorf("%q: write an address or network, then queries per second (192.168.1.5 50)", line)
+		}
+		nets, err := parseClientNets(f[:1])
+		if err != nil {
+			return nil, err
+		}
+		rate, err := strconv.Atoi(f[1])
+		if err != nil || rate < 1 || rate > 10_000_000 {
+			return nil, fmt.Errorf("%q: the rate must be 1-10000000 queries per second", line)
+		}
+		out = append(out, limOverride{net: nets[0], rate: float64(rate), burst: effectiveBurst(rate, 0)})
+	}
+	return out, nil
+}
+
+// newClientLimits is nil when no list, rate or client limit is configured, so the common case costs nothing.
 func newClientLimits(c DNSConfig) *clientLimits {
-	if len(c.AllowedClients) == 0 && c.ClientRate <= 0 {
+	if len(c.AllowedClients) == 0 && c.ClientRate <= 0 && len(c.ClientLimits) == 0 {
 		return nil
 	}
 	l := &clientLimits{rate: float64(c.ClientRate), burst: effectiveBurst(c.ClientRate, c.ClientBurst), action: c.ClientAction}
@@ -111,6 +146,7 @@ func newClientLimits(c DNSConfig) *clientLimits {
 	}
 	l.allow, _ = parseClientNets(c.AllowedClients) // validated when the config was loaded
 	l.exempt, _ = parseClientNets(c.ClientExempt)
+	l.over, _ = parseClientLimits(c.ClientLimits)
 	for i := range l.shards {
 		l.shards[i].m = map[netip.Addr]*bucket{}
 	}
@@ -159,7 +195,14 @@ func (l *clientLimits) check(client netip.Addr, now time.Time) admitVerdict {
 	if len(l.allow) > 0 && !inNets(l.allow, client) {
 		return admitDenied
 	}
-	if l.rate <= 0 || inNets(l.exempt, client) {
+	rate, burst, own := l.rate, l.burst, false
+	for i := range l.over { // a client's own limit comes before the exemptions and the pool's rate
+		if l.over[i].net.Contains(client) {
+			rate, burst, own = l.over[i].rate, l.over[i].burst, true
+			break
+		}
+	}
+	if rate <= 0 || (!own && inNets(l.exempt, client)) {
 		return admitOK
 	}
 	key := clientKey(client)
@@ -171,12 +214,13 @@ func (l *clientLimits) check(client netip.Addr, now time.Time) admitVerdict {
 		if len(sh.m) >= limShardMax {
 			l.makeRoom(sh, now)
 		}
-		b = &bucket{tokens: l.burst, last: now}
+		b = &bucket{tokens: burst, last: now, rate: rate, burst: burst}
 		sh.m[key] = b
 	} else {
-		b.tokens += now.Sub(b.last).Seconds() * l.rate
-		if b.tokens > l.burst {
-			b.tokens = l.burst
+		b.rate, b.burst = rate, burst
+		b.tokens += now.Sub(b.last).Seconds() * rate
+		if b.tokens > burst {
+			b.tokens = burst
 		}
 		b.last = now
 	}
@@ -190,9 +234,8 @@ func (l *clientLimits) check(client netip.Addr, now time.Time) admitVerdict {
 // makeRoom (sh.mu held) forgets clients whose bucket has refilled completely (they lose nothing), and if that
 // is not enough a few arbitrary ones, whose clients simply start with a full bucket again.
 func (l *clientLimits) makeRoom(sh *limShard, now time.Time) {
-	full := time.Duration(l.burst / l.rate * float64(time.Second))
 	for k, b := range sh.m {
-		if now.Sub(b.last) >= full {
+		if now.Sub(b.last) >= time.Duration(b.burst/b.rate*float64(time.Second)) {
 			delete(sh.m, k)
 		}
 	}

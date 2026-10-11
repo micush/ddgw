@@ -264,7 +264,7 @@ func (s *StatusServer) dnsStatus() map[string]any {
 			"queries": pi.Pool.Queries.Load(), "answered": pi.Pool.Answered.Load(),
 			"servfail": pi.Pool.Failed.Load(),
 			"ecs":      pi.Cfg.ECS, "ecs_sent": pi.Pool.ECSSent.Load(),
-			"allowed_clients": len(pi.Cfg.AllowedClients), "client_rate": pi.Cfg.ClientRate, "client_burst": int(effectiveBurst(pi.Cfg.ClientRate, pi.Cfg.ClientBurst)),
+			"allowed_clients": len(pi.Cfg.AllowedClients), "client_limits": len(pi.Cfg.ClientLimits), "client_rate": pi.Cfg.ClientRate, "client_burst": int(effectiveBurst(pi.Cfg.ClientRate, pi.Cfg.ClientBurst)),
 			"client_action": orDefault(pi.Cfg.ClientAction, actDrop), "denied": pi.Pool.Denied.Load(), "limited": pi.Pool.Limited.Load(),
 			"cache":    pi.Pool.cache.stats(),
 			"dot_port": pi.Cfg.DoTPort, "doh_port": pi.Cfg.DoHPort, "tls_insecure": pi.Cfg.TLSInsecure, "spread": pi.Cfg.Spread, "spread_band": pi.Cfg.SpreadBand,

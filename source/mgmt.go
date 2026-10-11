@@ -48,6 +48,7 @@ type Mgmt struct {
 	tshootFn  func() map[string]any                                                          // what only the status server knows, for the troubleshooting bundle (see tshoot.go)
 	regNameFn func(ctx context.Context, name, old string, addr netip.Addr) ([]string, error) // sends the dynamic update that registers a client name (regname.go)
 	othersFn  func() int                                                                     // how many other nodes are in service (tests replace it; nil asks the cluster)
+	flushFn   func(name string) int                                                          // drops a name from this node's answer caches
 	poolOf    func(gid int) *Pool                                                            // the DNS pool serving a gateway on this node (the cache warm start, cachewarm.go)
 	servMu    sync.Mutex
 	servSince map[int]time.Time // when each gateway started being served continuously

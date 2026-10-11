@@ -545,6 +545,9 @@ type DNSConfig struct {
 	ClientBurst  int      `json:"client_burst,omitempty"`
 	ClientAction string   `json:"client_action,omitempty"`
 	ClientExempt []string `json:"client_exempt,omitempty"`
+	// ClientLimits give single clients or networks a rate of their own: "192.168.1.5 50" (queries per second).  They apply
+	// even when ClientRate is 0 and before ClientExempt (see clientlimit.go).
+	ClientLimits []string `json:"client_limits,omitempty"`
 	// ClientNames are names given to clients by hand (Statistics ▸ Top clients ▸ right-click ▸ Name…): address -> name.  They are
 	// shown instead of the reverse-DNS name and can be filtered on.  Only the shared Settings' copy is used.
 	ClientNames map[string]string `json:"client_names,omitempty"`
@@ -1029,6 +1032,10 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	c.ClientExempt = append([]string(nil), shared.ClientExempt...)
 	if len(c.ClientExempt) == 0 {
 		c.ClientExempt = nil
+	}
+	c.ClientLimits = append([]string(nil), shared.ClientLimits...)
+	if len(c.ClientLimits) == 0 {
+		c.ClientLimits = nil
 	}
 	c.PolicyOn, c.PolicyLog = shared.PolicyOn, shared.PolicyLog
 	c.Policy = clonePolicy(shared.Policy)
@@ -1572,6 +1579,27 @@ func (d *DNSConfig) validateClients() error {
 			}
 		}
 		*f.list = norm
+	}
+	if len(d.ClientLimits) == 0 {
+		d.ClientLimits = nil
+	} else {
+		ov, err := parseClientLimits(d.ClientLimits)
+		if err != nil {
+			return fmt.Errorf("dns: client_limits: %w", err)
+		}
+		norm, seen := make([]string, 0, len(ov)), map[string]bool{}
+		for _, o := range ov {
+			n := o.net.String()
+			if o.net.IsSingleIP() {
+				n = o.net.Addr().String()
+			}
+			if seen[n] {
+				return fmt.Errorf("dns: client_limits: %s is listed twice", n)
+			}
+			seen[n] = true
+			norm = append(norm, n+" "+strconv.Itoa(int(o.rate)))
+		}
+		d.ClientLimits = norm
 	}
 	if d.ClientRate < 0 || d.ClientRate > 10_000_000 {
 		return errors.New("dns: client_rate must be 0-10000000 queries per second")

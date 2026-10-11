@@ -124,6 +124,24 @@ func (c *respCache) shardForBytes(key []byte) *cacheShard {
 }
 
 // Bytes is what the entries count for against the byte budget.
+// flushName drops every cached answer for name (every type, class, transport and client network, negative answers
+// included) and says how many there were.  name is lower case, without a trailing dot.
+func (c *respCache) flushName(name string) int {
+	prefix := name + "|"
+	n := 0
+	for _, sh := range c.shards {
+		sh.mu.Lock()
+		for k, e := range sh.m {
+			if len(k) > len(prefix) && k[:len(prefix)] == prefix {
+				sh.drop(e)
+				n++
+			}
+		}
+		sh.mu.Unlock()
+	}
+	return n
+}
+
 func (c *respCache) Bytes() int {
 	n := 0
 	for _, sh := range c.shards {

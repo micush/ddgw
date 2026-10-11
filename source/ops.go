@@ -248,6 +248,50 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	// nmap of a client
 	case "scan.start":
 		return scanStart(a.QClient, actor)
+	case "dns.lookup.full":
+		return lookupFull(a.Lookup)
+	case "cache.flush":
+		name, err := cacheFlushName(a.QDomain)
+		if err != nil {
+			return nil, err
+		}
+		if m.flushFn == nil {
+			return nil, errors.New("the cache is not available on this node")
+		}
+		n := m.flushFn(name)
+		warnf("cache: %q flushed %s from the answer cache of this node (%d answers)", actor, name, n)
+		return map[string]any{"name": name, "flushed": n}, nil
+	case "cache.flush.cluster":
+		name, err := cacheFlushName(a.QDomain)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(map[string]string{"domain": name})
+		parts, infos := clusterGatherReq(context.Background(), m, proxyReq{User: actor, Method: "POST", Path: "/api/cache/flush-node", CT: "application/json", Body: body}, clusterStatsTimeout,
+			func() (*struct {
+				Name    string
+				Flushed int
+			}, error) {
+				if m.flushFn == nil {
+					return nil, errors.New("the cache is not available on this node")
+				}
+				n := m.flushFn(name)
+				warnf("cache: %q flushed %s from the answer cache of this node (%d answers)", actor, name, n)
+				return &struct {
+					Name    string
+					Flushed int
+				}{name, n}, nil
+			})
+		if len(parts) == 0 {
+			return nil, errors.New("no node answered")
+		}
+		total := 0
+		for _, p := range parts {
+			if p.R != nil {
+				total += p.R.Flushed
+			}
+		}
+		return map[string]any{"name": name, "flushed": total, "nodes": infos}, nil
 	case "nettool.start":
 		return netToolStart(a.NetKind, a.QClient, actor)
 	case "clientname.register":

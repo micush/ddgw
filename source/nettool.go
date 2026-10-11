@@ -375,3 +375,12 @@ func (m *mtrRaw) render() {
 	}
 	m.j.Text = b.String()
 }
+
+// cacheFlushName checks and normalises the name to drop from the cache.
+func cacheFlushName(s string) (string, error) {
+	k, _, name, err := netTarget(s)
+	if err != nil || name == "" {
+		return "", fmt.Errorf("%q is not a host name", s)
+	}
+	return k, nil
+}
