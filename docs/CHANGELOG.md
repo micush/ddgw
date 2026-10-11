@@ -1,5 +1,19 @@
 # Changelog
 
+## [v350] - 2026-10-11 — Remove the "holding back its queued update" line
+
+### Changed
+- CLAUDE.md has a new rule: no update/status text between cards.
+
+### Removed
+- The Upgrade page no longer prints "This node is holding back its queued update: …; the others wait". The update order is unchanged; only the text is gone.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js.
+
+### Not verified
+- Not looked at in a browser.
+
 ## [v349] - 2026-10-11 — Online repository setting
 
 ### Added

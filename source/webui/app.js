@@ -2743,7 +2743,6 @@
         stat("Running", "v" + v.running), stat("Staged source", v.source_version ? "v" + v.source_version : "none"),
         stat("Auto-update", v.intent.auto_all ? "ON" : "off"),
         stat("This node", v.busy ? (v.phase || "working…") : newer ? "update available" : "up to date", true));
-      if (v.waiting) dyn.append(h("p", { class: "hint" }, "This node is holding back its queued update: " + v.waiting + "."));
       const addrs = new Set(v.nodes.map((n) => n.addr));
       for (const a of [...selected]) if (!addrs.has(a)) selected.delete(a);
       const picked = v.clustered ? [...selected] : [];

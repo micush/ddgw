@@ -242,6 +242,8 @@ README), so the version and changelog describe the final tree.
   no border. A failure the person must act on is plain red text (no box) beside the control that failed, and nothing else. When touching a page, remove any banner you find
   in the code you are changing. The owner has repeated this many times; do not make him say it again.
 
+- **No update or status text between cards.** Never put a line of update/progress/status text in the gap between two cards on a page (e.g. "This node is holding back its queued update…"). Anything of that kind goes inside a card, in a control's tooltip or state, or in `webui/help.js`.
+
 - **GUI text: keep it short.** Don't add explanatory paragraphs, hints or notes to pages, forms or tables.
   If something needs explaining, put it in `webui/help.js` (the "?" panel) and nothing on the page itself.
   A label, a placeholder and at most a few words of hint are the limit. Don't add any text the owner didn't ask for.
