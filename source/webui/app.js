@@ -614,6 +614,14 @@
       }
     }
     function pauseServer(g, addr, scope, pause) {
+      if (pause) {   // the last server in service stays on unless the gateway has fallback servers to answer from; a server that is down (not answering or paused) is not in service
+        const d = g.dns || cv.cfg.dns || {}, st = statusOf(g);
+        const inService = (x) => { const c = serverState(g, x, st.servers[x], st.via).c; return c !== "bad" && c !== "paused"; };
+        if (inService(addr) && !(d.servers || []).some((x) => x !== addr && inService(x)) && !(d.fallback_servers || []).length) {
+          errorBox(msgEl, "That is the last DNS server in service on gateway " + gwLabel(g) + " (the others are down or paused), and the gateway has no fallback servers, so pausing it would leave clients unanswered. Add a fallback server first (Configure ▸ DNS proxy ▸ Servers, or the gateway's own servers).");
+          return;
+        }
+      }
       quick(() => {
         if (scope === "all") { ensureDNS(g); toggleIn(g.dns, "paused_servers", addr, pause); }
         else toggleIn(cv.cfg, "paused_servers_here", addr, pause);
@@ -653,7 +661,11 @@
         if (!w) return n;
         if (!!n.node_paused === w.want || Date.now() > w.until) { delete waiting[n.addr]; return n; }
         return { ...n, status: w.want ? "paused" : "idle", label: w.want ? "pausing…" : "resuming…" };
-      }).sort((a, b) => String(a.name || a.addr).localeCompare(String(b.name || b.addr), undefined, { numeric: true }) || String(a.node_id || "").localeCompare(String(b.node_id || ""))), NW = 190, NSL = 14;   // by name, so picking another node in the Node menu does not move them      // a node is a parallelogram: its name and what it is doing
+      }).sort((a, b) => {   // the order the gateway was given by dragging (node_order), then by name: picking another node in the Node menu does not move them
+        const ord = g.node_order || [], ia = ord.indexOf(a.node_id), ib = ord.indexOf(b.node_id);
+        if (ia !== ib && (ia >= 0 || ib >= 0)) return ia < 0 ? 1 : ib < 0 ? -1 : ia - ib;
+        return String(a.name || a.addr).localeCompare(String(b.name || b.addr), undefined, { numeric: true }) || String(a.node_id || "").localeCompare(String(b.node_id || ""));
+      }), NW = 190, NSL = 14;      // a node is a parallelogram: its name and what it is doing
       // each side is four rows tall, or three when a four-row side would have a server's line run through a box; the next ones go in a new column further out
       const CG = 25, SIDE_GAP = 70;   // SIDE_GAP: room between the circle and the nodes on its left, the anycast pills on its right
       const SH = servers.some((a) => srvName(g, a)) ? 62 : 46;   // a named server has a third line, so every square in the row is taller
@@ -805,11 +817,16 @@
           label(x + AW / 2, y + 17, addr, "ip"),
           label(x + AW / 2, y + 32, a && a.up && !noSrv && !pz && a.status === "warn" ? "anycast · neighbor down" : a && a.up && !noSrv && !pz && a.status === "bad" ? (a.bgp === "disabled" ? "anycast · BGP disabled" : "anycast · no BGP session") : c === "ok" ? "anycast · announced" : c === "paused" && pz ? "paused · " + (pzAll ? "all nodes" : "this node") : c === "paused" ? "anycast · paused" : a && !a.up && !noSrv ? "anycast · withdrawn" : "anycast", "t2")));
       });
-      // the cluster's nodes, left of the circle, as parallelograms (read-only: they cannot be dragged or deleted here)
+      // the cluster's nodes, left of the circle, as parallelograms: drag one to another place (the order is saved with the gateway)
+      const nodeIds = nodes.map((n) => n.node_id);
       nodes.forEach((n, i) => {
         const at = nodeAt(i), x = cx + at.x, y = at.y, mid = x + NW / 2;
         lines.push(sv("line", { x1: cx - R, y1: CY, x2: x + NW - NSL / 2, y2: y + AH / 2, class: "edge" + (n.status === "bad" ? " down" : "") }));
-        shapes.push(sv("g", { class: "shape st-" + n.status, tabindex: "0", role: "button", "aria-label": "Cluster node " + n.name, oncontextmenu: nodeMenu(n), onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
+        shapes.push(sv("g", { class: "shape drag st-" + n.status, tabindex: "0", role: "button", "aria-label": "Cluster node " + n.name, oncontextmenu: nodeMenu(n),
+          onpointerdown: dragStart({ axis: "xy", n: nodeIds.every(Boolean) ? nodes.length : 0, index: i, pos: { x, y }, slot: (k) => ({ x: cx + nodeAt(k).x, y: nodeAt(k).y }),
+            ghost: (k) => sv("rect", { class: "dropslot", x: cx + nodeAt(k).x, y: nodeAt(k).y, width: NW, height: AH, rx: 4 }),
+            drop: (k) => { const ids = nodeIds.slice(); reorder(ids, i, k); g.node_order = ids; commit(); } }),
+          onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
           label(mid, y + 17, fitPx(n.name + (n.self ? " *" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
@@ -2191,7 +2208,7 @@
       collect = () => ({
         ...general.get(),
         // keep what this form has no fields for (a gateway's own DNS pool, per-server domains)
-        groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.excluded_nodes ? { excluded_nodes: g.orig.excluded_nodes } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
+        groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.excluded_nodes ? { excluded_nodes: g.orig.excluded_nodes } : {}), ...(g.orig.node_order ? { node_order: g.orig.node_order } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
         dns: { ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get() },
         // the certificate is managed under Web GUI; keep any file paths already in the config
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },

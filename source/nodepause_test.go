@@ -84,6 +84,15 @@ func TestNodePauseThroughMgmt(t *testing.T) {
 	if st, err := mg.NodePauseStatus(); err != nil || st.Paused {
 		t.Fatalf("fresh node: %+v %v", st, err)
 	}
+	// the only node in service cannot be paused: nothing would answer
+	mg.othersFn = func() int { return 0 }
+	if _, err := mg.NodePause(true, "test"); err == nil || !strings.Contains(err.Error(), "only node in service") {
+		t.Fatalf("pausing the only node: %v", err)
+	}
+	if st, _ := mg.NodePauseStatus(); st.Paused {
+		t.Fatal("the refused pause was saved")
+	}
+	mg.othersFn = func() int { return 1 } // another node carries on
 	if msg, err := mg.NodePause(true, "test"); err != nil || !strings.Contains(msg, "paused") {
 		t.Fatalf("pause: %q %v", msg, err)
 	}

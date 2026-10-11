@@ -105,3 +105,25 @@ func pickNode(peers []PeerView, excluded []string, name string) (string, error) 
 	}
 	return "", fmt.Errorf("%q matches more than one node — use the node's address or node ID", name)
 }
+
+// cleanNodeOrder checks a list of node IDs like cleanNodeIDs but keeps its order (the order the nodes are drawn in).
+func cleanNodeOrder(l []string) ([]string, error) {
+	if len(l) == 0 {
+		return nil, nil
+	}
+	if len(l) > 256 {
+		return nil, errors.New("too many nodes")
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(l))
+	for _, id := range l {
+		if _, err := cleanNodeIDs([]string{id}); err != nil {
+			return nil, err
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}

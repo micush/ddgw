@@ -331,3 +331,30 @@ func clusterGateway(nodes []CanvasNode) (status, detail string) {
 	}
 	return "bad", "No node is serving this gateway"
 }
+
+// otherNodesInService counts the other members of the cluster that answer and are not paused: the nodes that would carry
+// on if this one were paused.  A node that is down (not answering) or paused does not count.
+func (c *Cluster) otherNodesInService() int {
+	if c == nil || !c.Enabled() {
+		return 0
+	}
+	infos := map[string]peerInfo{}
+	c.mu.Lock()
+	for addr, pi := range c.info {
+		if pi != nil {
+			infos[addr] = *pi
+		}
+	}
+	c.mu.Unlock()
+	n := 0
+	for _, p := range c.View().Peers {
+		if p.Self || !p.Reachable {
+			continue
+		}
+		if pi, ok := infos[p.Addr]; ok && pi.Msg.NodePaused {
+			continue
+		}
+		n++
+	}
+	return n
+}

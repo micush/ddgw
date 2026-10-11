@@ -44,6 +44,8 @@ type SharedGroup struct {
 	RealMACs bool `json:"real_macs,omitempty"`
 	// ExcludedNodes are the nodes (by node ID) removed from the gateway (omitted when none: the hash is unchanged).
 	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
+	// NodeOrder is the order the nodes are drawn in beside the gateway (omitted when not set).
+	NodeOrder []string `json:"node_order,omitempty"`
 	// DNS is the group's own upstream pool (nil: it uses the shared one).
 	DNS *DNSConfig `json:"dns,omitempty"`
 }
@@ -77,7 +79,7 @@ func sharedOf(dc *DaemonConfig) SharedConfig {
 		sc.Groups = append(sc.Groups, SharedGroup{
 			GroupID: g.GroupID, Name: g.Name, VIP4: g.VIP4, VIP6: g.VIP6, LBMethod: g.LBMethod,
 			HelloMS: g.HelloMS, HoldMS: g.HoldMS, MaxAFNs: g.MaxAFNs, Key: g.Key, DNSProxy: g.DNSProxy,
-			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), MoreVIP4: nonEmpty(g.MoreVIP4), MoreVIP6: nonEmpty(g.MoreVIP6), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors), RealMACs: g.RealMACs, ExcludedNodes: nonEmpty(g.ExcludedNodes),
+			DNS: cloneDNSPtr(g.DNS), ExtraVIPs: nonEmpty(g.ExtraVIPs), MoreVIP4: nonEmpty(g.MoreVIP4), MoreVIP6: nonEmpty(g.MoreVIP6), PausedVIPs: nonEmpty(g.PausedVIPs), PausedAll: g.PausedAll, Neighbors: nonEmpty(g.Neighbors), RealMACs: g.RealMACs, ExcludedNodes: nonEmpty(g.ExcludedNodes), NodeOrder: nonEmpty(g.NodeOrder),
 		})
 	}
 	sort.Slice(sc.Groups, func(i, j int) bool { return sc.Groups[i].GroupID < sc.Groups[j].GroupID })
@@ -122,6 +124,7 @@ func applySharedGroup(gc *GroupConfig, g SharedGroup) {
 	gc.PausedAll = g.PausedAll
 	gc.RealMACs = g.RealMACs
 	gc.ExcludedNodes = append([]string(nil), g.ExcludedNodes...)
+	gc.NodeOrder = append([]string(nil), g.NodeOrder...)
 	gc.Neighbors = append([]string{}, g.Neighbors...)
 }
 

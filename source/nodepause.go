@@ -1,5 +1,7 @@
 package main
 
+import "errors"
+
 // NodePauseState is what the Node page and `ddgw --node-status` show.
 type NodePauseState struct {
 	Paused bool `json:"paused"`
@@ -29,6 +31,9 @@ func (m *Mgmt) NodePause(pause bool, actor string) (string, error) {
 		}
 		return "this node is already running", nil
 	}
+	if pause && m.othersInService() == 0 {
+		return "", errors.New("this is the only node in service (the others are paused or not answering), so pausing it would stop every gateway — resume or repair another node first; to stop a gateway everywhere, pause the gateway instead")
+	}
 	dc.NodePaused = pause
 	note := "node: resume"
 	if pause {
@@ -41,4 +46,11 @@ func (m *Mgmt) NodePause(pause bool, actor string) (string, error) {
 		return "node paused — its gateways stop serving and the other nodes take over; resume it when maintenance is done", nil
 	}
 	return "node resumed — its gateways rejoin once their DNS servers answer", nil
+}
+
+func (m *Mgmt) othersInService() int {
+	if m.othersFn != nil {
+		return m.othersFn()
+	}
+	return m.cl.otherNodesInService()
 }

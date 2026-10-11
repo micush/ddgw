@@ -142,6 +142,9 @@ type GroupConfig struct {
 	// stays readable by older versions.  ExcludedHere is set by effective() when this node is one of them (never written).
 	ExcludedNodes []string `json:"excluded_nodes,omitempty"`
 	ExcludedHere  bool     `json:"-"`
+	// NodeOrder is the order the cluster's nodes are drawn in beside this gateway (node IDs; drag them on Topology): shared.
+	// A node not listed comes after the listed ones, by name.  Omitted when empty.
+	NodeOrder []string `json:"node_order,omitempty"`
 }
 
 // newGatewayGroup is the starting point of a gateway that is created now (first start, Add gateway, --canvas-add,
@@ -353,6 +356,11 @@ func (g *GroupConfig) Validate() error {
 	}
 	g.PausedVIPs = keepAnycast(g.PausedVIPs, g.ExtraVIPs)
 	g.PausedVIPsHere = keepAnycast(g.PausedVIPsHere, g.ExtraVIPs)
+	if l, err := cleanNodeOrder(g.NodeOrder); err != nil {
+		return fmt.Errorf("%s: node_order: %v", pre, err)
+	} else {
+		g.NodeOrder = l
+	}
 	if l, err := cleanNodeIDs(g.ExcludedNodes); err != nil {
 		return fmt.Errorf("%s: excluded_nodes: %v", pre, err)
 	} else {

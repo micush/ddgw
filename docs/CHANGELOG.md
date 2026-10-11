@@ -1,5 +1,30 @@
 # Changelog
 
+## [v322] - 2026-10-10 — Down counts as down: the last server and the last node stay in service
+
+### Changed
+- A DNS server that is down counts as out of service whether it is not answering or paused. On the Topology page, pausing a server is refused when it is in service and every other server of the gateway is down or paused, unless the gateway has fallback servers (v321 only looked at paused ones). `--canvas-pause` still only knows which servers are paused.
+- The last node in service cannot be paused (Pause node… on the Topology page, Operate ▸ Node, `--node-pause`): the node being paused asks the cluster, and if no other node is answering and not paused (a node that is down or paused is out of service) it refuses with that reason. Fallback servers are not an exception here, because they sit behind the gateway the paused node would give up. A single node on its own cannot be paused either. A gateway can still be paused (on this node or all nodes).
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (changed: pausing the only node is refused and not saved, with another node in service it works), cgo-off and arm64 builds, `node --check`. Not verified: counting the other nodes in a real cluster (the test replaces that count), the refusal messages in a browser, and the server rule with a really down server.
+
+## [v321] - 2026-10-10 — The last server in service cannot be paused without a fallback
+
+### Changed
+- Pausing a DNS server (on this node or all nodes) is refused when it is the last one in service on the gateway and the gateway has no fallback servers: the page shows a message saying to add a fallback server first, and `--canvas-pause` (the same edit) returns the same error. With fallback servers set, it is allowed as before (the gateway then answers from the fallback servers). A server that is down but not paused still counts as in service for this rule. Configurations that already have every server paused load as before. (The v320 entry below, dragging the nodes into any order, is in this build too: v320 was not sent on its own.)
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (changed: the pause test now expects the refusal, then the pause with a fallback server), cgo-off and arm64 builds, `node --check`. Not verified: the message in a browser.
+
+## [v320] - 2026-10-10 — Topology: drag the nodes into any order
+
+### Added
+- The cluster nodes beside a gateway can be dragged to another slot, like the anycast pills, and the order is saved at once. It is kept per gateway as `node_order` (node IDs), shared by the cluster, so every node and every browser shows the same order; nodes not in it come after the placed ones, by name (v319's name order is the default). A reorder never restarts the gateway. Nodes cannot be dragged while a node has no ID yet (an older member).
+
+### Verified
+gofmt, vet, `go test -race -count=1 .` (new: the order is validated and kept, repeats dropped, bad IDs refused, shared with the cluster, and no gateway restart), cgo-off and arm64 builds, `node --check`. Not verified: the drag itself in a browser, and the order on a second node of a cluster.
+
 ## [v319] - 2026-10-10 — Topology: the nodes keep their places
 
 ### Changed

@@ -492,6 +492,16 @@ type canvasEdit struct {
 	members string // the cluster's node IDs, comma separated (a slice would make canvasEdit incomparable)
 }
 
+// lastServerInService reports whether addr is the only server of d that is not paused (on every node or on this one).
+func lastServerInService(d *DNSConfig, pausedHere []string, addr string) bool {
+	for _, sv := range d.Servers {
+		if sv != addr && !containsStr(d.PausedServers, sv) && !containsStr(pausedHere, sv) {
+			return false
+		}
+	}
+	return true
+}
+
 // moveTo returns list with the item at index from moved to index to (both 0-based, to clamped).
 func moveTo[T any](list []T, from, to int) []T {
 	if to < 0 {
@@ -941,6 +951,9 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 			}
 			have := containsStr(*list, addr)
 			if e.Action == "pause" {
+				if !have && lastServerInService(d, dc.PausedServersHere, addr) && len(d.FallbackServers) == 0 {
+					return "", fmt.Errorf("server %s is the last one in service on gateway %d and the gateway has no fallback servers, so pausing it would leave clients unanswered — add a fallback server first", addr, e.Group)
+				}
 				if !have {
 					*list = append(*list, addr)
 				}

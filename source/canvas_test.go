@@ -613,7 +613,13 @@ func TestPauseServerAndGateway(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	do(canvasEdit{Action: "pause", Kind: "server", Group: 1, Server: a.addr})
+	// the last server in service cannot be paused while the gateway has no fallback servers
+	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "pause", Kind: "server", Group: 1, Server: a.addr}); err == nil || !strings.Contains(err.Error(), "fallback") {
+		t.Fatalf("the last server was paused without a fallback server: %v", err)
+	}
+	own.FallbackServers = []string{"192.0.2.99"}
+	do(canvasEdit{Action: "pause", Kind: "server", Group: 1, Server: a.addr}) // with a fallback server it is allowed
+	own.FallbackServers = nil
 	_ = dc.Validate()
 	s.refreshPool(dc, true)
 	if cv = buildCanvas(dc, rows, s.poolList())[0]; cv.Status != "bad" || !strings.Contains(cv.Detail, "paused") {
