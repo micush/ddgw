@@ -32,6 +32,7 @@ type CanvasNode struct {
 	VerDiff   bool        `json:"version_differs,omitempty"`
 	Behind    bool        `json:"behind,omitempty"` // has not caught up with the primary's shared settings
 	Updating  bool        `json:"updating,omitempty"`
+	SoakSec   int         `json:"soak_sec,omitempty"` // canary soak: seconds left
 	UpdateErr string      `json:"update_failed,omitempty"`
 	LastSeen  int64       `json:"last_seen,omitempty"` // unix seconds
 	Error     string      `json:"error,omitempty"`
@@ -81,7 +82,7 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 	out := make([]CanvasNode, 0, len(view.Peers))
 	for _, p := range view.Peers {
 		n := CanvasNode{Addr: p.Addr, Name: p.Hostname, Self: p.Self, Role: p.Role, Reachable: p.Reachable, Version: p.Version,
-			Updating: p.Updating, UpdateErr: p.UpdateFailed, Error: p.Error}
+			Updating: p.Updating, SoakSec: p.SoakSec, UpdateErr: p.UpdateFailed, Error: p.Error}
 		n.Hostname = p.Hostname
 		n.NodeID = p.NodeID
 		n.Excluded = p.NodeID != "" && containsStr(excluded, p.NodeID)

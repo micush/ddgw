@@ -456,6 +456,9 @@
   });
 
   // right-click menu items are written plain: no … after a label that opens a dialog
+  // the canary soak: a node that took a new update first shows an hourglass until the others are let go (sec = seconds left)
+  const soakTip = (sec) => "soaking: " + sec + "s remaining";
+  const soakMark = (sec) => (sec > 0 ? [" ", h("span", { class: "soak", title: soakTip(sec), "aria-label": soakTip(sec) }, "⏳")] : null);
   function plain(l) { return typeof l === "string" ? l.replace(/…(?=$| \()/, "") : l; }
   function errorBox(el, msg) {
     clear(el).append(h("div", { class: "notice bad", role: "alert" }, msg));
@@ -836,7 +839,8 @@
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
           label(mid, y + 17, fitPx(n.name + (n.self ? " *" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
-          label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2")));
+          label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2"),
+          n.soak_sec > 0 ? sv("text", { x: x + NSL + 8, y: y + 17, class: "t1 soak" }, sv("title", {}, soakTip(n.soak_sec)), "⏳") : null));
       });
       servers.forEach((addr, i) => {
         const x = rowX + i * COLW + (COLW - SW) / 2, mx = x + SW / 2;
@@ -1254,7 +1258,7 @@
       n.version ? "Version: " + n.version + (n.version_differs ? " (not the same as this node's)" : "") : "",
       n.reachable || n.self ? (n.behind ? "Settings: behind the primary's" : "Settings: up to date") : "",
       n.host ? "Host: " + (n.host.cpu_pct >= 0 ? "CPU " + Math.round(n.host.cpu_pct) + "%, " : "") + "memory " + Math.round(n.host.mem_pct) + "%" + (n.host.disk_pct >= 0 ? ", disk " + Math.round(n.host.disk_pct) + "%" + (n.host.disk_mount ? " (" + n.host.disk_mount + ")" : "") : "") + " — amber above 85%" : "",
-      n.updating ? "An update is in progress" : "", n.update_failed ? "Update failed: " + n.update_failed : "",
+      n.updating ? "An update is in progress" : "", n.soak_sec > 0 ? soakTip(n.soak_sec) : "", n.update_failed ? "Update failed: " + n.update_failed : "",
     ].filter(Boolean).join("\n");
     // open another node (the Node menu, top right), optionally on one page; this node's own address stands for "this node"
     const openNode = (n, tab) => { const me = selfNode(); setTarget(me && n.addr === me.addr ? null : n.addr); if (tab) selectTab(tab); };
@@ -2371,7 +2375,7 @@
   const membersTable = (v, onRemove, named) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
     const rows = v.peers.map((p) => h("tr", Object.assign({ class: p.self ? "local" : "" }, onRemove && !p.self ? { tabindex: "0", oncontextmenu: rowMenu([["Remove", () => onRemove(p), "danger"]]) } : {}),
-      named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "") : h("td", { class: "mono" }, p.addr, p.self ? " ★" : ""),
+      named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)) : h("td", { class: "mono" }, p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)),
       named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
       h("td", {}, p.reachable ? pill("yes", "ok") : pill("NO", "bad"), p.updating ? [" ", pill("updating", "warn")] : null),
@@ -2727,7 +2731,7 @@
         const state = n.updating ? pill("updating", "warn") : n.failed ? pill("failed v" + n.failed, "bad") : n.behind ? pill("behind", "warn") : pill("ok", "ok");
         const cb = h("td", {}, h("input", { type: "checkbox", checked: selected.has(n.addr), disabled: v.intent.auto_all, "aria-label": "Select " + n.addr, onchange: (ev) => { if (ev.target.checked) selected.add(n.addr); else selected.delete(n.addr); VIEWS.updates.poll(); } }));
         return h("tr", { class: n.self ? "local" : "" }, v.clustered ? cb : null,
-          h("td", { class: "mono" }, n.addr, n.self ? " ★" : ""),
+          h("td", { class: "mono" }, n.addr, n.self ? " ★" : "", soakMark(n.soak_sec)),
           h("td", {}, n.reachable ? pill("yes", "ok") : pill("NO", "bad")),
           h("td", { class: "num" }, n.running || "–"), h("td", { class: "num" }, n.source || "–"),
           h("td", {}, n.queued ? pill(v.intent.auto_all ? "auto" : "queued", "info") : ""), h("td", {}, state));

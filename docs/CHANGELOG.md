@@ -1,5 +1,25 @@
 # Changelog
 
+## [v336] - 2026-10-11 — Canary soak is 2 minutes
+
+### Changed
+- The canary node (v335) now has to run the new version for 2 minutes, not 10, before the other nodes update. The boot guard already confirms a version after 60 seconds; the extra minute lets a gateway's health turn bad if it is going to. Help and README say 2 minutes.
+- While a node soaks, an hourglass sits next to its name (the Topology node shape, the member tables on the Cluster and Monitor pages, and the Upgrade page's Nodes table); hovering it shows `soaking: 100s remaining`. When the soak ends the hourglass goes away and the other nodes continue. The countdown is in the cluster data as `soak_sec`.
+
+### Verified
+gofmt, vet, `node --check` (app.js and help.js), `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles.
+
+## [v335] - 2026-10-11 — Updates: the first node is a canary
+
+### Changed
+- In a cluster, the first node to take a new version is the canary. The other nodes (auto-update and queued updates alike) hold while that node has run the new version for less than 2 minutes, while any gateway on it is bad, and while the update has failed on any member; the Upgrade page shows the reason. Once one node has settled, the rest follow in turn, one at a time as before, without a fresh 10 minutes each. A canary that crashes restarts the clock; one that rolls back holds the rest until its retry. Nodes report their uptime in the cluster status message (`uptime_sec`, ignored by older nodes). `--update-apply` on a node is not held. This catches crashes, instability and bad gateways, not wrong DNS answers by itself; it also gives you 10 minutes to cancel the queue.
+
+### Fixed
+- The help text for Per-client limits (added in v325) had unescaped double quotes inside a string in `help.js`, which is a syntax error: the in-app Help would not have loaded in v325–v334. Fixed; `node --check` on `help.js` now runs with every release.
+
+### Verified
+gofmt, vet, `node --check` (app.js and help.js), `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestCanaryHold`. Not verified: a live multi-node upgrade.
+
 ## [v334] - 2026-10-11 — No … on menu items
 
 ### Changed

@@ -57,8 +57,10 @@ type PeerStatusMsg struct {
 	SourceVersion string        `json:"source_version"`
 	Updating      bool          `json:"updating"`
 	UpdateFailed  string        `json:"update_failed,omitempty"`
-	SharedRev     uint64        `json:"shared_rev"`
-	Intent        UpdateIntent  `json:"intent"`
+	// UptimeSec is how long this process has been running (the canary soak reads it); absent on older nodes
+	UptimeSec int64        `json:"uptime_sec,omitempty"`
+	SharedRev uint64       `json:"shared_rev"`
+	Intent    UpdateIntent `json:"intent"`
 	// Which gateways this node is serving; GwKnown is false for nodes that
 	// predate the field (their health is then assumed).
 	GwKnown  bool      `json:"gw_known,omitempty"`
@@ -615,7 +617,7 @@ func (c *Cluster) statusMsg() PeerStatusMsg {
 		Peer:     c.node.Self(), Epoch: snap.Epoch, Role: snap.Role, PrimaryAddr: snap.PrimaryAddr,
 		Peers: append(c.knownPeers(snap), c.node.Self()), Removed: snap.Removed,
 		Version: version(), SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(),
-		UpdateFailed: c.mg.upd.FailedFor(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
+		UpdateFailed: c.mg.upd.FailedFor(), UptimeSec: int64(time.Since(processStart) / time.Second), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
 		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(), GwIPs: c.mg.localGwIPs(),
 	}
 }
@@ -1406,6 +1408,7 @@ type PeerView struct {
 	SourceVersion string    `json:"source_version"`
 	Updating      bool      `json:"updating"`
 	UpdateFailed  string    `json:"update_failed,omitempty"`
+	SoakSec       int       `json:"soak_sec,omitempty"` // seconds left of the canary soak (0: not soaking)
 	SharedRev     uint64    `json:"shared_rev"`
 	LastSeen      time.Time `json:"last_seen,omitempty"`
 	Error         string    `json:"error,omitempty"`
@@ -1464,6 +1467,10 @@ func (c *Cluster) View() ClusterView {
 		v.Peers = append(v.Peers, pv)
 	}
 	sort.SliceStable(v.Peers[1:], func(i, j int) bool { return v.Peers[1+i].Addr < v.Peers[1+j].Addr })
+	soak := c.soakLeftLocked(snap)
+	for i := range v.Peers {
+		v.Peers[i].SoakSec = soak[v.Peers[i].Addr]
+	}
 	if !c.cfg.Enabled {
 		v.Warnings = append(v.Warnings, "clustering is disabled on this node (cluster.enabled is false)")
 	}
@@ -1496,8 +1503,10 @@ func (c *Cluster) updateNodes() []UpdateNode {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	soak := c.soakLeftLocked(snap)
+	out[0].SoakSec = soak[snap.SelfAddr]
 	for _, p := range snap.Peers {
-		n := UpdateNode{Addr: p.Addr, Queued: intent.wants(p.Addr)}
+		n := UpdateNode{Addr: p.Addr, Queued: intent.wants(p.Addr), SoakSec: soak[p.Addr]}
 		if pi := c.info[p.Addr]; pi != nil {
 			n.Reachable, n.Running, n.Source, n.Updating, n.Failed = pi.Reachable, pi.Msg.Version, pi.Msg.SourceVersion, pi.Msg.Updating, pi.Msg.UpdateFailed
 		}
@@ -1574,6 +1583,97 @@ func (c *Cluster) shouldWaitForOthers(target string, intent UpdateIntent) bool {
 	return false
 }
 
+// processStart is when this daemon started; peers read it as uptime.
+var processStart = time.Now()
+
+// updateSoak is how long the first node to take a new version must run it, with
+// no gateway marked bad, before the other nodes follow (the canary).  A var so
+// tests can shorten it.
+var updateSoak = 2 * time.Minute
+
+// canaryHold says why this node must not update yet, or "".  The first node
+// to update is the canary: the rest hold while any reachable member that runs
+// the target version has been up less than updateSoak or reports a bad
+// gateway, and while any member's update to the target has failed.  Once one
+// member has soaked, the others go on in turn without waiting for each other's
+// soak.
+func (c *Cluster) canaryHold(target string) string {
+	snap := c.node.Snapshot()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var young string
+	for _, p := range snap.Peers {
+		pi := c.info[p.Addr]
+		if pi == nil || !pi.Reachable {
+			continue
+		}
+		m := pi.Msg
+		if m.UpdateFailed == target {
+			return "update to v" + target + " failed on " + p.Addr + "; the others wait"
+		}
+		if m.Version != target || m.Updating {
+			continue
+		}
+		bad := false
+		for _, g := range m.Gateways {
+			if g.Health == "bad" {
+				bad = true
+			}
+		}
+		up := time.Duration(m.UptimeSec) * time.Second
+		if bad {
+			return p.Addr + " runs v" + target + " but a gateway there is bad; the others wait"
+		}
+		if up >= updateSoak {
+			return "" // this member has soaked: the canary passed
+		}
+		if young == "" {
+			young = p.Addr + " runs v" + target + " (" + strconv.Itoa(int((updateSoak-up)/time.Minute)+1) + " min left to settle); the others wait"
+		}
+	}
+	return young
+}
+
+// soakLeftLocked maps each member that is soaking to the seconds it has left: a
+// member on the newest version, up for less than updateSoak, while some member
+// still runs an older one (the others are waiting on it).  c.mu is held.
+func (c *Cluster) soakLeftLocked(snap ClusterSnapshot) map[string]int {
+	type mem struct {
+		addr string
+		ver  string
+		up   time.Duration
+		busy bool
+	}
+	ms := []mem{{snap.SelfAddr, version(), time.Since(processStart), c.mg.upd.Busy()}}
+	for _, p := range snap.Peers {
+		if pi := c.info[p.Addr]; pi != nil && pi.Reachable {
+			ms = append(ms, mem{p.Addr, pi.Msg.Version, time.Duration(pi.Msg.UptimeSec) * time.Second, pi.Msg.Updating})
+		}
+	}
+	newest := ms[0].ver
+	for _, m := range ms {
+		if versionGreater(m.ver, newest) {
+			newest = m.ver
+		}
+	}
+	older := false
+	for _, m := range ms {
+		if m.ver != newest {
+			older = true
+		}
+	}
+	out := map[string]int{}
+	if !older {
+		return out
+	}
+	for _, m := range ms {
+		if m.ver == newest && !m.busy && m.up < updateSoak {
+			out[m.addr] = int((updateSoak-m.up)/time.Second) + 1
+		}
+	}
+	return out
+}
+
 // selfGateways and gatewaysOf express one member's gateway report as a peerGateways.
 func selfGateways(addr string, known bool, gs []GwState) peerGateways {
 	pg := peerGateways{Addr: addr, Known: known, Serving: map[int]bool{}, Fresh: map[int]bool{}, Offnet: map[int]bool{}}
@@ -1636,6 +1736,12 @@ func (m *Mgmt) updateTick(ctx context.Context) {
 	}
 	if m.cl.Enabled() && m.cl.shouldWaitForOthers(target, intent) {
 		return
+	}
+	if m.cl.Enabled() {
+		if why := m.cl.canaryHold(target); why != "" {
+			m.upd.SetWaiting(why)
+			return
+		}
 	}
 	if ok, why := m.updateSafeToApply(); !ok {
 		m.upd.SetWaiting(why)

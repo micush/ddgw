@@ -517,6 +517,7 @@ type UpdateNode struct {
 	Queued    bool   `json:"queued"`
 	Updating  bool   `json:"updating"`
 	Failed    string `json:"failed,omitempty"`
+	SoakSec   int    `json:"soak_sec,omitempty"`
 	Behind    bool   `json:"behind"`
 }
 
