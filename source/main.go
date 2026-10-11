@@ -130,7 +130,7 @@ the web GUI):
                    [--all-nodes]   (every cluster node's numbers added together)
                    --stats-clear [--all-nodes]   (forget the counts and top lists, here or on every node)
                    --scan ADDR   (nmap of a client, run from this node; needs the nmap package)
-                   --ping ADDR  --traceroute ADDR   (ping / mtr of a client, run from this node; needs ping and mtr)
+                   --ping ADDR|NAME  --traceroute ADDR|NAME   (ping / mtr of a client or domain, run from this node; needs ping and mtr)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
   Capture          --capture IFACE [--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]

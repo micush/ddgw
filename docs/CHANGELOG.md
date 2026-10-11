@@ -1,5 +1,15 @@
 # Changelog
 
+## [v328] - 2026-10-11 — Whois is a popup; Ping, Traceroute and Whois on Top domains too
+
+### Changed
+- Ping sends four packets (`ping -n -c 4 -W 2`, stopped after 15 s), not ten.
+- Whois is no longer in the tooltip. Right-click a client or a domain ▸ **Whois** opens a popup with the same data (a domain: its addresses, registrar, registrant, dates, name servers; a client address: block, name, organization, country, origin AS), with **Run again**. Hovering a client still shows its reverse-DNS names (and the scan result); hovering a domain shows only "Click: show who asked for this domain". Nothing is asked of a registry until you open the popup (before, every hover did).
+- Ping and Traceroute are in the right-click menu of Top domains as well as Top clients, next to Whois. For a domain the node looks the name up (IPv4 preferred) and probes that address; the popup and `--ping` / `--traceroute` accept an address or a host name. A name is checked (letters, digits, `-`, `_`, dots; no all-numeric last label) and goes after `--` like an address.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...` (new: names accepted and refused, a name that does not resolve), cgo-off vet and test, cross-compiles. Not verified: the popups in a browser, and a whois lookup (no outbound port 43 here).
+
 ## [v327] - 2026-10-11 — Traceroute shows up live
 
 ### Changed

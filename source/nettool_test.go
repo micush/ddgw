@@ -35,8 +35,17 @@ func TestNetToolSpec(t *testing.T) {
 	}
 }
 
+func TestNetTarget(t *testing.T) {
+	for in, want := range map[string]string{"10.1.2.3": "10.1.2.3", " Host.Example.COM. ": "host.example.com", "my_host-1.lan": "my_host-1.lan", "::ffff:10.1.2.3": "10.1.2.3"} {
+		k, _, _, err := netTarget(in)
+		if err != nil || k != want {
+			t.Errorf("%q: %q %v", in, k, err)
+		}
+	}
+}
+
 func TestNetToolRefusesBadInput(t *testing.T) {
-	for _, bad := range []string{"", "-c 1000000", "10.0.0.1; id", "host.example.com", "224.0.0.1", "10.0.0.0/24"} {
+	for _, bad := range []string{"", "-c 1000000", "10.0.0.1; id", "-oN x", "a b.example", "bad..name", "224.0.0.1", "10.0.0.0/24"} {
 		if _, err := netToolStart("ping", bad, "t"); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
@@ -162,7 +171,18 @@ func TestTraceTableEndsAtTarget(t *testing.T) {
 	j := &NetJob{}
 	m := &mtrRaw{j: j, hops: map[int]*mtrHop{}, target: "10.9.9.9"}
 	m.Write([]byte("x 0 1\nh 0 10.9.9.1\np 0 1000 1\nx 1 2\nh 1 10.9.9.9\np 1 2000 2\nx 2 3\nx 2 4\n"))
-	if strings.Contains(j.Text, "???") || strings.Count(j.Text, "\n") != 3 {
+	if strings.Contains(j.Text, "???") || strings.Count(j.Text, "\n") != 4 {
 		t.Errorf("hops past the target are listed:\n%s", j.Text)
+	}
+}
+
+func TestNetToolNameNotFound(t *testing.T) {
+	fakeTools(t, `echo hi`, "")
+	if _, err := netToolStart("ping", "no-such-host.invalid", "t"); err != nil {
+		t.Fatal(err)
+	}
+	j := waitNet(t, "ping", "no-such-host.invalid")
+	if j.State != "error" || !strings.Contains(j.Text, "no-such-host.invalid") {
+		t.Errorf("%s %q", j.State, j.Text)
 	}
 }

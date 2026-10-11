@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +22,7 @@ import (
 const (
 	netToolParallel = 4
 	netToolTextMax  = 16384
-	pingTimeout     = 30 * time.Second
+	pingTimeout     = 15 * time.Second
 	traceTimeout    = 120 * time.Second
 )
 
@@ -39,13 +41,13 @@ var netJobs = struct {
 	jobs map[string]*NetJob
 }{jobs: map[string]*NetJob{}}
 
-// netToolSpec is the program and arguments for kind and addr: ten pings two seconds apart at most, or mtr with ten
+// netToolSpec is the program and arguments for kind and addr: four pings, or mtr with ten
 // probes per hop, both without name lookups.  mtr runs in its raw mode, which reports every probe as it happens, so the
 // table can grow on screen (its report mode prints only when it is done).
 func netToolSpec(kind string, a netip.Addr) (string, []string, time.Duration, error) {
 	switch kind {
 	case "ping":
-		args := []string{"-n", "-c", "10", "-W", "2"}
+		args := []string{"-n", "-c", "4", "-W", "2"}
 		if a.Is6() {
 			args = append(args, "-6")
 		}
@@ -77,13 +79,38 @@ func (b netBuf) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// netToolStart begins ping or traceroute of addr (or returns the one already running).  A finished one is replaced.
+var netNameRe = regexp.MustCompile(`^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$`)
+
+// netTarget checks what was asked about: one host's address, or a host name (looked up when the job runs).  key is how
+// the job is remembered; ip is set for an address, name for a name.
+func netTarget(s string) (key string, ip netip.Addr, name string, err error) {
+	if a, e := scanAddr(s); e == nil {
+		return a.String(), a, "", nil
+	}
+	n := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(s), "."))
+	if len(n) == 0 || len(n) > 253 {
+		return "", ip, "", fmt.Errorf("%q is not an IP address or a host name", s)
+	}
+	labels := strings.Split(n, ".")
+	for _, l := range labels {
+		if !netNameRe.MatchString(l) {
+			return "", ip, "", fmt.Errorf("%q is not an IP address or a host name", s)
+		}
+	}
+	if last := labels[len(labels)-1]; strings.Trim(last, "0123456789") == "" { // 224.0.0.1 or 1.2.3 is a bad address, not a name
+		return "", ip, "", fmt.Errorf("%q is not an IP address or a host name", s)
+	}
+	return n, ip, n, nil
+}
+
+// netToolStart begins ping or traceroute of addr, an address or a host name (or returns the one already running).  A
+// finished one is replaced.
 func netToolStart(kind, addr, actor string) (*NetJob, error) {
-	a, err := scanAddr(addr)
+	key, ip, name, err := netTarget(addr)
 	if err != nil {
 		return nil, err
 	}
-	prog, args, limit, err := netToolSpec(kind, a)
+	prog, _, limit, err := netToolSpec(kind, netip.MustParseAddr("127.0.0.1"))
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +119,9 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 		pkg := map[string]string{"ping": "iputils-ping (iputils on the RHEL family)", "mtr": "mtr"}[prog]
 		return nil, fmt.Errorf("%s is not installed on this node (install the %s package)", prog, pkg)
 	}
-	key := kind + "|" + a.String()
+	jk := kind + "|" + key
 	netJobs.mu.Lock()
-	if j := netJobs.jobs[key]; j != nil && j.State == "running" {
+	if j := netJobs.jobs[jk]; j != nil && j.State == "running" {
 		c := *j
 		netJobs.mu.Unlock()
 		return &c, nil
@@ -109,8 +136,8 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 		netJobs.mu.Unlock()
 		return nil, errors.New("too many are running already; try again in a moment")
 	}
-	j := &NetJob{Kind: kind, Addr: a.String(), State: "running", At: time.Now().Unix()}
-	netJobs.jobs[key] = j
+	j := &NetJob{Kind: kind, Addr: key, State: "running", At: time.Now().Unix()}
+	netJobs.jobs[jk] = j
 	for k, o := range netJobs.jobs { // finished ones older than an hour are forgotten
 		if o.State != "running" && time.Now().Unix()-o.End > 3600 {
 			delete(netJobs.jobs, k)
@@ -118,15 +145,55 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 	}
 	c := *j
 	netJobs.mu.Unlock()
-	infof("nettool: %q started %s of %s", actor, prog, j.Addr)
+	infof("nettool: %q started %s of %s", actor, prog, key)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), limit)
 		defer cancel()
+		finish := func(state, text string) {
+			netJobs.mu.Lock()
+			j.End, j.State = time.Now().Unix(), state
+			if text != "" {
+				j.Text = text
+			}
+			netJobs.mu.Unlock()
+			infof("nettool: %s of %s %s", prog, key, state)
+		}
+		title := ""
+		if name != "" { // a name: the first address it has (IPv4 first), looked up here
+			rc, rcancel := context.WithTimeout(ctx, 5*time.Second)
+			ips, err := net.DefaultResolver.LookupNetIP(rc, "ip", name)
+			rcancel()
+			ip = netip.Addr{}
+			for _, x := range ips {
+				x = x.Unmap()
+				if x.IsUnspecified() || x.IsMulticast() || x.Zone() != "" {
+					continue
+				}
+				if !ip.IsValid() || (x.Is4() && ip.Is6()) {
+					ip = x
+				}
+			}
+			if !ip.IsValid() {
+				msg := "no address found"
+				if err != nil {
+					msg = err.Error()
+				}
+				finish("error", name+": "+msg)
+				return
+			}
+			title = name + " (" + ip.String() + ")"
+			if kind == "ping" {
+				netJobs.mu.Lock()
+				j.Text = name + " → " + ip.String() + "\n\n"
+				netJobs.mu.Unlock()
+			}
+		}
+		_, args, _, _ := netToolSpec(kind, ip)
 		cmd := exec.CommandContext(ctx, path, args...)
 		cmd.Stdout, cmd.Stderr = netBuf{j}, netBuf{j}
 		var raw *mtrRaw
 		if kind == "trace" {
-			raw = &mtrRaw{j: j, hops: map[int]*mtrHop{}, target: j.Addr}
+			raw = &mtrRaw{j: j, hops: map[int]*mtrHop{}, target: ip.String(), title: title}
 			cmd.Stdout = raw
 		}
 		err := cmd.Run()
@@ -134,16 +201,15 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 		if raw != nil {
 			raw.render() // the last partial line, and the table as it ended
 		}
-		j.End = time.Now().Unix()
-		j.State = "done"
+		state := "done"
 		if err != nil {
 			// ping exits 1 when nothing came back: its output already says so, and is not an error here
 			var ee *exec.ExitError
 			if ctx.Err() != nil {
-				j.State = "error"
+				state = "error"
 				j.Text = strings.TrimSpace(j.Text + "\n(stopped after " + limit.String() + ")")
 			} else if !errors.As(err, &ee) || strings.TrimSpace(j.Text) == "" {
-				j.State = "error"
+				state = "error"
 				if strings.TrimSpace(j.Text) == "" {
 					j.Text = err.Error()
 				}
@@ -153,27 +219,27 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 			j.Text = prog + " printed nothing"
 		}
 		netJobs.mu.Unlock()
-		infof("nettool: %s of %s %s", prog, j.Addr, j.State)
+		finish(state, "")
 	}()
 	return &c, nil
 }
 
 // netToolGet is the state of kind for addr: running, done, error, or none when there never was one.
 func netToolGet(kind, addr string) (*NetJob, error) {
-	a, err := scanAddr(addr)
+	key, _, _, err := netTarget(addr)
 	if err != nil {
 		return nil, err
 	}
-	if _, _, _, err := netToolSpec(kind, a); err != nil {
+	if _, _, _, err := netToolSpec(kind, netip.MustParseAddr("127.0.0.1")); err != nil {
 		return nil, err
 	}
 	netJobs.mu.Lock()
 	defer netJobs.mu.Unlock()
-	if j := netJobs.jobs[kind+"|"+a.String()]; j != nil {
+	if j := netJobs.jobs[kind+"|"+key]; j != nil {
 		c := *j
 		return &c, nil
 	}
-	return &NetJob{Kind: kind, Addr: a.String(), State: "none"}, nil
+	return &NetJob{Kind: kind, Addr: key, State: "none"}, nil
 }
 
 // mtrHop is what mtr's raw output has told so far about one hop.
@@ -187,7 +253,8 @@ type mtrHop struct {
 // into the usual table and keeps the job's text up to date after every line.  Hops are counted from 0 in the raw output.
 type mtrRaw struct {
 	j      *NetJob
-	target string
+	target string // the address probed
+	title  string // what the table says it is to (the name and address, or the address)
 	part   string
 	hops   map[int]*mtrHop
 }
@@ -209,6 +276,13 @@ func (m *mtrRaw) Write(p []byte) (int, error) {
 	}
 	m.render()
 	return len(p), nil
+}
+
+func (m *mtrRaw) titleOr() string {
+	if m.title != "" {
+		return m.title
+	}
+	return m.target
 }
 
 func (m *mtrRaw) line(l string) {
@@ -283,7 +357,7 @@ func (m *mtrRaw) render() {
 		w = 7
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-*s  %6s %4s %7s %7s %7s %7s\n", w+6, "to "+m.target, "Loss%", "Snt", "Last", "Avg", "Best", "Wrst")
+	fmt.Fprintf(&b, "to %s\n%-*s  %6s %4s %7s %7s %7s %7s\n", m.titleOr(), w+4, "", "Loss%", "Snt", "Last", "Avg", "Best", "Wrst")
 	for i, k := range keys {
 		h := m.hops[k]
 		host := h.host

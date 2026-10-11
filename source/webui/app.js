@@ -2964,10 +2964,8 @@
       return card;
     }
 
-    // Tooltips: a client shows every reverse-DNS name the daemon has for it; a domain asks the
-    // daemon for its whois data the first time it is hovered (the daemon caches and asks the
-    // registry from the picked node), then keeps the answer here too.
-    const whoisSeen = new Map();
+    // Tooltips: a client shows every reverse-DNS name the daemon has for it.  Whois is a popup (right-click ▸ Whois):
+    // the daemon caches the answer and asks the registry from the picked node.
     const whoisText = (w) => {
       if (w.kind === "ip") {
         if (!w.found) return w.domain + " — " + w.note;
@@ -2979,28 +2977,6 @@
       return addrs + [w.domain, w.registrar && "Registrar: " + w.registrar, w.registrant && "Registrant: " + w.registrant, w.registered && "Registered: " + w.registered,
         w.updated && "Updated: " + w.updated, w.expires && "Expires: " + w.expires, (w.name_servers || []).length && "Name servers: " + w.name_servers.join(", "), "From: " + w.server].filter(Boolean).join("\n");
     };
-    // what a redraw gives the button before the next hover: the answer already looked up, if there is one, so a refresh does not wipe it
-    function cachedWhois(name, head, tail) {
-      const hit = whoisSeen.get((state.target || "") + "|" + name);
-      return hit && hit.text && Date.now() - hit.at < (hit.ok ? 600000 : 60000) ? (head ? head + "\n\n" : "") + hit.text + tail : "";
-    }
-    function whoisFor(btn, name, tail, head) {
-      head = head ? head + "\n\n" : "";
-      const key = (state.target || "") + "|" + name;
-      const hit = whoisSeen.get(key);
-      if (hit && Date.now() - hit.at < (hit.ok ? 600000 : 60000)) { btn.title = head + hit.text + tail; return; }
-      if (hit && hit.busy) return;
-      btn.title = head + "Looking up whois…" + tail;
-      const mine = { busy: true, at: Date.now() };
-      whoisSeen.set(key, mine);
-      if (whoisSeen.size > 500) whoisSeen.delete(whoisSeen.keys().next().value);
-      api("GET", "/api/whois?domain=" + encodeURIComponent(name)).then((r) => {
-        whoisSeen.set(key, { text: whoisText(r.data), ok: true, at: Date.now() });
-      }, (e) => {
-        whoisSeen.set(key, { text: "whois: " + (e.message || "failed"), ok: false, at: Date.now() });
-      }).then(() => { if (btn.getAttribute("data-name") === name) btn.title = head + whoisSeen.get(key).text + tail; });   // the list is redrawn in place: this button may show another name by now
-    }
-
     // A row is a button: picking a client lists what it asked for in Top domains, picking a
     // domain lists who asked for it in Top clients.  o.picked is this list's picked row,
     // o.note says the list is filtered, o.onClear drops that filter.
@@ -3042,13 +3018,13 @@
       } catch (e) { scanSeen.delete(scanKey(addr)); if (last) draw(last); if (e.message !== "unauthenticated") say(status, "bad", "Scan of " + addr + ": " + e.message); }
     }
 
-    // Ping / Traceroute: a popup with the output of ping or mtr of a client, run on the picked node and shown as it grows
-    function netTool(kind, addr) {
-      const title = (kind === "ping" ? "Ping " : "Traceroute ") + addr;
+    // A popup with text in it that a function fills in (and can fill in again: Run again): Whois, Ping, Traceroute.
+    // run(put, live) calls put(text) as often as it likes and returns when done; live() says whether the popup still wants it.
+    function textPopup(title, run) {
       const out = h("pre", { class: "nt-out", tabindex: "0", "aria-live": "off" }, "…");
       const again = h("button", { class: "btn", type: "button", disabled: true }, "Run again");
       const d = h("dialog", { class: "cv-dialog nt-dialog", "aria-label": title });
-      let alive = true, run = 0;
+      let alive = true, round = 0;
       const close = () => { alive = false; try { d.close(); } catch (_) { /* closed */ } d.remove(); };
       d.addEventListener("close", () => { alive = false; d.remove(); });
       d.append(h("button", { class: "dlg-x", type: "button", "aria-label": "Close", title: "Close", onclick: close }, "✕"), h("h2", {}, title), out,
@@ -3056,24 +3032,32 @@
       root.append(d);
       d.showModal();
       const go = async () => {
-        const me = ++run;
+        const me = ++round;
+        const live = () => alive && me === round;
         again.disabled = true;
         out.textContent = "…";
-        const q = "?kind=" + kind + "&client=" + encodeURIComponent(addr);
-        try {
-          let j = (await api("POST", "/api/nettool", { kind, client: addr })).data;
-          while (alive && me === run) {
-            if (j.text) { const end = out.scrollTop + out.clientHeight >= out.scrollHeight - 4; out.textContent = j.text; if (end) out.scrollTop = out.scrollHeight; }
-            if (j.state !== "running") break;
-            await new Promise((r) => setTimeout(r, 1000));
-            if (!alive || me !== run) return;
-            j = (await api("GET", "/api/nettool" + q)).data;
-          }
-        } catch (e) { if (alive && me === run && e.message !== "unauthenticated") out.textContent = e.message; }
-        if (alive && me === run) again.disabled = false;
+        const put = (text) => { if (!live()) return; const end = out.scrollTop + out.clientHeight >= out.scrollHeight - 4; out.textContent = text; if (end) out.scrollTop = out.scrollHeight; };
+        try { await run(put, live); } catch (e) { if (live() && e.message !== "unauthenticated") out.textContent = e.message; }
+        if (live()) again.disabled = false;
       };
       again.addEventListener("click", go);
       go();
+    }
+    // Ping / Traceroute of a client address or a domain: ping or mtr run on the picked node, shown as it comes in
+    function netTool(kind, name) {
+      textPopup((kind === "ping" ? "Ping " : "Traceroute ") + name, async (put, live) => {
+        let j = (await api("POST", "/api/nettool", { kind, client: name })).data;
+        for (;;) {
+          if (j.text) put(j.text);
+          if (j.state !== "running") return;
+          await new Promise((r) => setTimeout(r, 1000));
+          if (!live()) return;
+          j = (await api("GET", "/api/nettool?kind=" + kind + "&client=" + encodeURIComponent(name))).data;
+        }
+      });
+    }
+    function whoisPopup(name) {
+      textPopup("Whois " + name, async (put) => put(whoisText((await api("GET", "/api/whois?domain=" + encodeURIComponent(name))).data)));
     }
 
     // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
@@ -3174,8 +3158,9 @@
         const list = (((await api("GET", "/api/config")).config.dns || {}).policy || []);
         has = list.some((r) => isNameRow(r, name)); rewritten = list.some((r) => isRewriteRow(r, name));
       } catch (_) { /* offer Block and Rewrite */ }
-      rowMenu(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
-        : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])(e);
+      const tools = [["Whois", () => whoisPopup(name)], ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)]];
+      rowMenu([...tools, ...(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
+        : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])])(e);
     }
     // Name…: give a client a name by hand (Settings ▸ client_names); an empty name removes it
     async function setClientName(addr, name, old) {
@@ -3222,7 +3207,7 @@
       let blocked = false;
       try { const list = ((await api("GET", "/api/config")).config.dns || {}).policy || []; blocked = list.some((r) => isBlockRow(r, addr)); } catch (_) { /* offer Block */ }
       const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
-      rowMenu([["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Scan", () => scanClient(addr)],
+      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Scan", () => scanClient(addr)],
         ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }
@@ -3253,12 +3238,9 @@
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
                   const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") + (scanText(e.name) ? "\n\n" + scanText(e.name) : "") : "";
-                  // the handlers are properties of the new element, so that morphing the list into the old one gives the reused button
-                  // this row's name (a listener added with addEventListener would stay on it and look up the name it had before)
-                  const go = (ev) => whoisFor(ev.currentTarget, e.name, tail, head);
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
-                    title: cachedWhois(e.name, head, tail) || (withHost ? (head + "\n" + e.name + tail) : "Hover for whois" + tail),
-                    onclick: () => o.onPick(e.name === o.picked ? "" : e.name), onmouseenter: go, onfocus: go }, e.name);
+                    title: withHost ? head + tail : tail.trim(),
+                    onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
                   const kw = withHost ? null : blockedNames.get(e.name.toLowerCase());
                   const rw = withHost || kw ? null : rewrittenNames.get(e.name.toLowerCase());
                   return withHost && blocked.has(e.name)
