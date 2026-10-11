@@ -1217,6 +1217,7 @@ func (c *Cluster) Run(ctx context.Context) {
 		if c.Enabled() {
 			c.SyncOnce(sctx)
 		}
+		c.sampleGwUp()
 		c.mg.updateTick(sctx)
 		cancel()
 		c.logStrain()
@@ -1843,6 +1844,9 @@ type GwState struct {
 	// ServingSec is how long this node has served the gateway without a break (the gateway's uptime on this node); the
 	// cluster's uptime for the gateway is the longest of these.  Absent on older nodes.
 	ServingSec int64 `json:"serving_sec,omitempty"`
+	// UpSince (unix seconds) is when somebody in the cluster began serving this gateway without a break, as this node knows
+	// it: kept across the nodes' restarts by passing it between them (see sampleGwUp).  Absent on older nodes.
+	UpSince int64 `json:"up_since,omitempty"`
 }
 
 // servingSettle is how long a gateway must have been served continuously before
@@ -1913,7 +1917,98 @@ func (m *Mgmt) localGateways() []GwState {
 			delete(m.servSince, gid)
 		}
 	}
+	m.gwUpMu.Lock()
+	for i := range gs {
+		if t, ok := m.gwUp[gs[i].GroupID]; ok {
+			gs[i].UpSince = t.Unix()
+		}
+	}
+	m.gwUpMu.Unlock()
 	return gs
+}
+
+// gwUpSeconds is how long the cluster has served the gateway without a break (0: nobody serves it, or not known yet).
+func (m *Mgmt) gwUpSeconds(gid int) int64 {
+	m.gwUpMu.Lock()
+	defer m.gwUpMu.Unlock()
+	if t, ok := m.gwUp[gid]; ok {
+		return int64(time.Since(t) / time.Second)
+	}
+	return 0
+}
+
+// sampleGwUp keeps, for each gateway, since when somebody in the cluster has served it without a break.  A node's own time
+// serving restarts with the node, so on a rolling update the longest of them would only reach back to the first node to
+// come back.  Instead every node remembers the moment it first saw the gateway served, passes it on in its status message
+// (GwState.UpSince), and takes the earliest of its own and what the members report: a node that restarts learns it again
+// from the members still serving.  It is dropped when nobody serves the gateway (a real outage) and starts again then.
+func (c *Cluster) sampleGwUp() {
+	m := c.mg
+	if m == nil || m.gwFn == nil {
+		return
+	}
+	mine := m.localGateways() // before c.mu: it takes its own locks
+	type acc struct {
+		serving bool
+		best    time.Time // earliest start known
+	}
+	now := time.Now()
+	by := map[int]*acc{}
+	get := func(gid int) *acc {
+		if by[gid] == nil {
+			by[gid] = &acc{}
+		}
+		return by[gid]
+	}
+	note := func(a *acc, t time.Time) {
+		if !t.IsZero() && (a.best.IsZero() || t.Before(a.best)) {
+			a.best = t
+		}
+	}
+	for _, g := range mine {
+		a := get(g.GroupID)
+		if g.Serving {
+			a.serving = true
+			note(a, now.Add(-time.Duration(g.ServingSec)*time.Second))
+		}
+	}
+	c.mu.Lock()
+	for _, pi := range c.info {
+		if pi == nil || !pi.Reachable {
+			continue
+		}
+		for _, g := range pi.Msg.Gateways {
+			a := get(g.GroupID)
+			if g.Serving {
+				a.serving = true
+				note(a, now.Add(-time.Duration(g.ServingSec)*time.Second))
+			}
+			if g.UpSince > 0 {
+				note(a, time.Unix(g.UpSince, 0))
+			}
+		}
+	}
+	c.mu.Unlock()
+	m.gwUpMu.Lock()
+	defer m.gwUpMu.Unlock()
+	if m.gwUp == nil {
+		m.gwUp = map[int]time.Time{}
+	}
+	for gid, a := range by {
+		if !a.serving {
+			delete(m.gwUp, gid) // nobody serves it now: the uptime starts again when somebody does
+			continue
+		}
+		if t, ok := m.gwUp[gid]; ok {
+			note(a, t)
+		}
+		m.gwUp[gid] = a.best
+	}
+	for gid := range m.gwUp {
+		if by[gid] == nil {
+			delete(m.gwUp, gid)
+		}
+	}
 }
 
 // peerGateways is what one other cluster member reported.

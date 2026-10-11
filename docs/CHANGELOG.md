@@ -1,5 +1,13 @@
 # Changelog
 
+## [v347] - 2026-10-11 — The gateway's uptime survives a rolling update
+
+### Changed
+- v346 measured the gateway's cluster uptime as the longest time any serving node had served it, so after every node had updated in turn it reached back only to the first node's restart. Each node now remembers since when somebody in the cluster has served each gateway without a break, passes it on in its status message (`up_since`) and takes the earliest of its own and what the members report. A node that restarts learns it again from the members still serving, so a rolling update does not reset it as long as some node serves the gateway throughout. It is dropped when no node serves the gateway (a real outage) and starts again when one does; a gateway served by a single node therefore still restarts its uptime when that node restarts, which is correct. Older nodes do not report it; the figure then falls back to the v346 one. A gap shorter than one sync interval (about 5 s) with nobody serving is not noticed.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestGatewayUptimeSurvivesRestart`. Not verified: a live multi-node rolling update.
+
 ## [v346] - 2026-10-11 — Topology: node uptime; the gateway's uptime is the cluster's
 
 ### Added

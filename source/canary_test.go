@@ -264,3 +264,52 @@ func TestClusterUpSec(t *testing.T) {
 		t.Errorf("no nodes: %d", got)
 	}
 }
+
+// The gateway's uptime is the cluster's and survives a rolling update: a node that has just restarted (its own serving time
+// is seconds) learns from a member that is still serving how long the gateway has been up; it starts again only when nobody
+// serves it.
+func TestGatewayUptimeSurvivesRestart(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 2; i++ {
+		a.sync()
+		b.sync()
+	}
+	a.mg.gwFn = func() []GwState { return []GwState{{GroupID: 1, Serving: true}} }
+	setPeer := func(gs []GwState) {
+		a.mg.cl.mu.Lock()
+		pi := a.mg.cl.info[b.addr]
+		pi.Reachable = true
+		pi.Msg.Gateways = gs
+		a.mg.cl.mu.Unlock()
+	}
+	hour := time.Now().Add(-time.Hour).Unix()
+	// A has just come back; B has served for an hour
+	setPeer([]GwState{{GroupID: 1, Serving: true, ServingSec: 3600, UpSince: hour}})
+	a.mg.cl.sampleGwUp()
+	if got := a.mg.gwUpSeconds(1); got < 3590 || got > 3700 {
+		t.Fatalf("after a restart the uptime must come from the serving member: %d s, want ~3600", got)
+	}
+	// B restarts in turn: it reports nothing yet, A keeps what it learned
+	setPeer(nil)
+	a.mg.cl.sampleGwUp()
+	if got := a.mg.gwUpSeconds(1); got < 3590 {
+		t.Fatalf("the uptime must survive the other node restarting: %d s", got)
+	}
+	// and A reports it, so B (restarted) can learn it again
+	var up int64
+	for _, g := range a.mg.localGateways() {
+		if g.GroupID == 1 {
+			up = g.UpSince
+		}
+	}
+	if up == 0 || time.Now().Unix()-up < 3590 {
+		t.Fatalf("A must pass the start on in its report: up_since %d", up)
+	}
+	// nobody serves it: the uptime is dropped, and starts again when somebody does
+	a.mg.gwFn = func() []GwState { return []GwState{{GroupID: 1, Serving: false}} }
+	a.mg.cl.sampleGwUp()
+	if got := a.mg.gwUpSeconds(1); got != 0 {
+		t.Fatalf("an outage ends the uptime: %d", got)
+	}
+}

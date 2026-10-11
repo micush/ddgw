@@ -235,7 +235,9 @@ func (s *StatusServer) markNodes(groups []CanvasGateway) {
 		}
 		if len(groups[i].Nodes) > 0 {
 			groups[i].ClusterStatus, groups[i].ClusterDetail = clusterGateway(groups[i].Nodes)
-			groups[i].ClusterUpSec = clusterUpSec(groups[i].Nodes)
+			if groups[i].ClusterUpSec = s.mg.gwUpSeconds(groups[i].GroupID); groups[i].ClusterUpSec == 0 {
+				groups[i].ClusterUpSec = clusterUpSec(groups[i].Nodes) // not sampled yet (just started) or older nodes
+			}
 			// the gateway's own circle follows: served by one node of several is amber even where that one node is fine
 			if groups[i].Status == "ok" && groups[i].ClusterStatus == "warn" {
 				groups[i].Status, groups[i].Detail = "warn", groups[i].ClusterDetail
