@@ -1591,6 +1591,9 @@ var processStart = time.Now()
 // tests can shorten it.
 var updateSoak = 2 * time.Minute
 
+// canaryLostWindow is how long after the last contact a member that was updating (or running the target) holds the others.
+const canaryLostWindow = 5 * time.Minute
+
 // canaryHold says why this node must not update yet, or "".  The first node
 // to update is the canary: the rest hold while any reachable member that runs
 // the target version has been up less than updateSoak or reports a bad
@@ -1604,10 +1607,17 @@ func (c *Cluster) canaryHold(target string) string {
 	var young string
 	for _, p := range snap.Peers {
 		pi := c.info[p.Addr]
-		if pi == nil || !pi.Reachable {
+		if pi == nil {
 			continue
 		}
 		m := pi.Msg
+		if !pi.Reachable {
+			// a member that vanished while updating, or right after taking the target, may be crash-looping: hold for a while
+			if (m.Updating || m.Version == target) && !pi.LastSeen.IsZero() && time.Since(pi.LastSeen) < canaryLostWindow {
+				return "lost contact with " + p.Addr + " while it was updating to v" + target + "; the others wait"
+			}
+			continue
+		}
 		if m.UpdateFailed == target {
 			return "update to v" + target + " failed on " + p.Addr + "; the others wait"
 		}

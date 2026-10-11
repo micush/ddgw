@@ -86,3 +86,53 @@ func TestSoakLeft(t *testing.T) {
 		t.Fatalf("with no newer version nothing soaks: %v", l)
 	}
 }
+
+// A member that vanishes while updating holds the others for a while: it may be crash-looping.
+func TestCanaryHoldLostContact(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 2; i++ {
+		a.sync()
+		b.sync()
+	}
+	next := fmt.Sprintf("%d", mustInt(version())+1)
+	cl := a.mg.cl
+	set := func(reach bool, m PeerStatusMsg, seen time.Time) {
+		cl.mu.Lock()
+		pi := cl.info[b.addr]
+		pi.Reachable, pi.Msg, pi.LastSeen = reach, m, seen
+		cl.mu.Unlock()
+	}
+	set(false, PeerStatusMsg{Version: version(), Updating: true}, time.Now().Add(-30*time.Second))
+	if w := cl.canaryHold(next); !strings.Contains(w, "lost contact") {
+		t.Fatalf("a member lost while updating must hold the rest: %q", w)
+	}
+	set(false, PeerStatusMsg{Version: version(), Updating: true}, time.Now().Add(-time.Hour))
+	if w := cl.canaryHold(next); w != "" {
+		t.Fatalf("a member gone for an hour must not hold updates forever: %q", w)
+	}
+	set(false, PeerStatusMsg{Version: version()}, time.Now())
+	if w := cl.canaryHold(next); w != "" {
+		t.Fatalf("a member that was down and not updating is not a canary: %q", w)
+	}
+}
+
+// After the boot guard rolls a version back, the node reports it failed (it survives the restart) until a newer one is staged.
+func TestRolledBackVersionStaysFailed(t *testing.T) {
+	u, err := NewUpdater(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := fmt.Sprintf("%d", mustInt(version())+1)
+	if u.FailedFor() != "" {
+		t.Fatal("nothing failed yet")
+	}
+	u.writeGuard(bootGuard{State: "rolled-back", From: version(), To: next})
+	if got := u.FailedFor(); got != next {
+		t.Fatalf("FailedFor = %q, want %q", got, next)
+	}
+	u.writeGuard(bootGuard{State: "applying", From: version(), To: next})
+	if got := u.FailedFor(); got != "" {
+		t.Fatalf("a new attempt clears the failure: %q", got)
+	}
+}

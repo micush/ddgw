@@ -1,5 +1,14 @@
 # Changelog
 
+## [v337] - 2026-10-11 — A failed canary stays failed
+
+### Fixed
+- A version the boot guard rolled back is now remembered as failed across the restart that follows the rollback. Before, the node forgot it, saw the staged source as newer again and tried the same build once more, and the other nodes saw no failure and did not hold. Now the node reports `failed vN` until a newer version is staged (or you run `--update-apply`, which tries again), and the other nodes hold meanwhile.
+- A member that vanishes while updating, or within 5 minutes of running the new version, holds the other nodes: a canary that crash-loops is unreachable, and unreachable members used to be skipped. A member that has been gone longer, or was down but not updating, does not hold updates.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestCanaryHoldLostContact`, `TestRolledBackVersionStaysFailed`. Not verified: a live crash-looping build.
+
 ## [v336] - 2026-10-11 — Canary soak is 2 minutes
 
 ### Changed

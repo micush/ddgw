@@ -295,6 +295,11 @@ func (u *Updater) FailedFor() string {
 	if u.failedVer != "" && time.Since(u.failedAt) < retryAfterFail {
 		return u.failedVer
 	}
+	// a version the boot guard rolled back stays failed until a newer one is staged (or --update-apply tries it again):
+	// the restart that followed the rollback lost the in-memory record, and the node must not try the same build again
+	if g, ok := u.readGuard(); ok && g.State == "rolled-back" && g.From == version() {
+		return g.To
+	}
 	return ""
 }
 
