@@ -1,5 +1,13 @@
 # Changelog
 
+## [v339] - 2026-10-11 — Statistics tiles: numbers and labels never cut off
+
+### Fixed
+- The Statistics tiles cut big numbers (`2,71…`) and labels (`Total Que…`, `Server Fai…`) with …, and the full number was not in a tooltip. A tile is now as wide as its number and label need (at least 8.5rem; the row wraps), so no label is cut off. From 1,000,000 up a count is written short and cut, not rounded: 2,710,532 is `2.71M`, 100,555,111 is `100.5M` (two decimals below 100 of a unit, one from there; then B and T); the full number is the tooltip. Below a million it is written in full. It applies to every number in the tiles (the QPS and its peak, the failed-updates line too). The three lines keep one font and one size in every tile, as in v331.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. The tile CSS rendered in headless Chromium: no label cut off; `shortCount` run in node on 999,999, 1,000,000, 2,710,532, 100,555,111, 1.2e12. Not verified: the real page with live data.
+
 ## [v338] - 2026-10-11 — Only the first node shows the soak
 
 ### Fixed

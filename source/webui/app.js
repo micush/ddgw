@@ -457,6 +457,15 @@
 
   // right-click menu items are written plain: no … after a label that opens a dialog
   // the canary soak: a node that took a new update first shows an hourglass until the others are let go (sec = seconds left)
+  // 2,710,532 -> 2.71M, 100,555,111 -> 100.5M: cut (not rounded) to two decimals below 100 of a unit, one from there; below a million in full
+  const shortCount = (v) => {
+    if (v < 1e6) return n0(v);
+    const units = ["M", "B", "T"];
+    let i = 0, x = v / 1e6;
+    while (x >= 1000 && i < units.length - 1) { x /= 1000; i++; }
+    const d = x >= 100 ? 10 : 100;
+    return String(Math.floor(x * d) / d) + units[i];
+  };
   const soakTip = (sec) => "soaking: " + sec + "s remaining";
   const soakMark = (sec) => (sec > 0 ? [" ", h("span", { class: "soak", title: soakTip(sec), "aria-label": soakTip(sec) }, "⏳")] : null);
   function plain(l) { return typeof l === "string" ? l.replace(/…(?=$| \()/, "") : l; }
@@ -2874,12 +2883,12 @@
         { type: "button", class: "qtile pick " + cls, "aria-pressed": (key === "qps" ? qpsView : (KINDS[key] || "") === sel && !qpsView) ? "true" : "false",
           title: key === "qps" ? (tip || "") : key ? "Show only " + label + " in the chart and lists" : "Show everything",
           onclick: () => (key === "qps" ? toggleQps() : pick(KINDS[key] || "")) },
-        (() => { const big = typeof value !== "string" && value >= 1e7, text = typeof value === "string" ? value : big ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value); return h("div", { class: "qv", title: big ? n0(value) : null }, text); })(),   // every number has the same size: ten million and up is written 710.9M, the full count in the tooltip
+        h("div", { class: "qv", title: typeof value === "string" ? null : n0(value) }, typeof value === "string" ? value : shortCount(value)),   // a million and up is written short (2.71M, 100.5M), the full number in the tooltip
         h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
       clear(tiles).append(
         tile("q-total", "Total Queries", t, "", ""),
         // queries per second: now = the last finished bucket (the newest one is still filling), with the average and the peak over the range
-        (() => { const b = d.total || [], st = d.step || 60, f = (v) => (v >= 100 ? n0(Math.round(v)) : v.toFixed(1)),
+        (() => { const b = d.total || [], st = d.step || 60, f = (v) => (v >= 100 ? shortCount(Math.round(v)) : v.toFixed(1)),
             rate = b.map((v) => v / st), cur = rate.length > 1 ? rate[rate.length - 2] : rate.length ? rate[0] : 0,
             avg = rate.length ? rate.reduce((a, v) => a + v, 0) / rate.length : 0, peak = rate.length ? Math.max(...rate) : 0;
           return tile("q-qps", "QPS", f(cur), rate.length ? "peak " + f(peak) : "", "qps", "Click to draw queries per second in the chart. Queries per second in the last finished interval. Over the chosen range: average " + f(avg) + ", peak " + f(peak)); })(),
@@ -2888,7 +2897,7 @@
         tile("q-nx", "NX Domain", d.sums.nx_domain, pct(d.sums.nx_domain, t), "nx_domain"),
         tile("q-ref", "Refused", d.sums.refused, pct(d.sums.refused, t), "refused"),
         // dynamic DNS updates forwarded to a primary (they are part of Total too)
-        tile("q-upd", "Updates", d.sums.updates, d.sums.updates ? (d.sums.updates_failed ? n0(d.sums.updates_failed) + " failed" : "none failed") : "", "updates"),
+        tile("q-upd", "Updates", d.sums.updates, d.sums.updates ? (d.sums.updates_failed ? shortCount(d.sums.updates_failed) + " failed" : "none failed") : "", "updates"),
         tile("q-clients", "Clients", d.sums.clients, ""),
         // answers served from the cache, out of the lookups that could be cached (the cache's own hit rate, over the chosen range)
         (() => { const hit = d.sums.cache_hits || 0, look = hit + (d.sums.cache_misses || 0);
