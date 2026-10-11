@@ -3004,29 +3004,17 @@
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not cleared: " + e.message); }
     }
 
-    // Scan: an nmap of a client, run on the picked node; the report goes into the client's tooltip
-    const scanSeen = new Map();   // address → { state, text, at }
-    const scanKey = (a) => (state.target || "") + "|" + a;
-    function scanText(addr) {
-      const s = scanSeen.get(scanKey(addr));
-      if (!s) return "";
-      if (s.state === "running") return "nmap: scanning…";
-      const when = new Date((s.end || s.at) * 1000).toLocaleString();
-      return "nmap scan, " + when + (s.state === "error" ? " (failed)" : "") + ":\n" + (s.text.length > 2500 ? s.text.slice(0, 2500) + "\n…" : s.text);
-    }
-    async function scanClient(addr) {
-      try {
+    // Scan: an nmap of a client, run on the picked node; a popup with the report when it is done
+    function scanPopup(addr) {
+      textPopup("Scan " + addr, async (put, live) => {
         let j = (await api("POST", "/api/scan", { client: addr })).data;
-        scanSeen.set(scanKey(addr), j);
-        if (last) draw(last);
         while (j.state === "running") {
           await new Promise((r) => setTimeout(r, 3000));
-          if (!bar.isConnected) return;   // the page was left
+          if (!live()) return;
           j = (await api("GET", "/api/scan?client=" + encodeURIComponent(addr))).data;
         }
-        scanSeen.set(scanKey(addr), j);
-        if (last) draw(last);
-      } catch (e) { scanSeen.delete(scanKey(addr)); if (last) draw(last); if (e.message !== "unauthenticated") say(status, "bad", "Scan of " + addr + ": " + e.message); }
+        put(j.text || "nmap printed nothing");
+      });
     }
 
     // A popup with text in it that a function fills in (and can fill in again: Run again): Whois, Ping, Traceroute.
@@ -3275,7 +3263,7 @@
         limit = own ? Number(own[1]) || 0 : 0;
       } catch (_) { /* offer Block */ }
       const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
-      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Lookup", () => lookupPopup(addr)], ["Scan", () => scanClient(addr)],
+      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Lookup", () => lookupPopup(addr)], ["Scan", () => scanPopup(addr)],
         ["Limit…" + (limit ? " (" + limit + "/s)" : ""), () => askLimit(addr, limit)], ["Copy", () => copyAddr(addr)],
         ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
@@ -3306,7 +3294,7 @@
               h("td", {}, e.name === "(others)" ? h("div", { class: "muted" }, e.name)
                 : (() => {
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
-                  const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") + (scanText(e.name) ? "\n\n" + scanText(e.name) : "") : "";
+                  const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") : "";
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
                     title: withHost ? head + tail : tail.trim(),
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);

@@ -1,5 +1,13 @@
 # Changelog
 
+## [v332] - 2026-10-11 — Scan is a popup
+
+### Changed
+- Statistics ▸ Top clients ▸ right-click ▸ **Scan** opens a popup that shows the nmap summary when the scan is done (**Run again** repeats it), like Ping and Traceroute. The result is no longer put in the client's tooltip, so the tooltip shows only the reverse-DNS names, and a scan finished earlier is not kept on the page (the server still holds the last result of each address, and starting a scan of an address that is already being scanned shows that scan). `--scan ADDR` is unchanged.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. Not verified: the popup in a browser, a real nmap run.
+
 ## [v331] - 2026-10-11 — Top domains: Copy; the Statistics tiles are alike
 
 ### Added
