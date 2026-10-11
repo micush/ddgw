@@ -298,6 +298,7 @@ dialog.cv-dialog .dlg-x:hover { color: var(--text); background: var(--info-bg); 
 .cv-menu { position: fixed; z-index: 50; min-width: 12rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .3); padding: .25rem; display: flex; flex-direction: column; }
 .cv-menu button { text-align: left; background: transparent; border: 0; color: inherit; font: inherit; padding: .45rem .7rem; border-radius: 6px; cursor: pointer; }
 .cv-menu button:hover, .cv-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.cv-menu .sep { height: 1px; margin: .25rem .4rem; background: var(--border); }
 .cv-menu button.has-sub { display: flex; justify-content: space-between; gap: 1.5rem; }
 .cv-menu button.has-sub.open { background: var(--surface-2); }
 .cv-menu button.danger { color: var(--bad); }

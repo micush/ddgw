@@ -2349,8 +2349,8 @@
   const rowMenu = (items) => (e) => {
     e.preventDefault(); e.stopPropagation();
     closeRowMenu();
-    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label, fn, cls]) =>
-      h("button", { type: "button", role: "menuitem", class: cls || "", onclick: () => { closeRowMenu(); fn(); } }, label)));
+    // "-" between items draws a line between groups
+    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => it === "-" ? h("div", { class: "sep", role: "separator" }) : h("button", { type: "button", role: "menuitem", class: it[2] || "", onclick: () => { closeRowMenu(); it[1](); } }, it[0])));
     document.body.append(rowMenuEl);
     const r = rowMenuEl.getBoundingClientRect(), b = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 0, bottom: 0 };
     const x = e.clientX || b.left, y = e.clientY || b.bottom;
@@ -3208,10 +3208,12 @@
         const list = (((await api("GET", "/api/config")).config.dns || {}).policy || []);
         has = list.some((r) => isNameRow(r, name)); rewritten = list.some((r) => isRewriteRow(r, name));
       } catch (_) { /* offer Block and Rewrite */ }
-      const tools = [["Whois", () => whoisPopup(name)], ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)],
-        ["Lookup", () => lookupPopup(name)], ["Flush", () => flushPopup(name)], ["Copy", () => copyAddr(name)]];
-      rowMenu([...tools, ...(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
-        : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])])(e);
+      rowMenu([["Whois", () => whoisPopup(name)], ["Lookup", () => lookupPopup(name)], "-",
+        ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)], "-",
+        ["Copy", () => copyAddr(name)], "-",
+        ["Flush", () => flushPopup(name)],
+        ...(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
+          : [["Rewrite…", () => askRewrite(name)], has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")]])])(e);
     }
     // Name…: give a client a name by hand (Settings ▸ client_names); an empty name removes it
     async function setClientName(addr, name, old) {
@@ -3263,9 +3265,11 @@
         limit = own ? Number(own[1]) || 0 : 0;
       } catch (_) { /* offer Block */ }
       const manual = !!(entry && entry.manual), host = (entry && entry.host) || "";
-      rowMenu([["Whois", () => whoisPopup(addr)], ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Lookup", () => lookupPopup(addr)], ["Scan", () => scanPopup(addr)],
-        ["Limit…" + (limit ? " (" + limit + "/s)" : ""), () => askLimit(addr, limit)], ["Copy", () => copyAddr(addr)],
+      rowMenu([["Whois", () => whoisPopup(addr)], ["Lookup", () => lookupPopup(addr)], "-",
+        ["Ping", () => netTool("ping", addr)], ["Traceroute", () => netTool("trace", addr)], ["Scan", () => scanPopup(addr)], "-",
+        ["Copy", () => copyAddr(addr)], "-",
         ...(host ? [["Rename…", () => askName(addr, host)], ...(manual ? [["Remove name", () => setClientName(addr, "")]] : [])] : [["Name…", () => askName(addr, "")]]),
+        ["Limit…" + (limit ? " (" + limit + "/s)" : ""), () => askLimit(addr, limit)],
         blocked ? ["Unblock", () => unblockClient(addr)] : ["Block", () => addPolicyRow("*", "nodata", addr)]])(e);
     }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [v333] - 2026-10-11 — Top clients / Top domains menus: grouped
+
+### Changed
+- The right-click menus of Top clients and Top domains are grouped, with a line between groups. Client: Whois, Lookup | Ping, Traceroute, Scan | Copy | Name… / Rename… (Remove name), Limit…, Block / Unblock. Domain: Whois, Lookup | Ping, Traceroute | Copy | Flush, Rewrite… (Remove rewrite), Block / Unblock. The row menu takes `"-"` as a separator item (other menus are unchanged).
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. `TestBGPOperateAPIAndStatus` failed once under the race detector (a data race between `bgp_test.go` and `web_test.go`, nothing this change touches) and passed 20 reruns and the next full run; like `TestClusterLogsHostStrain` in v331 it is an intermittent test race that has not been chased down. Not verified: the menus in a browser.
+
 ## [v332] - 2026-10-11 — Scan is a popup
 
 ### Changed
