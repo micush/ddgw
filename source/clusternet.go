@@ -1553,18 +1553,26 @@ func (c *Cluster) pullSource(ctx context.Context, peer ClusterPeer) (string, err
 func (c *Cluster) shouldWaitForOthers(target string, intent UpdateIntent) bool {
 	snap := c.node.Snapshot()
 	var mine []GwState
+	var groups []GroupConfig
 	if c.mg != nil {
 		mine = c.mg.localGateways() // before c.mu: it takes its own lock
+		if dc, _, err := c.mg.LiveConfig(); err == nil {
+			groups = dc.Groups
+		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// what every reachable member (self included) says it serves
 	members := []peerGateways{selfGateways(snap.SelfAddr, c.mg != nil && c.mg.gwFn != nil, mine)}
+	members[0].NodeID = snap.NodeID
 	for _, p := range snap.Peers {
 		if pi := c.info[p.Addr]; pi != nil && pi.Reachable {
-			members = append(members, gatewaysOf(p.Addr, pi))
+			pg := gatewaysOf(p.Addr, pi)
+			pg.NodeID = p.NodeID
+			members = append(members, pg)
 		}
 	}
+	markGatewayExcluded(members, groups)
 	for _, p := range snap.Peers {
 		pi := c.info[p.Addr]
 		if pi == nil || !pi.Reachable {
@@ -1961,21 +1969,27 @@ func (m *Mgmt) updateSafe() (bool, string) {
 		return true, ""
 	}
 	peers := m.cl.peerGateways()
-	// A member that has been removed from a gateway (a shared setting every node holds) can never serve it, whatever
-	// version it runs and whatever it says: it does not count as a cover for that gateway.
 	if dc, _, err := m.LiveConfig(); err == nil {
-		for i := range peers {
-			for _, g := range dc.Groups {
-				if peers[i].NodeID != "" && containsStr(g.ExcludedNodes, peers[i].NodeID) {
-					if peers[i].Offnet == nil {
-						peers[i].Offnet = map[int]bool{}
-					}
-					peers[i].Offnet[g.GroupID] = true
+		markGatewayExcluded(peers, dc.Groups)
+	}
+	return safeToTakeDown(m.localGateways(), peers)
+}
+
+// markGatewayExcluded marks, for each member, the gateways it has been removed from (a shared setting every node holds): it
+// can never serve them, whatever version it runs and whatever it says, so it is no cover for them.  Both the
+// "may I go now" check and the "must I wait for that member" check use it; without it in the second one every
+// member looked held back by the safety rule and the update order (and with it the canary) was skipped.
+func markGatewayExcluded(ps []peerGateways, groups []GroupConfig) {
+	for i := range ps {
+		for _, g := range groups {
+			if ps[i].NodeID != "" && containsStr(g.ExcludedNodes, ps[i].NodeID) {
+				if ps[i].Offnet == nil {
+					ps[i].Offnet = map[int]bool{}
 				}
+				ps[i].Offnet[g.GroupID] = true
 			}
 		}
 	}
-	return safeToTakeDown(m.localGateways(), peers)
 }
 
 // updateSafeToApply is updateSafe for installing an update: a node that knows no other member is never held back, since no

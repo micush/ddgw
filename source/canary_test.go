@@ -140,3 +140,43 @@ func TestRolledBackVersionStaysFailed(t *testing.T) {
 		t.Fatalf("a new attempt clears the failure: %q", got)
 	}
 }
+
+// Every node serves its own gateway and is excluded from the others' (as in a cluster of single-node gateways in four
+// subnets).  The update order must still apply: no member may look "held back by the safety rule" just because the others
+// do not report its gateway.  Before v341 every member did, so all of them updated at once and the canary never held.
+func TestOrderAppliesWhenEveryNodeServesItsOwnGateway(t *testing.T) {
+	names := []string{"A", "B", "C", "D"}
+	var members []peerGateways
+	var groups []GroupConfig
+	for i, n := range names {
+		gid := i + 1
+		pg := selfGateways(n, true, []GwState{{GroupID: gid, Serving: true}})
+		pg.NodeID = "id" + n
+		members = append(members, pg)
+		var ex []string
+		for _, o := range names {
+			if o != n {
+				ex = append(ex, "id"+o)
+			}
+		}
+		groups = append(groups, GroupConfig{GroupID: gid, ExcludedNodes: ex})
+	}
+	if !heldBySafety("A", members[0].gwList(), members) {
+		t.Fatal("test set-up: without the exclusions A must look held (that is the bug)")
+	}
+	markGatewayExcluded(members, groups)
+	for _, m := range members {
+		if heldBySafety(m.Addr, m.gwList(), members) {
+			t.Fatalf("%s must not look held back once the exclusions are known", m.Addr)
+		}
+	}
+}
+
+// gwList turns the map form back into the list heldBySafety takes.
+func (p peerGateways) gwList() []GwState {
+	var out []GwState
+	for id, s := range p.Serving {
+		out = append(out, GwState{GroupID: id, Serving: s})
+	}
+	return out
+}

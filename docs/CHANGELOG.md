@@ -1,5 +1,17 @@
 # Changelog
 
+## [v341] - 2026-10-11 — Updates really go one at a time; Statistics tiles on one row
+
+### Fixed
+- **Nodes updated at the same time, so the canary never held anything back.** Found in a troubleshooting bundle from a four-node cluster in which every node serves its own gateway and is excluded from the others': v339 went onto three nodes within the same second, and v340 onto two. The "wait for the member ahead of me" rule skipped any member that looked held back by the keep-every-gateway-served rule, and the check it used did not know about the members removed from a gateway (the check a node uses for itself did), so every node looked held back to every other and the update order was skipped altogether. The two checks now share one function (`markGatewayExcluded`). Nodes now update strictly one after another, lowest address first, and the first one is the canary as described in v335. A node that really cannot go (it is the only one serving a gateway that another member could cover) is still skipped, as before.
+
+### Changed
+- Statistics tiles: all tiles are on one row. A label wraps to two lines in a narrow window (never cut), a number never wraps, and below the width of the widest word the row scrolls sideways.
+- Short numbers are rounded to two decimals, not cut: 2,710,532 is `2.71M`, 100,555,111 is `100.56M` (a trailing 0 is dropped: 5,000,000,000 is `5B`; 999,996,000 is `1B`).
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestOrderAppliesWhenEveryNodeServesItsOwnGateway` (fails without the fix). The tiles in headless Chromium at 1500 px (one row) and 1100 px (scrolls). Not verified: a live multi-node update with the fix (the bundle's timestamps and the unit test are the evidence).
+
 ## [v340] - 2026-10-11 — Fix: Statistics page failed with "n0 is not defined"
 
 ### Fixed
