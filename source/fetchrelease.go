@@ -17,8 +17,10 @@ import (
 // ticked.  It looks for the tag the way get.sh does: the newest published release, otherwise the highest v<number> tag,
 // downloads that tag's source archive and hands it to the same staging as an uploaded file.  Variables only so tests can
 // point them at a fake server.
+const defaultRepo = "micush/ddgw"
+
 var (
-	ghRepo = "micush/ddgw"
+	ghRepo = defaultRepo
 	ghAPI  = "https://api.github.com"
 	ghHost = "https://github.com"
 )
@@ -74,8 +76,8 @@ func numericTagLess(a, b string) bool {
 }
 
 // latestTag is the newest published release, or else the highest v<number> tag of the repository.
-func latestTag(ctx context.Context) (string, error) {
-	if b, err := ghGet(ctx, ghAPI+"/repos/"+ghRepo+"/releases/latest", 1<<20); err == nil {
+func latestTag(ctx context.Context, repo string) (string, error) {
+	if b, err := ghGet(ctx, ghAPI+"/repos/"+repo+"/releases/latest", 1<<20); err == nil {
 		var r struct {
 			Tag string `json:"tag_name"`
 		}
@@ -83,7 +85,7 @@ func latestTag(ctx context.Context) (string, error) {
 			return r.Tag, nil
 		}
 	}
-	b, err := ghGet(ctx, ghAPI+"/repos/"+ghRepo+"/tags?per_page=100", 4<<20)
+	b, err := ghGet(ctx, ghAPI+"/repos/"+repo+"/tags?per_page=100", 4<<20)
 	if err != nil {
 		return "", fmt.Errorf("cannot reach GitHub: %w", err)
 	}
@@ -100,20 +102,20 @@ func latestTag(ctx context.Context) (string, error) {
 		}
 	}
 	if best == "" {
-		return "", errors.New("no release or v<number> tag found in " + ghRepo + " (rate limit or no tags yet)")
+		return "", errors.New("no release or v<number> tag found in " + repo + " (rate limit or no tags yet)")
 	}
 	return best, nil
 }
 
 // fetchRelease downloads the source archive of the newest tag.
-func fetchRelease(ctx context.Context) (body []byte, tag string, err error) {
+func fetchRelease(ctx context.Context, repo string) (body []byte, tag string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	tag, err = latestTag(ctx)
+	tag, err = latestTag(ctx, repo)
 	if err != nil {
 		return nil, "", err
 	}
-	body, err = ghGet(ctx, ghHost+"/"+ghRepo+"/archive/refs/tags/"+tag+".tar.gz", maxUploadBytes)
+	body, err = ghGet(ctx, ghHost+"/"+repo+"/archive/refs/tags/"+tag+".tar.gz", maxUploadBytes)
 	if err != nil {
 		return nil, tag, fmt.Errorf("download of %s failed: %w", tag, err)
 	}
@@ -121,16 +123,62 @@ func fetchRelease(ctx context.Context) (body []byte, tag string, err error) {
 }
 
 func (w *WebServer) handleUpdateFetch(rw http.ResponseWriter, r *http.Request, s *session) {
-	body, tag, err := fetchRelease(r.Context())
+	repo := w.mg.upd.Repo()
+	body, tag, err := fetchRelease(r.Context(), repo)
 	if err != nil {
 		jsonError(rw, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	warnf("web: %q fetched release %s from GitHub (%d bytes, from %s)", s.user, tag, len(body), clientIP(r))
+	warnf("web: %q fetched release %s of %s from GitHub (%d bytes, from %s)", s.user, tag, repo, len(body), clientIP(r))
 	ver, err := w.mg.UpdateUpload(body, s.user)
 	if err != nil {
 		jsonError(rw, http.StatusUnprocessableEntity, tag+": "+err.Error())
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "data": map[string]any{"version": ver, "tag": tag}})
+}
+
+// repoRe is an owner or a repository name on GitHub.
+var repoRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+
+// normalizeRepo reads the online repository as an admin writes it: https://github.com/owner/repo (also with .git, a trailing
+// slash, or without the https://), or just owner/repo.  It returns owner/repo, or "" for the default repository.  Only
+// github.com is accepted: the daemon builds and installs what it downloads, so the source is the admin's choice, but the
+// host is fixed.
+func normalizeRepo(in string) (string, error) {
+	s := strings.TrimSpace(in)
+	if s == "" || strings.EqualFold(s, "default") {
+		return "", nil
+	}
+	for _, p := range []string{"https://", "http://"} {
+		if len(s) >= len(p) && strings.EqualFold(s[:len(p)], p) {
+			s = s[len(p):]
+			break
+		}
+	}
+	if strings.HasPrefix(strings.ToLower(s), "www.") {
+		s = s[4:]
+	}
+	if strings.HasPrefix(strings.ToLower(s), "github.com/") {
+		s = s[len("github.com/"):]
+	} else if i := strings.Index(s, "/"); i > 0 && strings.Contains(s[:i], ".") {
+		return "", errors.New("only github.com repositories are supported")
+	}
+	s = strings.TrimSuffix(strings.TrimRight(s, "/"), ".git")
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 || !repoRe.MatchString(parts[0]) || !repoRe.MatchString(parts[1]) || parts[1] == "." || parts[1] == ".." {
+		return "", errors.New("write the repository as https://github.com/owner/repo")
+	}
+	if strings.EqualFold(s, defaultRepo) {
+		return "", nil
+	}
+	return s, nil
+}
+
+// Repo is the repository to fetch releases from: the one set in the update settings, or the default.
+func (u *Updater) Repo() string {
+	if r := u.Intent().Repo; r != "" {
+		return r
+	}
+	return ghRepo
 }

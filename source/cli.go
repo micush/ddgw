@@ -31,7 +31,7 @@ type cliFlags struct {
 	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                                                                       *bool
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, scanAddr, pingAddr, traceAddr, lookupAddr, cacheFlush, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile, tshootFile *string
 	asn, routerID, asPrepend, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                                                                              *string
-	updateUpload, updatePush, updateCancel, updateAuto                                                                                                                                                                                               *string
+	updateUpload, updatePush, updateCancel, updateAuto, updateRepo                                                                                                                                                                                   *string
 	canvas, vmacTest, tshoot, tshootCapture                                                                                                                                                                                                          *bool
 	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node, realMACs                                                                              *string
 	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                                                                                    *int
@@ -70,7 +70,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		multihop:     s("multihop"),
 		keepalive:    s("keepalive"),
 		hold:         s("hold"),
-		updateUpload: s("update-upload"), updatePush: s("update-push"), updateCancel: s("update-cancel"), updateAuto: s("update-auto"),
+		updateUpload: s("update-upload"), updatePush: s("update-push"), updateCancel: s("update-cancel"), updateAuto: s("update-auto"), updateRepo: s("update-repo"),
 	}
 }
 
@@ -459,6 +459,9 @@ func (f *cliFlags) run(sock string) bool {
 		}
 		op(sock, "update.auto", map[string]any{"enabled": on})
 		fmt.Println("Auto-update is now", map[bool]string{true: "ON", false: "off"}[on])
+	case *f.updateRepo != "":
+		op(sock, "update.repo", map[string]any{"repo": *f.updateRepo})
+		fmt.Println("Online repository set. (--update-repo default goes back to https://github.com/" + defaultRepo + ")")
 	case *f.updateHistory:
 		var h []UpdateEvent
 		decode(op(sock, "update.history", map[string]any{"limit": 0}), &h)
@@ -573,6 +576,11 @@ func printUpdate(v UpdateView) {
 	} else {
 		fmt.Println("Go toolchain:  NOT FOUND — this node cannot build updates (re-run install.sh)")
 	}
+	repo := v.Intent.Repo
+	if repo == "" {
+		repo = defaultRepo + " (default)"
+	}
+	fmt.Printf("Repository:    https://github.com/%s\n", repo)
 	fmt.Printf("Auto-update:   %s\n", map[bool]string{true: "ON (every node updates itself when newer source is available)", false: "off"}[v.Intent.AutoAll])
 	if v.Busy {
 		fmt.Printf("In progress:   %s\n", orDefault(v.Phase, "yes"))

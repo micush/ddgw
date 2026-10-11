@@ -2260,7 +2260,21 @@
           try { await api("POST", "/api/update/auto", { enabled: on }); state.autoUpdate = on; say("ok"); }
           catch (e) { cb.checked = !on; say("bad", "Not changed: " + (e.message || e)); }
         });
+        // the repository "Fetch from online" downloads from: shared, saved when the field is left; empty goes back to the default
+        const DEFAULT_REPO = "https://github.com/micush/ddgw";
+        const repoIn = h("input", { type: "text", value: state.updateRepo ? "https://github.com/" + state.updateRepo : DEFAULT_REPO, spellcheck: "false", autocomplete: "off", "aria-label": "Online repository" });
+        const repoErr = h("span", { class: "notice bad", role: "alert" });
+        repoIn.addEventListener("change", async (ev) => {
+          ev.stopPropagation(); // not a config edit
+          clear(repoErr);
+          try {
+            await api("POST", "/api/update/repo", { repo: repoIn.value.trim() });
+            state.updateRepo = ((await api("GET", "/api/update")).data.intent.repo) || "";
+            repoIn.value = state.updateRepo ? "https://github.com/" + state.updateRepo : DEFAULT_REPO;
+          } catch (e) { repoErr.textContent = e.message || String(e); }
+        });
         return section("Upgrade", h("label", { class: "f check" }, cb, "Update every node automatically when a newer release is staged (one node at a time)"),
+          h("label", { class: "f" }, h("span", {}, "Online repository"), repoIn, repoErr),
           h("p", { class: "hint" }, "Upload a release on the Upgrade page; with this on, each node then builds and installs it in turn and rolls back by itself if the new version does not stay up."));
       };
       // the GUI certificate lives under Web GUI; its own controls save through their own calls, never through the settings form
@@ -2290,7 +2304,7 @@
         const c = await api("GET", "/api/cluster");
         state.clustered = !!(c.data.enabled && c.data.peers.length > 1);
       } catch (e) { if (e.message === "unauthenticated") throw e; }
-      try { state.autoUpdate = !!(await api("GET", "/api/update")).data.intent.auto_all; } catch (e) { if (e.message === "unauthenticated") throw e; state.autoUpdate = null; }
+      try { const u = (await api("GET", "/api/update")).data.intent; state.autoUpdate = !!u.auto_all; state.updateRepo = u.repo || ""; } catch (e) { if (e.message === "unauthenticated") throw e; state.autoUpdate = null; }
       const r = await api("GET", "/api/config");
       state.cfg = r.config;
       state.cfgInfo = r;

@@ -32,6 +32,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		Nodes    []string `json:"nodes"`
 		Force    bool     `json:"force"`
 		Enabled  bool     `json:"enabled"`
+		Repo     string   `json:"repo"`
 		DataB64  string   `json:"data"`
 		Limit    int      `json:"limit"`
 		Hostname string   `json:"hostname"`
@@ -452,6 +453,8 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		return m.UpdateStatus(), m.UpdateCancel(resolveNodes(m, a.Nodes), actor)
 	case "update.auto":
 		return m.UpdateStatus(), m.UpdateAuto(a.Enabled, actor)
+	case "update.repo":
+		return m.UpdateStatus(), m.UpdateRepo(a.Repo, actor)
 	}
 	return nil, fmt.Errorf("unknown command: %s", cmd)
 }

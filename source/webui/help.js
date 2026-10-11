@@ -160,6 +160,7 @@ const DDGW_HELP = {
       ["fields", [
         ["Log level", "`debug`, `info` (default), `warning` or `error`. The least important lines the daemon writes to the journal and the Log page."],
         ["Update every node automatically when a newer release is staged (one node at a time)", "Auto-update. On (the default), each node builds and installs a staged release by itself, one node at a time (the first node must run it 2 minutes without trouble before the others follow), and rolls back if the new version does not stay up. Ticking it asks you to confirm. Applies to the whole cluster."],
+        ["Online repository", "The GitHub repository **Fetch from online** (Operate ▸ Upgrade) downloads releases from, written as `https://github.com/owner/repo` (the default is `https://github.com/micush/ddgw`; use it to follow a fork or if the repository moves). Saved when you leave the field; an empty field goes back to the default. Only github.com repositories are accepted. Shared: it is kept with the update settings on the primary and followed by every node. Nodes build and install what is downloaded as root, so point it only at a repository you trust. CLI: `--update-repo URL|default`."],
       ]],
       ["h", "Gateway groups (one card per gateway)"],
       ["fields", [
@@ -381,10 +382,10 @@ const DDGW_HELP = {
       ["h", "Fields"],
       ["fields", [
         ["Release archive", "Select a `ddgw_vN.tgz` (or `.zip`) release archive. It is checked and staged on this node; the other members pull it from here."],
-        ["Fetch from online", "Tick it and **Upload** downloads the newest release of `micush/ddgw` from GitHub (or, when it has no releases, its highest `v<number>` tag) to this node and stages it, instead of using the file you chose. This node needs to reach api.github.com and github.com (a proxy set in its environment is used). The rest is the same as an upload: the version must be newer than the one running before it can be applied."],
+        ["Fetch from online", "Tick it and **Upload** downloads the newest release of the online repository (Configure ▸ General ▸ Upgrade; `micush/ddgw` unless you changed it) from GitHub (or, when it has no releases, its highest `v<number>` tag) to this node and stages it, instead of using the file you chose. This node needs to reach api.github.com and github.com (a proxy set in its environment is used). The rest is the same as an upload: the version must be newer than the one running before it can be applied."],
         ["Select (tick box on each member row)", "Ticks a member for **Update N selected**. Disabled while auto-update is on (Configure ▸ General)."],
       ]],
-      ["cli", "ddgw --update-status   (the 50 newest history events)\nddgw --update-history  (all of them)\nddgw --update-upload FILE\nddgw --update-apply\nddgw --update-push all|ADDR,...\nddgw --update-cancel all|ADDR,...\nddgw --update-auto on|off"],
+      ["cli", "ddgw --update-status   (the 50 newest history events)\nddgw --update-history  (all of them)\nddgw --update-upload FILE\nddgw --update-apply\nddgw --update-push all|ADDR,...\nddgw --update-cancel all|ADDR,...\nddgw --update-auto on|off\nddgw --update-repo URL|default"],
     ],
   },
   anycaststatus: {

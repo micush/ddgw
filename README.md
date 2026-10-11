@@ -597,6 +597,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--cluster-status/-token/-join/-promote/-remove/-unremove/-leave/-sync` | Cluster tab |
 | `--update-status/-history/-upload/-apply/-push` | Upgrade tab (stats at the top, upload, a paged History of every update event (`--update-history` prints them all; `--update-status` the newest 50), Nodes card: tick members, **Update this node now** / **Update N selected**) |
 | `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
+| `--update-repo` | Configure ▸ General ▸ **Upgrade** card (Online repository) |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
 | `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); a client's **Limit** is the `client_limits` setting, **Copy** has no command |
 | `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); `--whois` is right-click ▸ **Whois**; the last is its **Recent dynamic updates** card |
@@ -937,6 +938,7 @@ ddgw --update-status
 ddgw --update-apply                 # build and install on this node now
 ddgw --update-push all              # ask nodes (or ADDR,ADDR) to update
 ddgw --update-auto on               # every node follows the newest source
+ddgw --update-repo https://github.com/you/ddgw   # where "fetch online" downloads from (default: micush/ddgw)
 ddgw --update-cancel all
 ddgw --update-history
 ```

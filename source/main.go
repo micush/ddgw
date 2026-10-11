@@ -124,6 +124,8 @@ the web GUI):
   Upgrade          --update-status  --update-history  --update-upload FILE
                    --update-apply  --update-push all|ADDR,...
                    --update-cancel all|ADDR,...  --update-auto on|off
+                   --update-repo URL|default   (where "fetch online" downloads from;
+                   default https://github.com/micush/ddgw)
   Statistics       --stats [--stats-range 1h|1d|7d|30d]
                    [--stats-rcode nxdomain|servfail|refused|noerror|other|update]
                    [--stats-client ADDR | --stats-domain NAME]

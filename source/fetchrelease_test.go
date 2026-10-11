@@ -49,15 +49,15 @@ func fakeGitHub(t *testing.T, release string, tags string, archives map[string][
 
 func TestLatestTag(t *testing.T) {
 	fakeGitHub(t, "v300", `[]`, nil)
-	if tag, err := latestTag(context.Background()); err != nil || tag != "v300" {
+	if tag, err := latestTag(context.Background(), ghRepo); err != nil || tag != "v300" {
 		t.Fatalf("release: %q %v", tag, err)
 	}
 	fakeGitHub(t, "", `[{"name":"v99"},{"name":"v1000"},{"name":"nightly"},{"name":"v215"}]`, nil)
-	if tag, err := latestTag(context.Background()); err != nil || tag != "v1000" {
+	if tag, err := latestTag(context.Background(), ghRepo); err != nil || tag != "v1000" {
 		t.Fatalf("tags: %q %v", tag, err)
 	}
 	fakeGitHub(t, "", `[{"name":"nightly"}]`, nil)
-	if _, err := latestTag(context.Background()); err == nil {
+	if _, err := latestTag(context.Background(), ghRepo); err == nil {
 		t.Fatal("no usable tag was accepted")
 	}
 }
@@ -85,5 +85,52 @@ func TestUpdateFetchFromGitHub(t *testing.T) {
 	fakeGitHub(t, "v9", `[]`, map[string][]byte{"v9": []byte("not an archive")})
 	if r := e.do("POST", "/api/update/fetch", map[string]any{}, withAuth(e, true)); r.code != 422 {
 		t.Fatalf("junk archive: %d %s", r.code, r.raw)
+	}
+}
+
+func TestNormalizeRepo(t *testing.T) {
+	good := map[string]string{
+		"":                                      "",
+		"default":                               "",
+		"https://github.com/micush/ddgw":        "", // the default is stored as empty
+		"https://github.com/micush/ddgw/":       "",
+		"github.com/micush/ddgw.git":            "",
+		"micush/ddgw":                           "",
+		"https://github.com/someone/ddgw-fork":  "someone/ddgw-fork",
+		"  https://www.github.com/a.b/c_d.git ": "a.b/c_d",
+		"someone/fork":                          "someone/fork",
+	}
+	for in, want := range good {
+		got, err := normalizeRepo(in)
+		if err != nil || got != want {
+			t.Errorf("normalizeRepo(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{
+		"https://gitlab.com/a/b", "https://example.com/a/b", "a", "a/b/c", "https://github.com/a", "https://github.com/a/b/c",
+		"https://github.com/../b", "a/..", "a b/c", "https://github.com/a/b?x=1", "-a/b", "git@github.com:a/b",
+	} {
+		if got, err := normalizeRepo(in); err == nil {
+			t.Errorf("normalizeRepo(%q) = %q, want an error", in, got)
+		}
+	}
+}
+
+// The repository is part of the shared update settings: set on the primary, kept in the intent, used by the fetch.
+func TestUpdateRepoSetting(t *testing.T) {
+	u, err := NewUpdater(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Repo() != ghRepo {
+		t.Fatalf("default repo = %q", u.Repo())
+	}
+	u.SetRepo("someone/fork", "tester", "n1")
+	if u.Repo() != "someone/fork" || u.Intent().Repo != "someone/fork" {
+		t.Fatalf("repo not set: %q", u.Repo())
+	}
+	u.SetRepo("", "tester", "n1")
+	if u.Repo() != ghRepo {
+		t.Fatalf("empty must go back to the default: %q", u.Repo())
 	}
 }

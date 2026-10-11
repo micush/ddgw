@@ -394,6 +394,7 @@ func waitUntilSafe(safe func() (bool, string), force bool, every time.Duration, 
 type adminNodes struct {
 	Nodes   []string `json:"nodes"`
 	Enabled bool     `json:"enabled"`
+	Repo    string   `json:"repo,omitempty"`
 }
 
 func (m *Mgmt) UpdatePush(nodes []string, by string) error {
@@ -406,6 +407,17 @@ func (m *Mgmt) UpdatePush(nodes []string, by string) error {
 
 func (m *Mgmt) UpdateCancel(nodes []string, by string) error {
 	_, err := m.runOnPrimary("update-cancel", by, adminNodes{Nodes: nodes})
+	return err
+}
+
+// UpdateRepo sets the repository "Fetch from online" downloads from (a GitHub URL or owner/repo; empty or "default" for the
+// default one); shared by the cluster.
+func (m *Mgmt) UpdateRepo(repo, by string) error {
+	norm, err := normalizeRepo(repo)
+	if err != nil {
+		return err
+	}
+	_, err = m.runOnPrimary("update-repo", by, adminNodes{Repo: norm})
 	return err
 }
 
@@ -475,7 +487,7 @@ func (m *Mgmt) execAdminOp(op, by string, payload json.RawMessage) (json.RawMess
 			return nil, err
 		}
 		return ok(map[string]any{})
-	case "update-push", "update-cancel", "update-auto", "update-done":
+	case "update-push", "update-cancel", "update-auto", "update-done", "update-repo":
 		var p adminNodes
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return nil, err
@@ -487,6 +499,12 @@ func (m *Mgmt) execAdminOp(op, by string, payload json.RawMessage) (json.RawMess
 			m.upd.Cancel(p.Nodes, by)
 		case "update-auto":
 			m.upd.SetAuto(p.Enabled, by, m.cl.selfAddrForEvents())
+		case "update-repo":
+			norm, err := normalizeRepo(p.Repo)
+			if err != nil {
+				return nil, err
+			}
+			m.upd.SetRepo(norm, by, m.cl.selfAddrForEvents())
 		}
 		return ok(map[string]any{})
 	}

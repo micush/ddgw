@@ -51,6 +51,9 @@ type UpdateIntent struct {
 	Pending []string  `json:"pending"` // node addresses queued for an update
 	By      string    `json:"by,omitempty"`
 	At      time.Time `json:"at,omitempty"`
+	// Repo is the GitHub repository "Fetch from online" downloads releases from, as owner/repo; empty means the default
+	// (defaultRepo).  Part of the intent, so it is shared by the cluster and set on the primary.
+	Repo string `json:"repo,omitempty"`
 }
 
 func (i UpdateIntent) wants(addr string) bool {
@@ -61,7 +64,7 @@ func (i UpdateIntent) wants(addr string) bool {
 type UpdateEvent struct {
 	At     time.Time `json:"at"`
 	Node   string    `json:"node"`
-	Kind   string    `json:"kind"` // uploaded|pulled|queued|cancelled|auto-on|auto-off|applied|failed|rolled-back
+	Kind   string    `json:"kind"` // uploaded|pulled|queued|cancelled|auto-on|auto-off|repo|applied|failed|rolled-back
 	From   string    `json:"from,omitempty"`
 	To     string    `json:"to,omitempty"`
 	Detail string    `json:"detail,omitempty"`
@@ -197,6 +200,23 @@ func (u *Updater) SetAuto(on bool, by, self string) {
 	}
 	infof("auto-update %s by %s", map[bool]string{true: "enabled", false: "disabled"}[on], by)
 	u.addEventLocked(UpdateEvent{Node: self, Kind: kind, By: by})
+}
+
+// SetRepo sets the online repository (already normalised; "" is the default).
+func (u *Updater) SetRepo(repo, by, self string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.intent.Repo == repo {
+		return
+	}
+	u.intent.Repo = repo
+	u.saveIntentLocked()
+	shown := repo
+	if shown == "" {
+		shown = "the default (" + defaultRepo + ")"
+	}
+	infof("update: online repository set to %s by %s", shown, by)
+	u.addEventLocked(UpdateEvent{Node: self, Kind: "repo", Detail: shown, By: by})
 }
 
 func (u *Updater) Push(nodes []string, by string) {

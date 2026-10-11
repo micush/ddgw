@@ -1,5 +1,13 @@
 # Changelog
 
+## [v349] - 2026-10-11 — Online repository setting
+
+### Added
+- Configure ▸ General ▸ Upgrade has an **Online repository** box, default `https://github.com/micush/ddgw`. It is the GitHub repository Operate ▸ Upgrade ▸ **Fetch from online** downloads releases from (the newest release, or its highest `v<number>` tag), so a fork, or a repository that moved, can be followed. The box saves when you leave it; an empty box goes back to the default; the address is written as `https://github.com/owner/repo` (also accepted: with `.git`, a trailing slash, without `https://`, or `owner/repo`). Only github.com repositories are accepted, and a wrong address is refused with a short red message beside the box. It is part of the shared update settings: set on the primary, followed by every node, recorded in the update history. CLI: `--update-repo URL|default`; `--update-status` shows it.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestNormalizeRepo`, `TestUpdateRepoSetting`. Not verified: the box in a browser, a real download from a changed repository (this sandbox cannot reach GitHub).
+
 ## [v348] - 2026-10-11 — An anycast address's uptime is the cluster's too
 
 ### Changed
