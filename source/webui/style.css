@@ -413,8 +413,8 @@ td input[type=date] { width: 11rem; }
 .qtile { container-type: inline-size; min-width: 0; }
 /* a long number shrinks to fit the tile instead of being cut off: app.js sets --len to its width in digits (a comma counts half) */
 .qtile .qv { --len: 1; font-size: clamp(.5rem, calc(100cqi / (var(--len) * .72)), 1.35rem); font-weight: 700; white-space: nowrap; }
-.qtile .qs { font-size: .75rem; color: var(--muted); min-height: 1em; }
-.qtile .ql { font-size: .8rem; font-weight: 600; }
+.qtile .qs { --len: 1; font-size: clamp(.5rem, calc(100cqi / (var(--len) * .6)), .75rem); color: var(--muted); min-height: 1em; white-space: nowrap; }
+.qtile .ql { --len: 1; font-size: clamp(.5rem, calc(100cqi / (var(--len) * .68)), .8rem); font-weight: 600; white-space: nowrap; }
 .qlegend { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
 .qchip { display: inline-flex; align-items: center; gap: .4rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: .15rem .7rem .15rem .5rem; font: inherit; font-size: .8rem; cursor: pointer; }
 .qchip[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }

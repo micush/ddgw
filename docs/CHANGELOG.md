@@ -1,5 +1,13 @@
 # Changelog
 
+## [v329] - 2026-10-11 — Statistics tiles keep one height
+
+### Fixed
+- The tiles at the top of Statistics were taller with the Node menu on Cluster than on one node. The tiles share a grid row, and a bigger count made the small line ("10,007 of 15,867") and a label ("Cache Hits") too wide for their tile, so they wrapped onto a second line and every tile in the row grew to match. The small line and the label now shrink to the tile's width the way the number already did, and never wrap (same fix for the tiles on the Host page).
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. Not verified: the tiles in a browser (the long text fitting at your window widths).
+
 ## [v328] - 2026-10-11 — Whois is a popup; Ping, Traceroute and Whois on Top domains too
 
 ### Changed

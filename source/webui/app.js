@@ -455,6 +455,9 @@
     if (!document.hidden && state.timer && VIEWS[state.tab].poll) VIEWS[state.tab].poll().catch(() => {});
   });
 
+  // a tile's small line and label shrink to the tile's width like its number does (--len = their length), so they never wrap
+  // and make one tile, and with it the whole row, taller
+  function qfit(cls, text) { const e = h("div", { class: cls }, text); e.style.setProperty("--len", String(Math.max(1, text.length))); return e; }
   function errorBox(el, msg) {
     clear(el).append(h("div", { class: "notice bad", role: "alert" }, msg));
   }
@@ -2857,7 +2860,7 @@
           title: key === "qps" ? (tip || "") : key ? "Show only " + label + " in the chart and lists" : "Show everything",
           onclick: () => (key === "qps" ? toggleQps() : pick(KINDS[key] || "")) },
         (() => { const huge = typeof value !== "string" && value >= 1e12, text = typeof value === "string" ? value : huge ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value), qv = h("div", { class: "qv", title: huge ? n0(value) : null }, text); qv.style.setProperty("--len", String(Math.max(1, text.length - (text.match(/[,.\s]/g) || []).length / 2))); return qv; })(), // CSSOM, allowed by the CSP
-        h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
+        qfit("qs", sub || "\u00a0"), qfit("ql", label));
       clear(tiles).append(
         tile("q-total", "Total Queries", t, t ? "100%" : "", ""),
         // queries per second: now = the last finished bucket (the newest one is still filling), with the average and the peak over the range
@@ -3444,7 +3447,7 @@
       const n = d.now;
       clear(status);
       if (!n.at) { clear(tiles); clear(charts).append(h("div", { class: "empty" }, "No sample yet: the daemon has only just started.")); clear(tables); return; }
-      const tile = (cls, label, value, sub) => h("div", { class: "qtile " + cls }, h("div", { class: "qv" }, value), h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
+      const tile = (cls, label, value, sub) => h("div", { class: "qtile " + cls }, h("div", { class: "qv" }, value), qfit("qs", sub || "\u00a0"), qfit("ql", label));
       // the fullest real disk; tiny system mounts (under 1 GiB) only count when nothing bigger exists
       const big = (n.fs || []).filter((f) => f.total >= 1 << 30);
       const topFS = (big.length ? big : n.fs || []).reduce((a, f) => (!a || f.pct > a.pct ? f : a), null);
