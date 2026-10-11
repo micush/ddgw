@@ -455,9 +455,6 @@
     if (!document.hidden && state.timer && VIEWS[state.tab].poll) VIEWS[state.tab].poll().catch(() => {});
   });
 
-  // a tile's small line and label shrink to the tile's width like its number does (--len = their length), so they never wrap
-  // and make one tile, and with it the whole row, taller
-  function qfit(cls, text) { const e = h("div", { class: cls }, text); e.style.setProperty("--len", String(Math.max(1, text.length))); return e; }
   function errorBox(el, msg) {
     clear(el).append(h("div", { class: "notice bad", role: "alert" }, msg));
   }
@@ -2870,8 +2867,8 @@
         { type: "button", class: "qtile pick " + cls, "aria-pressed": (key === "qps" ? qpsView : (KINDS[key] || "") === sel && !qpsView) ? "true" : "false",
           title: key === "qps" ? (tip || "") : key ? "Show only " + label + " in the chart and lists" : "Show everything",
           onclick: () => (key === "qps" ? toggleQps() : pick(KINDS[key] || "")) },
-        (() => { const huge = typeof value !== "string" && value >= 1e12, text = typeof value === "string" ? value : huge ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value), qv = h("div", { class: "qv", title: huge ? n0(value) : null }, text); qv.style.setProperty("--len", String(Math.max(1, text.length - (text.match(/[,.\s]/g) || []).length / 2))); return qv; })(), // CSSOM, allowed by the CSP
-        qfit("qs", sub || "\u00a0"), qfit("ql", label));
+        (() => { const big = typeof value !== "string" && value >= 1e7, text = typeof value === "string" ? value : big ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value) : n0(value); return h("div", { class: "qv", title: big ? n0(value) : null }, text); })(),   // every number has the same size: ten million and up is written 710.9M, the full count in the tooltip
+        h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
       clear(tiles).append(
         tile("q-total", "Total Queries", t, "", ""),
         // queries per second: now = the last finished bucket (the newest one is still filling), with the average and the peak over the range
@@ -3087,7 +3084,7 @@
           (bad.length ? "\nNot reached: " + bad.map((n) => n.name + " (" + n.error + ")").join(", ") : ""));
       });
     }
-    // Copy: the address to the clipboard
+    // Copy: the address or the name to the clipboard
     async function copyAddr(text) {
       try { await navigator.clipboard.writeText(text); } catch (_) { /* no permission: nothing copied */ }
     }
@@ -3224,7 +3221,7 @@
         has = list.some((r) => isNameRow(r, name)); rewritten = list.some((r) => isRewriteRow(r, name));
       } catch (_) { /* offer Block and Rewrite */ }
       const tools = [["Whois", () => whoisPopup(name)], ["Ping", () => netTool("ping", name)], ["Traceroute", () => netTool("trace", name)],
-        ["Lookup", () => lookupPopup(name)], ["Flush", () => flushPopup(name)]];
+        ["Lookup", () => lookupPopup(name)], ["Flush", () => flushPopup(name)], ["Copy", () => copyAddr(name)]];
       rowMenu([...tools, ...(rewritten ? [["Remove rewrite", () => unblockName(name, true)]]
         : [has ? ["Unblock", () => unblockName(name)] : ["Block", () => addPolicyRow(name, "nodata")], ["Rewrite…", () => askRewrite(name)]])])(e);
     }
@@ -3516,7 +3513,7 @@
       const n = d.now;
       clear(status);
       if (!n.at) { clear(tiles); clear(charts).append(h("div", { class: "empty" }, "No sample yet: the daemon has only just started.")); clear(tables); return; }
-      const tile = (cls, label, value, sub) => h("div", { class: "qtile " + cls }, h("div", { class: "qv" }, value), qfit("qs", sub || "\u00a0"), qfit("ql", label));
+      const tile = (cls, label, value, sub) => h("div", { class: "qtile " + cls }, h("div", { class: "qv" }, value), h("div", { class: "qs" }, sub || "\u00a0"), h("div", { class: "ql" }, label));
       // the fullest real disk; tiny system mounts (under 1 GiB) only count when nothing bigger exists
       const big = (n.fs || []).filter((f) => f.total >= 1 << 30);
       const topFS = (big.length ? big : n.fs || []).reduce((a, f) => (!a || f.pct > a.pct ? f : a), null);

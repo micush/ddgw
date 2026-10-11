@@ -1,5 +1,16 @@
 # Changelog
 
+## [v331] - 2026-10-11 — Top domains: Copy; the Statistics tiles are alike
+
+### Added
+- Statistics ▸ Top domains ▸ right-click ▸ **Copy** puts the name on the clipboard (clients already had it for the address).
+
+### Changed
+- The tiles on Statistics (and Host) are alike: the number, the small line and the label have one font and one size each in every tile, so they line up across the row. Before, a long count shrank to fit and the label under it shrank with it. A count of ten million or more is now written 710.9M (the full number is in the tooltip) instead of shrinking; the label and small line are cut with … when a window is too narrow, never wrapped (which also keeps the row one height).
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles (one run of `TestClusterLogsHostStrain` failed under the race detector once and passed on five reruns and the next full run; nothing near this change). Not verified: the tiles and the menu in a browser.
+
 ## [v330] - 2026-10-11 — Right-click: Lookup, Flush, Limit, Copy
 
 ### Changed
@@ -21,7 +32,7 @@ The menus and dialogs in a browser, a flush across a real cluster, and a limit u
 ## [v329] - 2026-10-11 — Statistics tiles keep one height
 
 ### Fixed
-- The tiles at the top of Statistics were taller with the Node menu on Cluster than on one node. The tiles share a grid row, and a bigger count made the small line ("10,007 of 15,867") and a label ("Cache Hits") too wide for their tile, so they wrapped onto a second line and every tile in the row grew to match. The small line and the label now shrink to the tile's width the way the number already did, and never wrap (same fix for the tiles on the Host page).
+- The tiles at the top of Statistics were taller with the Node menu on Cluster than on one node. The tiles share a grid row, and a bigger count made the small line ("10,007 of 15,867") and a label ("Cache Hits") too wide for their tile, so they wrapped onto a second line and every tile in the row grew to match. They no longer wrap (see above).
 
 ### Verified
 gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. Not verified: the tiles in a browser (the long text fitting at your window widths).
