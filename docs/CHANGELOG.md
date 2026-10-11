@@ -1,5 +1,13 @@
 # Changelog
 
+## [v344] - 2026-10-11 — Statistics tiles: labels at the bottom
+
+### Fixed
+- v343 put a one-line label (QPS, Refused, Updates, Clients, Cache Hits) at the top of its tile, so it did not share a line with the last line of a wrapped label (Total Queries, Server Failure, NX Domain). The label now sits at the bottom of every tile: the number and the small line start at the top, the label ends at the bottom, and all of them line up across the row, as in the screenshot the owner sent.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. The real `app.js` in headless Chromium at 1290 px with the API mocked: one row, labels on a common bottom line.
+
 ## [v343] - 2026-10-11 — Statistics tiles: two decimals at most, numbers on one line
 
 ### Fixed
