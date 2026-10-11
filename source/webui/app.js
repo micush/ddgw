@@ -2387,7 +2387,7 @@
       named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)) : h("td", { class: "mono" }, p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)),
       named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
-      h("td", {}, p.reachable ? pill("yes", "ok") : pill("NO", "bad"), p.updating ? [" ", pill("updating", "warn")] : null),
+      h("td", {}, p.reachable ? pill("yes", "ok") : p.restarting ? pill("restarting", "info") : pill("NO", "bad"), p.updating || p.restarting ? [" ", pill("updating", "warn")] : null),
       h("td", { class: "num" }, p.reachable ? p.epoch : "–"),
       h("td", { class: "num" }, p.version || "–"), h("td", { class: "num" }, p.source_version || "–"),
       h("td", {}, p.self ? "now" : when(p.last_seen)),
@@ -2737,11 +2737,11 @@
         : act("/api/update/apply", {}, "Build v" + v.source_version + " on this node and restart into it?\n\nThe node is briefly unavailable. If the new version fails to stay up it is rolled back automatically.", "Building v" + v.source_version + " — this node restarts when it is done.") },
         picked.length ? "Update " + picked.length + " selected" : "Update this node now");
       const rows = v.nodes.map((n) => {
-        const state = n.updating ? pill("updating", "warn") : n.failed ? pill("failed v" + n.failed, "bad") : n.behind ? pill("behind", "warn") : pill("ok", "ok");
+        const state = n.updating || n.restarting ? pill("updating", "warn") : n.failed ? pill("failed v" + n.failed, "bad") : n.behind ? pill("behind", "warn") : pill("ok", "ok");
         const cb = h("td", {}, h("input", { type: "checkbox", checked: selected.has(n.addr), disabled: v.intent.auto_all, "aria-label": "Select " + n.addr, onchange: (ev) => { if (ev.target.checked) selected.add(n.addr); else selected.delete(n.addr); VIEWS.updates.poll(); } }));
         return h("tr", { class: n.self ? "local" : "" }, v.clustered ? cb : null,
           h("td", { class: "mono" }, n.addr, n.self ? " ★" : "", soakMark(n.soak_sec)),
-          h("td", {}, n.reachable ? pill("yes", "ok") : pill("NO", "bad")),
+          h("td", {}, n.reachable ? pill("yes", "ok") : n.restarting ? pill("restarting", "info") : pill("NO", "bad")),
           h("td", { class: "num" }, n.running || "–"), h("td", { class: "num" }, n.source || "–"),
           h("td", {}, n.queued ? pill(v.intent.auto_all ? "auto" : "queued", "info") : ""), h("td", {}, state));
       });

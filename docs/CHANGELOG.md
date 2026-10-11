@@ -1,5 +1,13 @@
 # Changelog
 
+## [v342] - 2026-10-11 — A node that is updating is not shown as down
+
+### Changed
+- While a node installs an update and restarts into it, the other nodes no longer show it as down. A member that stops answering and was last seen installing an update (or with a newer source staged than it runs), within the last 5 minutes, is **restarting**: the Upgrade page and the member tables say "restarting" and "updating" instead of the red NO, the node's shape on the Topology is grey (`updating`, tooltip "Updating: restarting into the new version") instead of red "not answering", and a gateway whose only node is updating is grey ("Updating — the node is restarting into the new version") instead of red "No node is serving this gateway". A node that is really down (nothing pending, or gone for more than 5 minutes), and a gateway with any other node down, stay red; a gateway still served by another node stays green. Before this, with updates going through several nodes (v339 and v340 went through them together, fixed in v341) the whole map turned red for a minute.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestRestartingMemberIsNotDown`. Not verified: the pages in a browser during a live update.
+
 ## [v341] - 2026-10-11 — Updates really go one at a time; Statistics tiles on one row
 
 ### Fixed

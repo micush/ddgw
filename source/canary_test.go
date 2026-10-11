@@ -180,3 +180,37 @@ func (p peerGateways) gwList() []GwState {
 	}
 	return out
 }
+
+// A member that stops answering while it installs an update is "updating", not down: the Topology and Upgrade pages
+// show it so, and the gateway it serves reads "updating" (grey) instead of "no node is serving" (red).
+func TestRestartingMemberIsNotDown(t *testing.T) {
+	next := fmt.Sprintf("%d", mustInt(version())+1)
+	recent := time.Now().Add(-20 * time.Second)
+	cases := []struct {
+		name string
+		pi   *peerInfo
+		want bool
+	}{
+		{"installing", &peerInfo{Msg: PeerStatusMsg{Updating: true}, LastSeen: recent}, true},
+		{"newer source staged", &peerInfo{Msg: PeerStatusMsg{Version: version(), SourceVersion: next}, LastSeen: recent}, true},
+		{"answering", &peerInfo{Reachable: true, Msg: PeerStatusMsg{Updating: true}, LastSeen: recent}, false},
+		{"down, nothing pending", &peerInfo{Msg: PeerStatusMsg{Version: version(), SourceVersion: version()}, LastSeen: recent}, false},
+		{"gone for an hour", &peerInfo{Msg: PeerStatusMsg{Updating: true}, LastSeen: time.Now().Add(-time.Hour)}, false},
+		{"never seen", &peerInfo{Msg: PeerStatusMsg{Updating: true}}, false},
+	}
+	for _, c := range cases {
+		if got := restartingInfo(c.pi); got != c.want {
+			t.Errorf("%s: restarting = %v, want %v", c.name, got, c.want)
+		}
+	}
+	st, _ := clusterGateway([]CanvasNode{{Gw: "updating"}})
+	if st != "idle" {
+		t.Errorf("a gateway whose only node is updating is %q, want idle", st)
+	}
+	if st, _ := clusterGateway([]CanvasNode{{Gw: "updating"}, {Gw: "down"}}); st != "bad" {
+		t.Errorf("an updating node must not hide a node that is really down: %q", st)
+	}
+	if st, _ := clusterGateway([]CanvasNode{{Gw: "updating"}, {Gw: "ok"}}); st != "ok" {
+		t.Errorf("a gateway still served by another node stays ok: %q", st)
+	}
+}

@@ -1395,23 +1395,26 @@ func (c *Cluster) pullState(ctx context.Context, snap ClusterSnapshot) error {
 // ── views ────────────────────────────────────────────────────────────────────
 
 type PeerView struct {
-	Addr          string    `json:"addr"`
-	NodeID        string    `json:"node_id"`
-	Fingerprint   string    `json:"fingerprint"`
-	Self          bool      `json:"self"`
-	Reachable     bool      `json:"reachable"`
-	Role          Role      `json:"role"`
-	Epoch         uint64    `json:"epoch"`
-	IsPrimary     bool      `json:"is_primary"`
-	Version       string    `json:"version"`
-	Hostname      string    `json:"hostname,omitempty"`
-	SourceVersion string    `json:"source_version"`
-	Updating      bool      `json:"updating"`
-	UpdateFailed  string    `json:"update_failed,omitempty"`
-	SoakSec       int       `json:"soak_sec,omitempty"` // seconds left of the canary soak (0: not soaking)
-	SharedRev     uint64    `json:"shared_rev"`
-	LastSeen      time.Time `json:"last_seen,omitempty"`
-	Error         string    `json:"error,omitempty"`
+	Addr          string `json:"addr"`
+	NodeID        string `json:"node_id"`
+	Fingerprint   string `json:"fingerprint"`
+	Self          bool   `json:"self"`
+	Reachable     bool   `json:"reachable"`
+	Role          Role   `json:"role"`
+	Epoch         uint64 `json:"epoch"`
+	IsPrimary     bool   `json:"is_primary"`
+	Version       string `json:"version"`
+	Hostname      string `json:"hostname,omitempty"`
+	SourceVersion string `json:"source_version"`
+	Updating      bool   `json:"updating"`
+	UpdateFailed  string `json:"update_failed,omitempty"`
+	SoakSec       int    `json:"soak_sec,omitempty"` // seconds left of the canary soak (0: not soaking)
+	// Restarting: not answering, but it was installing an update when it was last seen (a few minutes ago at most): it is
+	// restarting into the new version, which is not the same as being down
+	Restarting bool      `json:"restarting,omitempty"`
+	SharedRev  uint64    `json:"shared_rev"`
+	LastSeen   time.Time `json:"last_seen,omitempty"`
+	Error      string    `json:"error,omitempty"`
 	// IPs are the node's addresses (IPv4, IPv6 global and unique local) and GwIPs the ones it uses in the gateway protocol
 	IPs   []string `json:"ips,omitempty"`
 	GwIPs []string `json:"gw_ips,omitempty"`
@@ -1458,6 +1461,7 @@ func (c *Cluster) View() ClusterView {
 		pv := PeerView{Addr: p.Addr, NodeID: p.NodeID, Fingerprint: p.Fp, IsPrimary: p.Addr == snap.PrimaryAddr}
 		if pi := c.info[p.Addr]; pi != nil {
 			pv.Reachable, pv.LastSeen, pv.Error = pi.Reachable, pi.LastSeen, pi.Err
+			pv.Restarting = restartingInfo(pi)
 			m := pi.Msg
 			pv.Role, pv.Epoch, pv.Version, pv.SourceVersion = m.Role, m.Epoch, m.Version, m.SourceVersion
 			pv.Updating, pv.UpdateFailed, pv.SharedRev = m.Updating, m.UpdateFailed, m.SharedRev
@@ -1508,6 +1512,7 @@ func (c *Cluster) updateNodes() []UpdateNode {
 	for _, p := range snap.Peers {
 		n := UpdateNode{Addr: p.Addr, Queued: intent.wants(p.Addr), SoakSec: soak[p.Addr]}
 		if pi := c.info[p.Addr]; pi != nil {
+			n.Restarting = restartingInfo(pi)
 			n.Reachable, n.Running, n.Source, n.Updating, n.Failed = pi.Reachable, pi.Msg.Version, pi.Msg.SourceVersion, pi.Msg.Updating, pi.Msg.UpdateFailed
 		}
 		out = append(out, n)
@@ -1598,6 +1603,16 @@ var processStart = time.Now()
 // no gateway marked bad, before the other nodes follow (the canary).  A var so
 // tests can shorten it.
 var updateSoak = 2 * time.Minute
+
+// restartingInfo reports whether a member that does not answer was last seen installing an update (or about to), recently enough that it
+// is most likely restarting into the new version (the Topology, Cluster and Upgrade pages say "updating", not "down").
+func restartingInfo(pi *peerInfo) bool {
+	if pi == nil || pi.Reachable || pi.LastSeen.IsZero() || time.Since(pi.LastSeen) >= canaryLostWindow {
+		return false
+	}
+	// it said it was installing, or it had a newer source staged than it runs (the poll can miss the short installing phase)
+	return pi.Msg.Updating || versionGreater(pi.Msg.SourceVersion, pi.Msg.Version)
+}
 
 // canaryLostWindow is how long after the last contact a member that was updating (or running the target) holds the others.
 const canaryLostWindow = 5 * time.Minute

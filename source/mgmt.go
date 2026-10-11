@@ -518,7 +518,9 @@ type UpdateNode struct {
 	Updating  bool   `json:"updating"`
 	Failed    string `json:"failed,omitempty"`
 	SoakSec   int    `json:"soak_sec,omitempty"`
-	Behind    bool   `json:"behind"`
+	// Restarting: not answering, but it was installing an update when last seen (see PeerView.Restarting)
+	Restarting bool `json:"restarting,omitempty"`
+	Behind     bool `json:"behind"`
 }
 
 func (m *Mgmt) UpdateStatus() UpdateView {

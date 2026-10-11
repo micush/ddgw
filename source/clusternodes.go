@@ -119,6 +119,14 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 				// which node you ask); in any other state the gateway's own reason on this node is the more useful text
 				n.Detail = "Serving this gateway"
 			}
+		case !p.Reachable && !n.Excluded && p.Restarting:
+			// installing an update and restarting into it: not down, and not shown red (it is back in about a minute)
+			n.Gw = "updating"
+			n.Status, n.Label = "idle", "updating"
+			n.Detail = "Updating: restarting into the new version"
+			if !p.LastSeen.IsZero() {
+				n.Detail += " (last seen " + p.LastSeen.Format("15:04:05") + ")"
+			}
 		case !p.Reachable && !n.Excluded:
 			n.Gw = "down"
 			n.Status, n.Label = "bad", "not answering"
@@ -327,6 +335,8 @@ func clusterGateway(nodes []CanvasNode) (status, detail string) {
 		return "warn", "Served, but degraded, by " + of(cnt["degraded"])
 	case cnt["paused"] == total:
 		return "paused", "Paused on every node"
+	case cnt["updating"] > 0 && cnt["bad"] == 0 && cnt["starting"]+cnt["updating"] == total:
+		return "idle", "Updating — the node is restarting into the new version"
 	case cnt["starting"] > 0 && cnt["bad"] == 0:
 		return "idle", "Starting — the nodes are waiting for their DNS servers to answer"
 	}
