@@ -1,5 +1,26 @@
 # Changelog
 
+## [v351] - 2026-10-11 — No status text between cards; repository box layout
+
+### Removed
+- Upgrade page: the "rolled back" notice above the cards (the update history already lists it).
+- Statistics and Host pages: the memory-guard line under the cards (the help explains the guard).
+
+### Fixed
+- Fetch from online said "Staged v350 (v350)."; it now says "Staged v350.".
+
+### Changed
+- Online repository box is half as wide and sits further below the auto-update checkbox.
+
+### Not changed (still shown between cards; say if they should go)
+- Upgrade: "No Go toolchain" error. Cluster: conflict, warnings and "Last sync failed". Statistics: "Not included in these numbers". Certificate: expired. The "★ marks this node" legend on the Cluster pages.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js.
+
+### Not verified
+- Not looked at in a browser.
+
 ## [v350] - 2026-10-11 — Remove the "holding back its queued update" line
 
 ### Changed
@@ -9,7 +30,7 @@
 - The Upgrade page no longer prints "This node is holding back its queued update: …; the others wait". The update order is unchanged; only the text is gone.
 
 ### Verified
-- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js.
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check` on app.js and help.js.
 
 ### Not verified
 - Not looked at in a browser.
@@ -20,7 +41,10 @@
 - Configure ▸ General ▸ Upgrade has an **Online repository** box, default `https://github.com/micush/ddgw`. It is the GitHub repository Operate ▸ Upgrade ▸ **Fetch from online** downloads releases from (the newest release, or its highest `v<number>` tag), so a fork, or a repository that moved, can be followed. The box saves when you leave it; an empty box goes back to the default; the address is written as `https://github.com/owner/repo` (also accepted: with `.git`, a trailing slash, without `https://`, or `owner/repo`). Only github.com repositories are accepted, and a wrong address is refused with a short red message beside the box. It is part of the shared update settings: set on the primary, followed by every node, recorded in the update history. CLI: `--update-repo URL|default`; `--update-status` shows it.
 
 ### Verified
-gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestNormalizeRepo`, `TestUpdateRepoSetting`. Not verified: the box in a browser, a real download from a changed repository (this sandbox cannot reach GitHub).
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js. Unit tests cover address normalisation and the shared setting.
+
+### Not verified
+- A real download from a changed repository (the sandbox cannot reach GitHub) and the box in a browser. No live multi-daemon run.
 
 ## [v348] - 2026-10-11 — An anycast address's uptime is the cluster's too
 

@@ -182,6 +182,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 label.f { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
 label.f.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); }
+label.f.repo { margin-top: 1.25rem; }
+label.f.repo input { width: 50%; min-width: 16rem; }
 input[type=text], input[type=password], input[type=number], input[type=time], input[type=date], select, textarea {
   font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
   border-radius: 7px; padding: .42rem .6rem; width: 100%; min-width: 0;

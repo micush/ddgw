@@ -2274,7 +2274,7 @@
           } catch (e) { repoErr.textContent = e.message || String(e); }
         });
         return section("Upgrade", h("label", { class: "f check" }, cb, "Update every node automatically when a newer release is staged (one node at a time)"),
-          h("label", { class: "f" }, h("span", {}, "Online repository"), repoIn, repoErr),
+          h("label", { class: "f repo" }, h("span", {}, "Online repository"), repoIn, repoErr),
           h("p", { class: "hint" }, "Upload a release on the Upgrade page; with this on, each node then builds and installs it in turn and rolls back by itself if the new version does not stay up."));
       };
       // the GUI certificate lives under Web GUI; its own controls save through their own calls, never through the settings form
@@ -2351,8 +2351,6 @@
   for (const id of ["general", "groups", "dns", "web", "cluster"]) VIEWS["cfg_" + id] = makeConfigView(id);
 
   // ── shared helpers for the management pages ───────────────────────────────
-  // What the memory guard did (Statistics and Host): it drops the oldest history when memory use reaches its limit.
-  const guardNote = (g) => (g && g.trims ? [h("br"), h("span", { class: "warnline" }, "Memory guard: the oldest history was dropped " + g.trims + " time" + (g.trims === 1 ? "" : "s") + " to keep memory use under " + g.limit_pct + "%. Last: " + new Date(g.last * 1000).toLocaleString() + " — " + g.last_note)] : []);
   // Nothing is said when every node answered (the Node menu says "Cluster"); when one could not, which and why, since the
   // numbers are then missing its share
   const clusterNote = (c) => {
@@ -2736,7 +2734,6 @@
     function draw(v) { const real = dyn; dyn = h("div", {}); try { build(v); } finally { morph(real, dyn); dyn = real; } }
     // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
     function build(v) {
-      if (v.notice) dyn.append(h("div", { class: "notice bad", role: "alert" }, v.notice));
       if (!v.toolchain) dyn.append(h("div", { class: "notice bad", role: "alert" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/ddgw/go."));
       const newer = v.source_version && Number(v.source_version) > Number(v.running);
       fill(stats, 
@@ -2796,7 +2793,7 @@
             if (online.checked) {
               note.textContent = "Downloading from GitHub…";
               const r = await api("POST", "/api/update/fetch");
-              note.textContent = "Staged v" + r.data.version + " (" + r.data.tag + ").";
+              note.textContent = "Staged v" + r.data.version + ".";
             } else {
               const r = await apiUpload("/api/update/upload", f); file.value = ""; note.textContent = "Staged v" + r.data.version + ".";
             }
@@ -3373,8 +3370,7 @@
         topTable("Top domains" + kindLabel(), d.domains, pickClient ? sumOf(d.domains) : shareBase(d), domainsMore, () => { domainsMore = !domainsMore; draw(last); }, false,
           { picked: pickDomain, onPick: pickD, note: pickClient ? "Domains that " + pickClient + " asked for" : "", onClear: () => pickC("") }));
       clear(cnote).append(...clusterNote(d.cluster));   // which nodes are added together, when the Node menu says Cluster
-      const gn = guardNote(d.guard).slice(1);   // only the memory-guard warning, when there is one
-      clear(foot).append(...gn); foot.hidden = !gn.length;
+      foot.hidden = true;
     }
 
     // the recent dynamic DNS updates (always the latest ones, whatever the range)
@@ -3565,8 +3561,7 @@
           ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Interface"), h("th", {}, "State"), h("th", { class: "num" }, "Speed"), h("th", { class: "num" }, "In"), h("th", { class: "num" }, "Out"), h("th", { class: "num" }, "Link use"))), h("tbody", {}, ifRows)))
           : h("div", { class: "empty" }, "No interfaces found."))));
       clear(cnote).append(...clusterNote(d.cluster));   // which nodes are added together, when the Node menu says Cluster
-      const gn = guardNote(d.guard).slice(1);   // only the memory-guard warning, when there is one (how the numbers are kept is in the help)
-      clear(foot).append(...gn); foot.hidden = !gn.length;
+      foot.hidden = true;
     }
 
     async function load() {
