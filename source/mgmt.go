@@ -53,9 +53,10 @@ type Mgmt struct {
 	servMu    sync.Mutex
 	servSince map[int]time.Time // when each gateway started being served continuously
 	gwUpMu    sync.Mutex
-	gwUp      map[int]time.Time // since when somebody in the cluster has served each gateway without a break (see sampleGwUp)
-	bgp       *BGPManager       // keeps FRR in line with the BGP settings
-	webH      http.Handler      // the web API, for requests relayed from other cluster nodes
+	gwUp      map[int]time.Time    // since when somebody in the cluster has served each gateway without a break (see sampleGwUp)
+	anyUp     map[string]time.Time // the same for each anycast address (see sampleAnycastUp)
+	bgp       *BGPManager          // keeps FRR in line with the BGP settings
+	webH      http.Handler         // the web API, for requests relayed from other cluster nodes
 	cancelFn  context.CancelFunc
 }
 

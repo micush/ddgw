@@ -58,7 +58,9 @@ type PeerStatusMsg struct {
 	Updating      bool          `json:"updating"`
 	UpdateFailed  string        `json:"update_failed,omitempty"`
 	// UptimeSec is how long this process has been running (the canary soak reads it); absent on older nodes
-	UptimeSec int64        `json:"uptime_sec,omitempty"`
+	UptimeSec int64 `json:"uptime_sec,omitempty"`
+	// AnycastUp lists the anycast addresses this node announces now, with how long (see AnycastUp); absent on older nodes
+	AnycastUp []AnycastUp  `json:"anycast_up,omitempty"`
 	SharedRev uint64       `json:"shared_rev"`
 	Intent    UpdateIntent `json:"intent"`
 	// Which gateways this node is serving; GwKnown is false for nodes that
@@ -617,7 +619,7 @@ func (c *Cluster) statusMsg() PeerStatusMsg {
 		Peer:     c.node.Self(), Epoch: snap.Epoch, Role: snap.Role, PrimaryAddr: snap.PrimaryAddr,
 		Peers: append(c.knownPeers(snap), c.node.Self()), Removed: snap.Removed,
 		Version: version(), SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(),
-		UpdateFailed: c.mg.upd.FailedFor(), UptimeSec: int64(time.Since(processStart) / time.Second), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
+		UpdateFailed: c.mg.upd.FailedFor(), UptimeSec: int64(time.Since(processStart) / time.Second), AnycastUp: c.mg.anycastReport(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
 		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(), GwIPs: c.mg.localGwIPs(),
 	}
 }
@@ -1218,6 +1220,7 @@ func (c *Cluster) Run(ctx context.Context) {
 			c.SyncOnce(sctx)
 		}
 		c.sampleGwUp()
+		c.sampleAnycastUp()
 		c.mg.updateTick(sctx)
 		cancel()
 		c.logStrain()

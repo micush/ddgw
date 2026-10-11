@@ -381,6 +381,14 @@ func (s *StatusServer) canvasGroups() []CanvasGateway {
 	s.markAnycast(groups)
 	s.markNodes(groups)
 	s.up.annotate(groups, time.Now())
+	storeAnycastLocal(groups)
+	if s.mg != nil {
+		for i := range groups {
+			for j := range groups[i].Anycast {
+				groups[i].Anycast[j].ClusterUpSec = s.mg.anyUpSeconds(groups[i].Anycast[j].Addr)
+			}
+		}
+	}
 	return groups
 }
 

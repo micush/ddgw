@@ -313,3 +313,58 @@ func TestGatewayUptimeSurvivesRestart(t *testing.T) {
 		t.Fatalf("an outage ends the uptime: %d", got)
 	}
 }
+
+// An anycast address's uptime is the cluster's too: a node that restarts learns from the members still announcing it, and
+// it is dropped only when no node announces it.
+func TestAnycastUptimeSurvivesRestart(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 2; i++ {
+		a.sync()
+		b.sync()
+	}
+	anycastLocal.mu.Lock()
+	saved := anycastLocal.list
+	anycastLocal.mu.Unlock()
+	defer func() {
+		anycastLocal.mu.Lock()
+		anycastLocal.list = saved
+		anycastLocal.mu.Unlock()
+	}()
+	setLocal := func(l []AnycastUp) {
+		anycastLocal.mu.Lock()
+		anycastLocal.list = l
+		anycastLocal.mu.Unlock()
+	}
+	setPeer := func(l []AnycastUp) {
+		a.mg.cl.mu.Lock()
+		pi := a.mg.cl.info[b.addr]
+		pi.Reachable = true
+		pi.Msg.AnycastUp = l
+		a.mg.cl.mu.Unlock()
+	}
+	hour := time.Now().Add(-time.Hour).Unix()
+	// A has just started announcing it; B has had it up for an hour
+	setLocal([]AnycastUp{{Addr: "10.9.9.9", Since: time.Now().Unix() - 5}})
+	setPeer([]AnycastUp{{Addr: "10.9.9.9", Since: hour, UpSince: hour}})
+	a.mg.cl.sampleAnycastUp()
+	if got := a.mg.anyUpSeconds("10.9.9.9"); got < 3590 || got > 3700 {
+		t.Fatalf("uptime must come from the member that has it up: %d s, want ~3600", got)
+	}
+	// B restarts in turn: A keeps it, and reports it
+	setPeer(nil)
+	a.mg.cl.sampleAnycastUp()
+	if got := a.mg.anyUpSeconds("10.9.9.9"); got < 3590 {
+		t.Fatalf("the uptime must survive the other node restarting: %d s", got)
+	}
+	rep := a.mg.anycastReport()
+	if len(rep) != 1 || rep[0].UpSince == 0 || time.Now().Unix()-rep[0].UpSince < 3590 {
+		t.Fatalf("A must pass the start on: %+v", rep)
+	}
+	// nobody announces it: dropped
+	setLocal(nil)
+	a.mg.cl.sampleAnycastUp()
+	if got := a.mg.anyUpSeconds("10.9.9.9"); got != 0 {
+		t.Fatalf("an outage ends the uptime: %d", got)
+	}
+}

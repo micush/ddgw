@@ -1,5 +1,13 @@
 # Changelog
 
+## [v348] - 2026-10-11 — An anycast address's uptime is the cluster's too
+
+### Changed
+- The "Online for …" in an anycast address's tooltip on the Topology is now how long somebody in the cluster has had the address up (announced) without a break, the same way the gateway's is since v347: each node reports the anycast addresses it announces, with how long (`anycast_up` in the cluster status message), and takes the earliest start of its own and the members', so a rolling update does not reset it as long as some node keeps announcing the address. It is dropped when no node announces it. Older nodes do not report it; the shown node's own uptime is used until then. "Down for …" and the failure count stay the shown node's own.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestAnycastUptimeSurvivesRestart`. Not verified: a live multi-node rolling update with BGP.
+
 ## [v347] - 2026-10-11 — The gateway's uptime survives a rolling update
 
 ### Changed

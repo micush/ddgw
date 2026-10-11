@@ -67,6 +67,8 @@ type AnycastState struct {
 	Detail string  `json:"detail,omitempty"` // what Status means
 	BGP    string  `json:"bgp,omitempty"`    // why Status is not ok: disabled | none | down | partial (for the drawing's label)
 	Uptime *UpInfo `json:"uptime,omitempty"` // filled in for the topology view
+	// ClusterUpSec is how long somebody in the cluster has had the address up without a break (see sampleAnycastUp)
+	ClusterUpSec int64 `json:"cluster_up_sec,omitempty"`
 	// Carried lists the other gateways (group numbers) that keep the address up while this one cannot answer on it.
 	Carried []int `json:"carried,omitempty"`
 }
