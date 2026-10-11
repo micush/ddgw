@@ -2983,8 +2983,8 @@
         }
         a0 = a1;
       }
-      svg.append(sv("text", { class: "qpiet", x: c, y: c + 5, "text-anchor": "middle" }, n0(total)));
-      card.append(h("div", { class: "qrow" }, svg, h("ul", { class: "qkey" }, rows.map((e) => h("li", {}, h("span", { class: "sw " + (e.cls || clsOf[e.name]) }), h("span", { class: "kn" }, e.name), h("span", { class: "kc" }, n0(e.count) + " · " + pct(e.count, total)))))));
+      svg.append(sv("text", { class: "qpiet", x: c, y: c + 5, "text-anchor": "middle" }, sv("title", {}, n0(total)), shortCount(total)));
+      card.append(h("div", { class: "qrow" }, svg, h("ul", { class: "qkey" }, rows.map((e) => h("li", {}, h("span", { class: "sw " + (e.cls || clsOf[e.name]) }), h("span", { class: "kn" }, e.name), h("span", { class: "kc", title: n0(e.count) }, shortCount(e.count) + " · " + pct(e.count, total)))))));
       return card;
     }
 
@@ -3327,7 +3327,7 @@
                     : b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
-              h("td", { class: "num" }, n0(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
+              h("td", { class: "num", title: n0(e.count) }, shortCount(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
           : h("div", { class: "empty" }, filtered ? "Nothing matches “" + (withHost ? cFilter : dFilter) + "”." : "No queries in this range.")));
     }
 

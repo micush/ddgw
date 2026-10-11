@@ -1,5 +1,13 @@
 # Changelog
 
+## [v345] - 2026-10-11 — Statistics: short numbers in the donuts and top lists
+
+### Changed
+- The Query types and Transport donuts (the number in the middle and the counts beside the legend) and the Top clients and Top domains lists write a count of a million or more short, as the tiles do: 61,924,566 is `61.92M`, 61,788,721 is `61.79M`. The full number is the tooltip of each. Below a million it is written in full. The chart's axis labels are unchanged.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles. The real `app.js` in headless Chromium at 1400 px with the API mocked: donuts, legends and top lists show the short form, no page errors.
+
 ## [v344] - 2026-10-11 — Statistics tiles: labels at the bottom
 
 ### Fixed
