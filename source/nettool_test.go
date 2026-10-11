@@ -85,7 +85,7 @@ func waitNet(t *testing.T, kind, addr string) *NetJob {
 }
 
 func TestNetToolRuns(t *testing.T) {
-	fakeTools(t, `echo "64 bytes from $*"; exit 1`, `echo "HOST: x  Loss%  Snt"; echo " 1.|-- 10.9.9.1  0.0%  10"`)
+	fakeTools(t, `echo "64 bytes from $*"; exit 1`, `printf 'x 0 1\nh 0 10.9.9.1\np 0 1500 1\nx 0 2\nx 1 3\n'`)
 	if j, err := netToolStart("ping", "10.9.9.9", "t"); err != nil || j.State != "running" {
 		t.Fatalf("start: %v %v", j, err)
 	}
@@ -98,7 +98,8 @@ func TestNetToolRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	j = waitNet(t, "trace", "10.9.9.8")
-	if j.State != "done" || !strings.Contains(j.Text, "10.9.9.1") {
+	// hop 0 sent two probes and got one: 50% loss, 1.5 ms; hop 1 never answered
+	if j.State != "done" || !strings.Contains(j.Text, " 1. 10.9.9.1") || !strings.Contains(j.Text, "50.0%") || !strings.Contains(j.Text, "1.5") || !strings.Contains(j.Text, " 2. ???") {
 		t.Errorf("trace: %s %q", j.State, j.Text)
 	}
 	if j, _ := netToolGet("ping", "10.9.9.77"); j.State != "none" {
@@ -134,5 +135,34 @@ func TestNetToolMissingProgram(t *testing.T) {
 func TestNetToolRelayable(t *testing.T) {
 	if err := proxyAllowed("POST", "/api/nettool"); err != nil {
 		t.Errorf("not relayable: %v", err)
+	}
+}
+
+func TestTraceTableGrowsWhileRunning(t *testing.T) {
+	fakeTools(t, "", `printf 'x 0 1\nh 0 10.9.9.1\np 0 2000 1\n'; sleep 1; printf 'x 1 2\nh 1 10.9.9.2\np 1 3000 2\n'`)
+	if _, err := netToolStart("trace", "10.9.9.3", "t"); err != nil {
+		t.Fatal(err)
+	}
+	seen := false
+	for i := 0; i < 20 && !seen; i++ {
+		j, _ := netToolGet("trace", "10.9.9.3")
+		seen = j.State == "running" && strings.Contains(j.Text, "10.9.9.1") && !strings.Contains(j.Text, "10.9.9.2")
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !seen {
+		t.Error("the first hop was not readable while mtr still ran")
+	}
+	j := waitNet(t, "trace", "10.9.9.3")
+	if !strings.Contains(j.Text, "10.9.9.2") {
+		t.Errorf("final table: %q", j.Text)
+	}
+}
+
+func TestTraceTableEndsAtTarget(t *testing.T) {
+	j := &NetJob{}
+	m := &mtrRaw{j: j, hops: map[int]*mtrHop{}, target: "10.9.9.9"}
+	m.Write([]byte("x 0 1\nh 0 10.9.9.1\np 0 1000 1\nx 1 2\nh 1 10.9.9.9\np 1 2000 2\nx 2 3\nx 2 4\n"))
+	if strings.Contains(j.Text, "???") || strings.Count(j.Text, "\n") != 3 {
+		t.Errorf("hops past the target are listed:\n%s", j.Text)
 	}
 }

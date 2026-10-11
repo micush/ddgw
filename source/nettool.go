@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/netip"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,8 +39,9 @@ var netJobs = struct {
 	jobs map[string]*NetJob
 }{jobs: map[string]*NetJob{}}
 
-// netToolSpec is the program and arguments for kind and addr: ten pings two seconds apart at most, or an mtr report
-// of ten probes per hop, both without name lookups.
+// netToolSpec is the program and arguments for kind and addr: ten pings two seconds apart at most, or mtr with ten
+// probes per hop, both without name lookups.  mtr runs in its raw mode, which reports every probe as it happens, so the
+// table can grow on screen (its report mode prints only when it is done).
 func netToolSpec(kind string, a netip.Addr) (string, []string, time.Duration, error) {
 	switch kind {
 	case "ping":
@@ -48,7 +51,7 @@ func netToolSpec(kind string, a netip.Addr) (string, []string, time.Duration, er
 		}
 		return "ping", append(args, "--", a.String()), pingTimeout, nil
 	case "trace":
-		args := []string{"-n", "-r", "-w", "-c", "10"}
+		args := []string{"-n", "--raw", "-c", "10"}
 		if a.Is6() {
 			args = append(args, "-6")
 		}
@@ -121,8 +124,16 @@ func netToolStart(kind, addr, actor string) (*NetJob, error) {
 		defer cancel()
 		cmd := exec.CommandContext(ctx, path, args...)
 		cmd.Stdout, cmd.Stderr = netBuf{j}, netBuf{j}
+		var raw *mtrRaw
+		if kind == "trace" {
+			raw = &mtrRaw{j: j, hops: map[int]*mtrHop{}, target: j.Addr}
+			cmd.Stdout = raw
+		}
 		err := cmd.Run()
 		netJobs.mu.Lock()
+		if raw != nil {
+			raw.render() // the last partial line, and the table as it ended
+		}
 		j.End = time.Now().Unix()
 		j.State = "done"
 		if err != nil {
@@ -163,4 +174,130 @@ func netToolGet(kind, addr string) (*NetJob, error) {
 		return &c, nil
 	}
 	return &NetJob{Kind: kind, Addr: a.String(), State: "none"}, nil
+}
+
+// mtrHop is what mtr's raw output has told so far about one hop.
+type mtrHop struct {
+	host                   string
+	sent, got              int
+	last, sum, best, worst float64 // milliseconds
+}
+
+// mtrRaw turns mtr's --raw lines ("x HOP SEQ" probe sent, "h HOP ADDR" the hop's address, "p HOP USEC SEQ" a reply)
+// into the usual table and keeps the job's text up to date after every line.  Hops are counted from 0 in the raw output.
+type mtrRaw struct {
+	j      *NetJob
+	target string
+	part   string
+	hops   map[int]*mtrHop
+}
+
+func (m *mtrRaw) Write(p []byte) (int, error) {
+	netJobs.mu.Lock()
+	defer netJobs.mu.Unlock()
+	m.part += string(p)
+	if len(m.part) > 1<<20 {
+		m.part = ""
+	}
+	for {
+		i := strings.IndexByte(m.part, '\n')
+		if i < 0 {
+			break
+		}
+		m.line(m.part[:i])
+		m.part = m.part[i+1:]
+	}
+	m.render()
+	return len(p), nil
+}
+
+func (m *mtrRaw) line(l string) {
+	f := strings.Fields(l)
+	if len(f) < 3 {
+		return
+	}
+	n, err := strconv.Atoi(f[1])
+	if err != nil || n < 0 || n > 255 {
+		return
+	}
+	h := m.hops[n]
+	if h == nil {
+		h = &mtrHop{}
+		m.hops[n] = h
+	}
+	switch f[0] {
+	case "x":
+		h.sent++
+	case "h":
+		if a, err := netip.ParseAddr(f[2]); err == nil {
+			h.host = a.String()
+		}
+	case "p":
+		us, err := strconv.ParseFloat(f[2], 64)
+		if err != nil {
+			return
+		}
+		ms := us / 1000
+		if h.got == 0 || ms < h.best {
+			h.best = ms
+		}
+		if ms > h.worst {
+			h.worst = ms
+		}
+		h.got++
+		h.last = ms
+		h.sum += ms
+	}
+}
+
+// render rebuilds the job's text from the table (the caller holds netJobs.mu, except after the command has ended
+// and before the final state is set, when it is taken there as well).
+func (m *mtrRaw) render() {
+	if m.part != "" && !strings.Contains(m.part, "\n") && len(m.hops) > 0 {
+		m.line(m.part)
+		m.part = ""
+	}
+	keys := make([]int, 0, len(m.hops))
+	for k, h := range m.hops {
+		if h.sent > 0 || h.host != "" {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	sort.Ints(keys)
+	for i, k := range keys { // mtr probes a hop or two past the target before it knows it was reached: the table ends there
+		if h := m.hops[k]; h.host == m.target && h.got > 0 {
+			keys = keys[:i+1]
+			break
+		}
+	}
+	w := 0
+	for _, k := range keys {
+		if h := m.hops[k].host; len(h) > w {
+			w = len(h)
+		}
+	}
+	if w < 7 {
+		w = 7
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%-*s  %6s %4s %7s %7s %7s %7s\n", w+6, "to "+m.target, "Loss%", "Snt", "Last", "Avg", "Best", "Wrst")
+	for i, k := range keys {
+		h := m.hops[k]
+		host := h.host
+		if host == "" {
+			host = "???"
+		}
+		loss, avg := 100.0, 0.0
+		if h.sent > 0 {
+			loss = 100 * float64(h.sent-h.got) / float64(h.sent)
+		}
+		if h.got > 0 {
+			avg = h.sum / float64(h.got)
+		}
+		fmt.Fprintf(&b, "%2d. %-*s  %5.1f%% %4d %7.1f %7.1f %7.1f %7.1f\n", i+1, w, host, loss, h.sent, h.last, avg, h.best, h.worst)
+	}
+	m.j.Text = b.String()
 }

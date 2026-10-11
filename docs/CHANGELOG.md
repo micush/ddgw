@@ -1,5 +1,15 @@
 # Changelog
 
+## [v327] - 2026-10-11 — Traceroute shows up live
+
+### Changed
+- The Traceroute popup fills in while mtr runs. v326 used mtr's report mode, which prints nothing until all probes are done (about 10 seconds or more, longer with silent hops). It now runs `mtr -n --raw -c 10`, which reports every probe as it happens, and the table (hop, loss, sent, last, average, best, worst) is rebuilt after every line, so each hop appears as it answers. `--traceroute ADDR` prints the final table. A hop that never answers shows `???`.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...` (new: the table is readable with the first hop only while mtr is still running; loss and times computed from raw lines), cgo-off vet and test, cross-compiles. The real mtr here, through a real daemon, printed its table with `--traceroute 127.0.0.1`.
+### Not verified
+The popup in a browser, a real multi-hop path, and a path with silent hops.
+
 ## [v326] - 2026-10-11 — Top clients: Ping and Traceroute popups
 
 ### Added
