@@ -1,5 +1,21 @@
 # Changelog
 
+## [v324] - 2026-10-10 — Pause server is greyed out for the last server in service
+
+### Changed
+- On the Topology page, **Pause server** in a server's right-click menu is greyed out (its tooltip says why) when the server is in service, every other server of the gateway is down (not answering) or paused, and the gateway has no fallback servers, instead of letting you pick This node / All nodes and showing an error. The error stays as a safety net for any other way of asking.
+
+### Verified
+gofmt, vet, `node --check`. Not verified: the menu in a browser, and with a really down server.
+
+## [v323] - 2026-10-10 — Pause node is greyed out for the last node in service
+
+### Changed
+- On the Topology page, a node's right-click menu shows **Pause node…** greyed out (its tooltip says why) when no other node is answering and not paused, instead of letting you click it and showing an error. The server still refuses the pause if it is asked anyway (the Operate ▸ Node page, `--node-pause`).
+
+### Verified
+gofmt, vet, `node --check`. Not verified: the menu in a browser, and in a real cluster.
+
 ## [v322] - 2026-10-10 — Down counts as down: the last server and the last node stay in service
 
 ### Changed

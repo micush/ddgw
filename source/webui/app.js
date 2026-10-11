@@ -613,14 +613,18 @@
         clear(body).append(h("p", {}, "The test could not run: " + e.message));
       }
     }
+    // The last server in service stays on unless the gateway has fallback servers to answer from; a server that is down (not answering or
+    // paused) is not in service.  "" when it may be paused, otherwise the reason.
+    function lastServerWhy(g, addr) {
+      const d = g.dns || cv.cfg.dns || {}, st = statusOf(g);
+      const inService = (x) => { const c = serverState(g, x, st.servers[x], st.via).c; return c !== "bad" && c !== "paused"; };
+      return inService(addr) && !(d.servers || []).some((x) => x !== addr && inService(x)) && !(d.fallback_servers || []).length
+        ? "That is the last DNS server in service on gateway " + gwLabel(g) + " (the others are down or paused) and the gateway has no fallback servers, so pausing it would leave clients unanswered." : "";
+    }
     function pauseServer(g, addr, scope, pause) {
-      if (pause) {   // the last server in service stays on unless the gateway has fallback servers to answer from; a server that is down (not answering or paused) is not in service
-        const d = g.dns || cv.cfg.dns || {}, st = statusOf(g);
-        const inService = (x) => { const c = serverState(g, x, st.servers[x], st.via).c; return c !== "bad" && c !== "paused"; };
-        if (inService(addr) && !(d.servers || []).some((x) => x !== addr && inService(x)) && !(d.fallback_servers || []).length) {
-          errorBox(msgEl, "That is the last DNS server in service on gateway " + gwLabel(g) + " (the others are down or paused), and the gateway has no fallback servers, so pausing it would leave clients unanswered. Add a fallback server first (Configure ▸ DNS proxy ▸ Servers, or the gateway's own servers).");
-          return;
-        }
+      if (pause) {
+        const why = lastServerWhy(g, addr);
+        if (why) { errorBox(msgEl, why + " Add a fallback server first (Configure ▸ DNS proxy ▸ Servers, or the gateway's own servers)."); return; }
       }
       quick(() => {
         if (scope === "all") { ensureDNS(g); toggleIn(g.dns, "paused_servers", addr, pause); }
@@ -1058,10 +1062,12 @@
         subEl.style.left = left + "px";
         subEl.style.top = Math.max(4, Math.min(br.top - 4, window.innerHeight - sr.height - 4)) + "px";
       };
-      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label, fn, cls, subs]) => {
+      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label, fn, cls, subs, off]) => {
         if (!subs) {
+          if (off) return h("button", { type: "button", role: "menuitem", class: cls || "", disabled: true, title: off, onmouseenter: closeSub }, label);
           return h("button", { type: "button", role: "menuitem", class: cls || "", onmouseenter: closeSub, onclick: () => { closeMenu(); fn(); } }, label);
         }
+        if (off) return h("button", { type: "button", role: "menuitem", class: "has-sub", disabled: true, title: off, onmouseenter: closeSub }, label);
         const btn = h("button", { type: "button", role: "menuitem", class: "has-sub", "aria-haspopup": "true", "data-sub": "1", onclick: () => { openSub(btn, subs); subEl.querySelector("button").focus(); } }, label, h("span", { class: "arrow" }, "▸"));
         btn.addEventListener("mouseenter", () => openSub(btn, subs));
         return btn;
@@ -1205,18 +1211,18 @@
 
     // "Pause ▸ This node / All nodes" and "Resume ▸ …": a menu that opens beside this one while the pointer is on the item.
     // `scopeOn(scope)` says whether the thing is paused in that scope; only the scopes that can still change are offered.
-    const pauseItems = (noun, scopeOn, act) => {
+    const pauseItems = (noun, scopeOn, act, whyNot) => {
       const subs = (pause) => [["node", "This node"], ["all", "All nodes"]].filter(([sc]) => scopeOn(sc) !== pause).map(([sc, t]) => [t, () => act(sc, pause)]);
       const items = [];
       // never both: a paused item offers only Resume (for the scopes it is paused in), otherwise only Pause
       if (scopeOn("node") || scopeOn("all")) items.push(["Resume " + noun, null, "", subs(false)]);
-      else items.push(["Pause " + noun, null, "", subs(true)]);
+      else items.push(["Pause " + noun, null, "", subs(true), whyNot || ""]);
       return items;
     };
     const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ...(g.real_macs ? [] : [["Test virtual MACs…", () => vmacTest(g)]]), ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)], ...addNodeItems(g),
       ...pauseItems("gateway", (sc) => !!g[sc === "all" ? "paused_all" : "paused"], (sc, p) => pauseGateway(g, sc, p)), ["Delete gateway", delSel, "danger"]];
     const srvItems = (g, addr) => [["Statistics…", () => serverStats(g, addr)], ["Edit server…", () => serverForm(g, addr)], ["Add domain…", () => domainForm(g, addr, null)],
-      ...pauseItems("server", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p)), ["Delete server", delSel, "danger"]];
+      ...pauseItems("server", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p), lastServerWhy(g, addr)), ["Delete server", delSel, "danger"]];
     // Pause / resume announcing one anycast address: on this node only (kept in this node's own settings) or on every node (shared)
     const anyPauseList = (g, scope) => (scope === "all" ? "paused_vips" : "paused_vips_here");
     const anyPaused = (g, addr, scope) => (g[anyPauseList(g, scope)] || []).includes(addr);
@@ -1327,9 +1333,15 @@
       const l = removedNodes(g);
       return l.length ? [["Add node", null, "", l.map((r) => [r.label, () => quick(() => toggleIn(g, "excluded_nodes", r.id, false))])]] : [];
     };
+    // The last node in service cannot be paused: the item is greyed out, with the reason as its tooltip.  A node that is not answering or
+    // is paused is out of service.
+    const lastNodeWhy = (n) => {
+      const gs = groups(), all = gs.length ? statusOf(gs[0]).nodes || [] : [];
+      return all.some((x) => x.addr !== n.addr && x.reachable && !x.node_paused) ? "" : "The only node in service (the others are paused or not answering): pausing it would stop every gateway";
+    };
     const nodeMenu = (n) => (e) => openMenu(e, n.self
-      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
-      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
+      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
+      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
       : [["Cluster page…", () => selectTab("cluster")], ...memberItem(n)]);
     // right-click on a shape: select it, then show what can be done with it
     const rightClick = (kind, addr, di) => (e) => {

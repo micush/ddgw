@@ -558,3 +558,4 @@ table.qtop td:first-child .muted { overflow: hidden; text-overflow: ellipsis; wh
 .toolbar input[type=file] { margin-top: 0; }
 label.check { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 0 1.5rem; color: var(--text); }
 label.check input { margin: 0; }
+.cv-menu button:disabled, .cv-menu button:disabled:hover { background: transparent; }
