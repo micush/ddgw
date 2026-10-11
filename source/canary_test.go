@@ -82,6 +82,10 @@ func TestSoakLeft(t *testing.T) {
 	if l := left(PeerStatusMsg{Version: next, UptimeSec: 200}); len(l) != 0 {
 		t.Fatalf("a soaked canary shows nothing: %v", l)
 	}
+	// A (this node) is on the old version here, so make the roles clear: a soaked peer on the newest version ends the soak for all
+	if l := left(PeerStatusMsg{Version: next, UptimeSec: 3600}); len(l) != 0 {
+		t.Fatalf("after the canary soaked no node shows a soak: %v", l)
+	}
 	if l := left(PeerStatusMsg{Version: version(), UptimeSec: 5}); len(l) != 0 {
 		t.Fatalf("with no newer version nothing soaks: %v", l)
 	}

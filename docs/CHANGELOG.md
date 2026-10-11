@@ -1,5 +1,13 @@
 # Changelog
 
+## [v338] - 2026-10-11 — Only the first node shows the soak
+
+### Fixed
+- The hourglass (soaking countdown) showed on every node that had just updated, so the second and third nodes of a rolling update showed it too, though nobody waits on them. It now shows only on the first node, the canary, and goes away for good once it has soaked. The hold itself was already first-node-only.
+
+### Verified
+gofmt, vet, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles.
+
 ## [v337] - 2026-10-11 — A failed canary stays failed
 
 ### Fixed

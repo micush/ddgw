@@ -1677,6 +1677,11 @@ func (c *Cluster) soakLeftLocked(snap ClusterSnapshot) map[string]int {
 		return out
 	}
 	for _, m := range ms {
+		if m.ver == newest && !m.busy && m.up >= updateSoak {
+			return out // the canary has soaked: later nodes update without a soak of their own
+		}
+	}
+	for _, m := range ms {
 		if m.ver == newest && !m.busy && m.up < updateSoak {
 			out[m.addr] = int((updateSoak-m.up)/time.Second) + 1
 		}
