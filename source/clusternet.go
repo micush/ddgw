@@ -1840,6 +1840,9 @@ type GwState struct {
 	// HealthWhy the reason ("running, but some DNS servers are down").  Absent on older nodes.
 	Health    string `json:"health,omitempty"`
 	HealthWhy string `json:"health_why,omitempty"`
+	// ServingSec is how long this node has served the gateway without a break (the gateway's uptime on this node); the
+	// cluster's uptime for the gateway is the longest of these.  Absent on older nodes.
+	ServingSec int64 `json:"serving_sec,omitempty"`
 }
 
 // servingSettle is how long a gateway must have been served continuously before
@@ -1903,6 +1906,7 @@ func (m *Mgmt) localGateways() []GwState {
 			m.servSince[gid] = since
 		}
 		gs[i].Fresh = time.Since(since) < servingSettle
+		gs[i].ServingSec = int64(time.Since(since) / time.Second)
 	}
 	for gid := range m.servSince {
 		if !seen[gid] {

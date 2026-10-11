@@ -214,3 +214,53 @@ func TestRestartingMemberIsNotDown(t *testing.T) {
 		t.Errorf("a gateway still served by another node stays ok: %q", st)
 	}
 }
+
+// The Topology node tooltip shows how long the daemon on that node has been running: this node's own, and a peer's from its
+// cluster status message.
+func TestCanvasNodeUptime(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 2; i++ {
+		a.sync()
+		b.sync()
+	}
+	a.mg.cl.mu.Lock()
+	pi := a.mg.cl.info[b.addr]
+	pi.Reachable = true
+	pi.Msg.UptimeSec = 4242
+	a.mg.cl.mu.Unlock()
+	var self, peer *CanvasNode
+	nodes := a.mg.cl.canvasNodesEx(1, "ok", "", false, nil)
+	for i := range nodes {
+		if nodes[i].Self {
+			self = &nodes[i]
+		} else if nodes[i].Addr == b.addr {
+			peer = &nodes[i]
+		}
+	}
+	if self == nil || peer == nil {
+		t.Fatalf("nodes: %+v", nodes)
+	}
+	if peer.UptimeSec != 4242 {
+		t.Errorf("peer uptime = %d, want 4242", peer.UptimeSec)
+	}
+	if self.UptimeSec < 0 || self.UptimeSec > 3600 {
+		t.Errorf("own uptime = %d, want the age of this process", self.UptimeSec)
+	}
+}
+
+// The gateway's uptime is the cluster's: the longest unbroken time any node serving it now has served it.
+func TestClusterUpSec(t *testing.T) {
+	nodes := []CanvasNode{
+		{Gw: "ok", ServingSec: 90},
+		{Gw: "degraded", ServingSec: 4000},
+		{Gw: "down", ServingSec: 99999}, // not serving now: does not count
+		{Gw: "ok", ServingSec: 5000, Excluded: true},
+	}
+	if got := clusterUpSec(nodes); got != 4000 {
+		t.Errorf("clusterUpSec = %d, want 4000", got)
+	}
+	if got := clusterUpSec(nil); got != 0 {
+		t.Errorf("no nodes: %d", got)
+	}
+}

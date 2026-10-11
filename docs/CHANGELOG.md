@@ -1,5 +1,16 @@
 # Changelog
 
+## [v346] - 2026-10-11 — Topology: node uptime; the gateway's uptime is the cluster's
+
+### Added
+- Hovering a node's shape on the Topology shows **Up: 3d 4h**, how long the daemon on that node has been running (this node's own, or the one the member reports in the cluster status message; a restart or update resets it; nothing is shown for a node that is not answering or runs a version older than v335).
+
+### Changed
+- The gateway circle's "Online for …" is now the **cluster's** uptime for the gateway, not that of the one node whose picture is shown: the longest time any node that serves it now has served it without a break. A node restarting while another keeps serving does not reset it. It is a lower bound (the gateway was served at least that long). Each node reports how long it has served each gateway (`serving_sec`, ignored by older nodes); with no node reporting it (older versions), the old per-node text is shown. "Down for …" and the failure count are still the shown node's own.
+
+### Verified
+gofmt, vet, `node --check`, `go test -race -count=1 ./...`, cgo-off vet and test, cross-compiles; new `TestCanvasNodeUptime`, `TestClusterUpSec`. Not verified: the tooltips in a browser.
+
 ## [v345] - 2026-10-11 — Statistics: short numbers in the donuts and top lists
 
 ### Changed

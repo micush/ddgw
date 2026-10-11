@@ -86,6 +86,8 @@ type CanvasGateway struct {
 	// whichever node is asked.  Absent without a cluster, where Status is it.
 	ClusterStatus string `json:"cluster_status,omitempty"`
 	ClusterDetail string `json:"cluster_detail,omitempty"`
+	// ClusterUpSec is how long the gateway has been served without a break by the cluster as a whole (see clusterUpSec).
+	ClusterUpSec int64 `json:"cluster_up_sec,omitempty"`
 	// Via names the node whose picture of the gateway this is, when this node does not serve it itself (see viaServing).
 	Via           string   `json:"via,omitempty"`
 	ViaAddr       string   `json:"via_addr,omitempty"`

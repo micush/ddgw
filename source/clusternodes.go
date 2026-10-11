@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // CanvasNode is one cluster node as the Topology drawing shows it (a parallelogram beside the gateway's circle), seen
@@ -32,10 +33,13 @@ type CanvasNode struct {
 	VerDiff   bool        `json:"version_differs,omitempty"`
 	Behind    bool        `json:"behind,omitempty"` // has not caught up with the primary's shared settings
 	Updating  bool        `json:"updating,omitempty"`
-	SoakSec   int         `json:"soak_sec,omitempty"` // canary soak: seconds left
-	UpdateErr string      `json:"update_failed,omitempty"`
-	LastSeen  int64       `json:"last_seen,omitempty"` // unix seconds
-	Error     string      `json:"error,omitempty"`
+	SoakSec   int         `json:"soak_sec,omitempty"`   // canary soak: seconds left
+	UptimeSec int64       `json:"uptime_sec,omitempty"` // how long the daemon on that node has been running (absent on older nodes)
+	// ServingSec is how long that node has served this gateway without a break (the cluster's uptime for the gateway is the longest)
+	ServingSec int64  `json:"serving_sec,omitempty"`
+	UpdateErr  string `json:"update_failed,omitempty"`
+	LastSeen   int64  `json:"last_seen,omitempty"` // unix seconds
+	Error      string `json:"error,omitempty"`
 }
 
 var circleLabel = map[string]string{"ok": "serving", "warn": "degraded", "bad": "not serving", "paused": "paused", "idle": "starting"}
@@ -100,12 +104,16 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 		if p.Self {
 			n.Host = hostLoadPtr()
 			n.Addrs = ethernetAddrs()
+			n.UptimeSec = int64(time.Since(processStart) / time.Second)
+		} else if pi, ok := infos[p.Addr]; ok && p.Reachable {
+			n.UptimeSec = pi.Msg.UptimeSec
 		}
 		switch {
 		case p.Self:
 			n.Status, n.Detail, n.Paused = selfStatus, selfDetail, selfPaused
 			n.Label = circleLabel[selfStatus]
 			n.Gw = c.selfGw(gid, selfStatus, selfPaused)
+			n.ServingSec = c.selfServingSec(gid)
 			if n.Excluded {
 				n.Status, n.Label, n.Gw = "paused", "removed", "removed"
 			}
@@ -154,6 +162,9 @@ func (c *Cluster) canvasNodesEx(gid int, selfStatus, selfDetail string, selfPaus
 				}
 			}
 			n.Paused = pi.Msg.NodePaused
+			if gs != nil && gs.Serving {
+				n.ServingSec = gs.ServingSec
+			}
 			n.Gw = "ok"
 			if pi.Msg.GwKnown {
 				n.Gw = gwStateOf(gs, pi.Msg.NodePaused)
@@ -224,12 +235,25 @@ func (s *StatusServer) markNodes(groups []CanvasGateway) {
 		}
 		if len(groups[i].Nodes) > 0 {
 			groups[i].ClusterStatus, groups[i].ClusterDetail = clusterGateway(groups[i].Nodes)
+			groups[i].ClusterUpSec = clusterUpSec(groups[i].Nodes)
 			// the gateway's own circle follows: served by one node of several is amber even where that one node is fine
 			if groups[i].Status == "ok" && groups[i].ClusterStatus == "warn" {
 				groups[i].Status, groups[i].Detail = "warn", groups[i].ClusterDetail
 			}
 		}
 	}
+}
+
+// clusterUpSec is the gateway's uptime for the whole cluster: the longest unbroken time any node that serves it now has
+// served it (a lower bound: the gateway was served at least that long, by that node, however the others came and went).
+func clusterUpSec(nodes []CanvasNode) int64 {
+	var best int64
+	for _, n := range nodes {
+		if (n.Gw == "ok" || n.Gw == "degraded") && !n.Excluded && n.ServingSec > best {
+			best = n.ServingSec
+		}
+	}
+	return best
 }
 
 // labelPausedAll words the nodes of a gateway that is paused on every node (a shared setting): a node that answers and
@@ -276,6 +300,19 @@ func gwStateOf(gs *GwState, nodePaused bool) string {
 
 // selfGw is this node's own state for the gateway, worked out the same way as the other nodes' (from the same numbers it
 // reports to them); without them (before the daemon wires them up) from the gateway's colour here.
+// selfServingSec is how long this node has served the gateway without a break (0: not serving).
+func (c *Cluster) selfServingSec(gid int) int64 {
+	if c == nil || c.mg == nil || c.mg.gwFn == nil {
+		return 0
+	}
+	for _, g := range c.mg.localGateways() {
+		if g.GroupID == gid && g.Serving {
+			return g.ServingSec
+		}
+	}
+	return 0
+}
+
 func (c *Cluster) selfGw(gid int, selfStatus string, selfPaused bool) string {
 	if c != nil && c.mg != nil && c.mg.gwFn != nil {
 		var gs *GwState

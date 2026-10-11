@@ -541,7 +541,7 @@
     const gwTip = (g, st, dual) => {
       const fam = (af) => (st.fams[af] ? st.fams[af].detail : "not running");
       const together = dual ? "IPv4: " + fam("v4") + "; IPv6: " + fam("v6") : null;
-      return ["Gateway " + gwLabel(g), st.why && st.why !== together ? st.why : "", upText(st.uptime),
+      return ["Gateway " + gwLabel(g), st.why && st.why !== together ? st.why : "", st.clusterUp > 0 ? "Online for " + spanText(st.clusterUp) : upText(st.uptime),
         ...(dual ? [["IPv4", "v4"], ["IPv6", "v6"]].map(([n, af]) => n + " — " + fam(af)) : []),
         (g.more_vip4 || []).length + (g.more_vip6 || []).length ? "Also answers on " + [...(g.more_vip4 || []), ...(g.more_vip6 || [])].join(", ") : "",
         membersText(st.members), st.vmac && st.vmac.verdict !== "off" && !(st.why || "").startsWith("Virtual MACs:") ? vmacLine(st.vmac) : ""].filter(Boolean).join("\n");
@@ -578,7 +578,7 @@
       if (gwPaused || nodePaused || removed) { circle = "paused"; why = g.paused_all ? "Paused on all nodes — nothing is serving it until resumed" : removed && !g.paused && !nodePaused ? "This node was removed from the gateway — it does not serve it; the other nodes carry on" : nodePaused && !g.paused ? "This node is paused (Operate ▸ Node) — it is not serving; the other nodes carry on" : "Paused on this node — it is not serving; the other nodes carry on"; }
       else if (!via && circle === "paused") { circle = "idle"; why = "Resuming…"; }
       if (via) why = "As " + v.via + " sees it (it serves the gateway; this node does not): " + why;
-      return { via: (v && v.via) || "", circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], vmac: v && !via ? v.vmac || null : null, uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null };
+      return { via: (v && v.via) || "", circle, why, servers, fams, members, anycast: v ? v.anycast || [] : [], nodes: v ? v.nodes || [] : [], vmac: v && !via ? v.vmac || null : null, uptime: v && !gwPaused && !nodePaused && !removed ? v.uptime : null, clusterUp: v && !gwPaused && !removed ? v.cluster_up_sec || 0 : 0 };
     }
     // Where a server / domain is paused: "all" (shared, every node), "node" (this node's own settings) or "".
     const srvPausedScope = (g, addr) => (((g.dns || cv.cfg.dns || {}).paused_servers || []).includes(addr) ? "all" : (cv.cfg.paused_servers_here || []).includes(addr) ? "node" : "");
@@ -1264,6 +1264,7 @@
       ...(n.addrs || []).filter((i) => (i.v4 || []).length + (i.v6 || []).length).map((i) => i.name + ": " + [...(i.v4 || []), ...(i.v6 || [])].join(", ")),   // Ethernet interfaces: IPv4 and IPv6 GUA
       "Role: " + (n.role === "primary" ? "primary" : "replica"),
       n.self ? "Last seen: just now" : n.reachable ? "Last seen: " + (n.last_seen ? spanText(Date.now() / 1000 - n.last_seen) + " ago" : "just now") : "",
+      n.uptime_sec > 0 ? "Up: " + spanText(n.uptime_sec) : "",
       n.version ? "Version: " + n.version + (n.version_differs ? " (not the same as this node's)" : "") : "",
       n.reachable || n.self ? (n.behind ? "Settings: behind the primary's" : "Settings: up to date") : "",
       n.host ? "Host: " + (n.host.cpu_pct >= 0 ? "CPU " + Math.round(n.host.cpu_pct) + "%, " : "") + "memory " + Math.round(n.host.mem_pct) + "%" + (n.host.disk_pct >= 0 ? ", disk " + Math.round(n.host.disk_pct) + "%" + (n.host.disk_mount ? " (" + n.host.disk_mount + ")" : "") : "") + " — amber above 85%" : "",
