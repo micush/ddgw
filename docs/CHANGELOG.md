@@ -1,5 +1,18 @@
 # Changelog
 
+## [v325] - 2026-10-11 — No banners anywhere
+
+### Changed
+- The GUI shows no blue (info), yellow (warn) or green banners any more. The shared message line (`say`) now shows only failures, in red; progress and success messages are gone ("Scanning … with nmap…", "The scan … finished", "The statistics are cleared", "Added policy row…", "Unblocked …", "Host restart …", "Collecting from every node…", "Downloaded…", "Asked to take over…", "Tick two versions…", the registering-in-DNS line, and the rest). The result is visible in the page itself (a tooltip, the list, the row).
+- Things that need action stay, now red: the DNS page when it cannot be read, nodes missing from the statistics, cluster warnings and a failed sync, an update notice or a missing Go toolchain, a capture that failed on some nodes, "enter a number of minutes" / "choose a time of day" / "click a neighbor first", policy row already exists, take-over failed, a partly applied change.
+- Removed outright: "certificate expires in N day(s)" (an expired one is still red), the instruction text above a pending certificate request, the "Capturing… N s left" bar.
+- Plain small grey text instead of a box: "BGP is off / disabled on this node", the BGP notes, and "A restart is scheduled for … Cancel it".
+- Scan: no banner at all; the client's tooltip says "nmap: scanning…", then the result or "(failed)" and why.
+- `CLAUDE.md` now has a standing "no banners, ever" rule.
+
+### Verified
+`node --check webui/app.js`, gofmt, vet, `go test -race -count=1 ./...` (with PAM headers), cgo-off vet and test, cross-compiles for amd64, arm64, arm, 386, riscv64. Not verified: any page in a browser (light/dark), a real scan.
+
 ## [v324] - 2026-10-10 — Pause server is greyed out for the last server in service
 
 ### Changed

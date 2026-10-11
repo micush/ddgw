@@ -1770,7 +1770,7 @@
       async poll() {
         const r = await api("GET", "/api/dns");
         const out = h("div", {});
-        if (!r.ok) { out.append(h("div", { class: "notice info" }, r.error)); morph(body, out); return; }
+        if (!r.ok) { out.append(h("div", { class: "notice bad", role: "alert" }, r.error)); morph(body, out); return; }
         const d = r.data;
         const pools = d.pools && d.pools.length ? d.pools : [{ key: 0, groups: [], servers: d.servers, down_percent: d.down_percent, probes: d.probes }];
         out.append(h("div", { class: "stats" }, stat("Queries", d.queries), stat("Answered", d.answered), stat("SERVFAIL", d.servfail)));
@@ -2156,7 +2156,7 @@
     const tab = only;
 
     // Action results ("Saved", "Restored" …) are not announced; only errors, warnings and hints are.
-    const say = (kind, ...msg) => kind === "ok" ? clear(status) : clear(status).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
+    const say = (kind, ...msg) => kind !== "bad" ? clear(status) : clear(status).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
 
     function renderForm(cfg) {
       const general = fieldset(GENERAL_FIELDS, cfg);
@@ -2326,7 +2326,7 @@
   const clusterNote = (c) => {
     const lost = c && c.nodes ? c.nodes.filter((n) => !n.ok) : [];
     if (!lost.length) return [];
-    return [h("div", { class: "notice warn" }, "Not included in these numbers: " + lost.map((n) => n.name + " (" + n.error + ")").join(", "))];
+    return [h("div", { class: "notice bad", role: "alert" }, "Not included in these numbers: " + lost.map((n) => n.name + " (" + n.error + ")").join(", "))];
   };
   // A right-click menu for a table row: items are [label, handler, "danger"?]. Reuses the Topology menu's look.
   let rowMenuEl = null;
@@ -2379,7 +2379,7 @@
       h("thead", {}, h("tr", {}, (named ? ["Node name", "Node IP"] : ["Node"]).concat(["Role", "Reachable", "Epoch", "Running", "Source", "Last seen", ""]).map((t, i) => h("th", { class: i >= (named ? 4 : 3) && i <= (named ? 6 : 5) ? "num" : "" }, t)))),
       h("tbody", {}, rows)));
   };
-  const say = (el, kind, ...msg) => kind === "ok" ? clear(el) : clear(el).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
+  const say = (el, kind, ...msg) => kind !== "bad" ? clear(el) : clear(el).append(h("div", { class: "notice " + kind, role: kind === "bad" ? "alert" : "status" }, ...msg));
   const fail = (el) => (e) => { if (e.message !== "unauthenticated") say(el, "bad", e.message); };
   const kv = (rows) => h("dl", { class: "kv" }, rows.filter(Boolean).map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
   const section = (title, ...kids) => h("div", { class: "card" }, h("header", {}, h("h2", {}, title)), h("div", { class: "body" }, ...kids));
@@ -2408,7 +2408,6 @@
       const c = (await api("GET", "/api/tls")).data;
       clear(slot);
       if (c.expired) slot.append(h("div", { class: "notice bad", role: "alert" }, "The GUI certificate has expired. Install a new one under Configure ▸ Web GUI."));
-      else if (c.expires_soon && c.source !== "self-signed") slot.append(h("div", { class: "notice warn" }, "The GUI certificate expires in " + c.days_left + " day(s)."));
     } catch (_) { /* not critical */ }
   }
 
@@ -2552,7 +2551,7 @@
       if (c.pending_csr) {
         const ta = h("textarea", { rows: 8, readonly: true, class: "pem", "aria-label": "Pending CSR" });
         ta.value = c.pending_csr;
-        csrBox.append(h("div", { class: "notice info" }, "A certificate request is waiting. Send the text below to your certificate authority, then upload the certificate they send back (above) — leave the private key box empty."),
+        csrBox.append(
           ta, h("div", { class: "toolbar" }, copyBtn(() => ta.value),
             h("button", { class: "btn small", type: "button", onclick: () => saveText("ddgw.csr", ta.value) }, "Download"),
             h("button", { class: "btn small", type: "button", onclick: async () => {
@@ -2627,8 +2626,8 @@
     // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
     function build(v) {
       if (v.conflict) dyn.append(h("div", { class: "notice bad", role: "alert" }, "Conflict: " + v.conflict));
-      for (const w of v.warnings) dyn.append(h("div", { class: "notice warn" }, w));
-      if (v.last_sync_error) dyn.append(h("div", { class: "notice warn" }, "Last sync failed: " + v.last_sync_error));
+      for (const w of v.warnings) dyn.append(h("div", { class: "notice bad", role: "alert" }, w));
+      if (v.last_sync_error) dyn.append(h("div", { class: "notice bad", role: "alert" }, "Last sync failed: " + v.last_sync_error));
       const stat = (k, val, small) => h("div", { class: "stat" }, h("div", { class: "k" }, k), h("div", { class: "v" + (small ? " small" : "") }, val));
       dyn.append(h("div", { class: "stats" },
         stat("This node", v.self, true), stat("Role", v.role.toUpperCase()), stat("Epoch", v.epoch),
@@ -2705,8 +2704,8 @@
     function draw(v) { const real = dyn; dyn = h("div", {}); try { build(v); } finally { morph(real, dyn); dyn = real; } }
     // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
     function build(v) {
-      if (v.notice) dyn.append(h("div", { class: "notice warn", role: "alert" }, v.notice));
-      if (!v.toolchain) dyn.append(h("div", { class: "notice warn" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/ddgw/go."));
+      if (v.notice) dyn.append(h("div", { class: "notice bad", role: "alert" }, v.notice));
+      if (!v.toolchain) dyn.append(h("div", { class: "notice bad", role: "alert" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/ddgw/go."));
       const newer = v.source_version && Number(v.source_version) > Number(v.running);
       fill(stats, 
         stat("Running", "v" + v.running), stat("Staged source", v.source_version ? "v" + v.source_version : "none"),
@@ -3013,7 +3012,7 @@
         const r = (await api("POST", "/api/qstats/clear", {})).data || {};
         const bad = (r.nodes || []).filter((n) => !n.ok);
         await load();
-        if (bad.length) say(status, "warn", "Cleared, except on: " + bad.map((n) => n.name + " (" + n.error + ")").join(", "));
+        if (bad.length) say(status, "bad", "Cleared, except on: " + bad.map((n) => n.name + " (" + n.error + ")").join(", "));
         else say(status, "info", "The statistics are cleared.");
       } catch (e) { if (e.message !== "unauthenticated") say(status, "bad", "Not cleared: " + e.message); }
     }
@@ -3032,8 +3031,7 @@
       try {
         let j = (await api("POST", "/api/scan", { client: addr })).data;
         scanSeen.set(scanKey(addr), j);
-        if (last) draw(last);   // (a redraw clears the message line, so the message comes after it)
-        say(status, "info", "Scanning " + addr + " with nmap… (up to two minutes; hover the client afterwards to read the result)");
+        if (last) draw(last);
         while (j.state === "running") {
           await new Promise((r) => setTimeout(r, 3000));
           if (!bar.isConnected) return;   // the page was left
@@ -3041,7 +3039,6 @@
         }
         scanSeen.set(scanKey(addr), j);
         if (last) draw(last);
-        say(status, j.state === "done" ? "info" : "warn", "The scan of " + addr + (j.state === "done" ? " is finished: hover the client to read it." : " failed: hover the client to read why."));
       } catch (e) { scanSeen.delete(scanKey(addr)); if (last) draw(last); if (e.message !== "unauthenticated") say(status, "bad", "Scan of " + addr + ": " + e.message); }
     }
 
@@ -3053,7 +3050,7 @@
         cfg.dns = cfg.dns || {};
         const list = cfg.dns.policy || [];
         const same = list.findIndex((r) => (r.client || "*") === client && String(r.name || "*").toLowerCase() === name.toLowerCase());
-        if (same >= 0) { say(status, "warn", "There already is a policy row for " + (client === "*" ? name : client + " asking for " + name) + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
+        if (same >= 0) { say(status, "bad", "There already is a policy row for " + (client === "*" ? name : client + " asking for " + name) + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
         list.unshift(dest ? { client, name, servers: [], dest } : { client, name, servers: [keyword] });
         cfg.dns.policy = list;
         await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + (dest ? "rewrite to " + dest : keyword) + " for " + (client === "*" ? name : client + " / " + name) });
@@ -3678,12 +3675,10 @@
     function drawJob() {
       clear(jobBox);
       if (!job || job.none) return;
-      const left = Math.max(0, job.seconds - job.elapsed);
       // Nothing to say when it went well (the table does): only while it runs, and when a node could not capture
       const failed = (job.nodes || []).filter((n) => n.status !== "done").length;
-      if (!job.done) jobBox.append(h("div", { class: "notice info", role: "status" }, "Capturing on " + job.iface + (job.filter ? " (" + job.filter + ")" : "") + " on every node… " + Math.ceil(left) + " s left"));
-      else if (job.error) jobBox.append(h("div", { class: "notice bad", role: "status" }, job.error));
-      else if (failed) jobBox.append(h("div", { class: "notice warn", role: "status" }, failed + " of " + job.nodes.length + " nodes could not capture (see the list); the others are in the download."));
+      if (job.done && job.error) jobBox.append(h("div", { class: "notice bad", role: "alert" }, job.error));
+      else if (job.done && failed) jobBox.append(h("div", { class: "notice bad", role: "alert" }, failed + " of " + job.nodes.length + " nodes could not capture (see the list); the others are in the download."));
       if (job.nodes && job.nodes.length) {
         jobBox.append(h("div", { class: "scroll" }, h("table", {},
           h("thead", {}, h("tr", {}, ["Node", "Interface", "Result", "Packets kept", "Seen", "Size", "Why not"].map((t, i) => h("th", { class: i >= 3 && i <= 5 ? "num" : "" }, t)))),
@@ -3761,13 +3756,11 @@
     function build(st) {
       const c = st.config;
       if (!c.asn) {
-        box.append(section("BGP", h("div", { class: "notice info", role: "status" },
-          "BGP is off on this node. Set a local AS number under Configure → Anycast and the anycast addresses of the gateways are announced to your neighbors.")));
+        box.append(section("BGP", h("div", { class: "muted" }, "BGP is off on this node.")));
         return;
       }
       if (c.disabled) {
-        box.append(section("BGP", h("div", { class: "notice info", role: "status" },
-          "BGP is disabled on this node (AS " + c.asn + "). Enable it under Operate → Anycast.")));
+        box.append(section("BGP", h("div", { class: "muted" }, "BGP is disabled on this node (AS " + c.asn + ").")));
         return;
       }
       box.append(section("Status", kv([
@@ -3775,7 +3768,7 @@
         ["FRR", st.installed ? pill("installed", "ok") : pill("not installed", "bad")],
         st.installed ? ["bgpd", st.running ? pill("answering", "ok") : pill("not answering", "bad")] : null,
         ["Last apply", h("span", {}, pill(st.applied.ok ? "ok" : "failed", st.applied.ok ? "ok" : "bad"), " ", st.applied.detail || "–")],
-      ]), ...(st.notes || []).map((n) => h("div", { class: "notice warn", role: "status" }, n))));
+      ]), ...(st.notes || []).map((n) => h("div", { class: "muted" }, n))));
 
       const live = new Map(st.peers.map((p) => [p.peer, p]));
       const row = (n) => {
@@ -3868,7 +3861,7 @@
         const e = body.querySelector(".empty"); if (e) e.closest("tr").remove();
       } }, "+");
       const del = h("button", { class: "btn small", type: "button", "aria-label": "Remove the selected neighbor", title: "Remove the selected neighbor", onclick: () => {
-        if (sel === null) { say(status, "warn", "Click a neighbor first, then remove it."); return; }
+        if (sel === null) { say(status, "bad", "Click a neighbor first, then remove it."); return; }
         if (sel === "") { draft = null; drawNeighbors(); return; }
         if (!confirm("Remove neighbor " + sel + "?")) return;
         const next = clone(cfg); next.neighbors = next.neighbors.filter((x) => x.peer !== sel);
@@ -3944,8 +3937,7 @@
     function build(st) {
       const c = st.config;
       if (!c.asn) {
-        box.append(section("BGP", h("div", { class: "notice info", role: "status" },
-          "BGP is off on this node. Set a local AS number under Configure → Anycast first.")));
+        box.append(section("BGP", h("div", { class: "muted" }, "BGP is off on this node.")));
         return;
       }
       const live = new Map(st.peers.map((p) => [p.peer, p]));
@@ -3995,7 +3987,7 @@
     async function call(path, body, done) {
       try {
         const r = (await api("POST", "/api/users/" + path, body)).data;
-        if (r.partial) say(status, "warn", r.message); else clear(status); // success shows in the list; only a node that missed it is worth saying
+        if (r.partial) say(status, "bad", r.message); else clear(status); // success shows in the list; only a node that missed it is worth saying
         if (done) done();
         await VIEWS.users.poll();
       } catch (e) { fail(status)(e); }
@@ -4131,7 +4123,7 @@
       takeBtn.disabled = true;
       try {
         const r = await api("POST", "/api/assert-agc", {});
-        if (!r.ok) say(status, "warn", r.error || "Could not take over as the gateway controller");
+        if (!r.ok) say(status, "bad", r.error || "Could not take over as the gateway controller");
         else say(status, "info", "Asked to take over: " + (r.messages || []).join(" · "));   // what happened, per group and address family
       } catch (e) { fail(status)(e); }
       finally { takeBtn.disabled = false; }
@@ -4169,10 +4161,10 @@
       const req = { action: val("power-act") || "restart", when: val("power-when") || "now" };
       if (req.when === "in") {
         req.minutes = parseInt(mins.value, 10);
-        if (!(req.minutes >= 1 && req.minutes <= 10080)) { say(status, "warn", "Enter a number of minutes between 1 and 10080."); return; }
+        if (!(req.minutes >= 1 && req.minutes <= 10080)) { say(status, "bad", "Enter a number of minutes between 1 and 10080."); return; }
       } else if (req.when === "at") {
         req.time = clock.value;
-        if (!/^\d{2}:\d{2}$/.test(req.time)) { say(status, "warn", "Choose a time of day."); return; }
+        if (!/^\d{2}:\d{2}$/.test(req.time)) { say(status, "bad", "Choose a time of day."); return; }
       }
       go(req);
     }
@@ -4203,7 +4195,7 @@
         const p = (await api("GET", "/api/power")).data;
         clear(pending);
         if (p.scheduled) {
-          pending.append(h("div", { class: "notice warn", role: "status" },
+          pending.append(h("div", { class: "muted" },
             "A " + p.action + " is scheduled for " + when(p.at) + ". ",
             h("button", { class: "btn", type: "button", onclick: async () => {
               try { await api("POST", "/api/power", { action: "cancel" }); say(status, "info", "The scheduled " + p.action + " is cancelled."); await VIEWS.node.poll(); } catch (e) { fail(status)(e); }

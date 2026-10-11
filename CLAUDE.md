@@ -235,6 +235,13 @@ README), so the version and changelog describe the final tree.
 
 ## Notes
 
+- **NO BANNERS. Ever.** Never add a banner, notice bar or status message line to the GUI: not for
+  progress ("Scanning…"), not for success ("Saved", "finished"), not for info or warnings. State goes
+  in the control itself (tooltip, button label, a few words of small text beside it, a row's colour).
+  Do not call `say(status, "info"|"warn", …)` in new code. Only a failure the person must act on may
+  show, as red text beside the control that failed. When touching a page, remove any banner you find
+  in the code you are changing. The owner has repeated this many times; do not make him say it again.
+
 - **GUI text: keep it short.** Don't add explanatory paragraphs, hints or notes to pages, forms or tables.
   If something needs explaining, put it in `webui/help.js` (the "?" panel) and nothing on the page itself.
   A label, a placeholder and at most a few words of hint are the limit. Don't add any text the owner didn't ask for.
