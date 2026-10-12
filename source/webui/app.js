@@ -2694,9 +2694,11 @@
       joinBox.classList.toggle("hidden", !v.joinable);
       leaveBtn.classList.toggle("hidden", v.joinable);
       promoteBtn.classList.toggle("hidden", v.role === "primary");
+      if (document.activeElement !== failoverSel) failoverSel.value = v.failover || "auto";
+      failoverSel.title = "Automatic failover is " + (v.failover_on ? "on" : "off") + " now";
       lastView = v;
     }
-    let leaveBtn, promoteBtn, lastView = null;
+    let leaveBtn, promoteBtn, failoverSel, lastView = null;
 
     return {
       mount(main) {
@@ -2714,6 +2716,10 @@
           } }, "Join cluster")));
         leaveBtn = h("button", { class: "btn danger", type: "button", onclick: () => act("/api/cluster/leave", {}, "Leave the cluster? This node keeps its settings and becomes its own single-node cluster.", "Left the cluster.") }, "Leave cluster");
         promoteBtn = h("button", { class: "btn warn", type: "button", onclick: () => act("/api/cluster/promote", {}, "Promote THIS node to primary?\n\nDo this only if the current primary is gone for good (or you are moving the role on purpose). Every other member follows the new primary.", "This node is now the primary.") }, "Promote this node");
+        failoverSel = h("select", { "aria-label": "Automatic failover", onchange: async () => {
+          try { await api("POST", "/api/cluster/failover", { failover: failoverSel.value }); } catch (e) { fail(status)(e); }
+          await VIEWS.cluster.poll();
+        } }, [["auto", "Auto"], ["on", "On"], ["off", "Off"]].map(([v, t]) => h("option", { value: v }, t)));
         main.append(status,
           h("div", { class: "toolbar" },
             h("button", { class: "btn", type: "button", onclick: async () => {
@@ -2726,6 +2732,7 @@
               } catch (e) { fail(status)(e); }
             } }, "Create join code"),
             h("button", { class: "btn", type: "button", onclick: () => act("/api/cluster/sync", {}, null, "Synced.") }, "Sync now"),
+            h("span", { class: "muted" }, "Failover"), failoverSel,
             h("span", { class: "spacer" }), promoteBtn, leaveBtn),
           tokenBox, dyn, h("p", { class: "hint" }, "★ marks this node"), joinBox);
         joinBox.classList.add("hidden"); leaveBtn.classList.add("hidden"); promoteBtn.classList.add("hidden");

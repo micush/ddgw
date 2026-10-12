@@ -63,6 +63,9 @@ type PeerStatusMsg struct {
 	AnycastUp []AnycastUp  `json:"anycast_up,omitempty"`
 	SharedRev uint64       `json:"shared_rev"`
 	Intent    UpdateIntent `json:"intent"`
+	// PrimaryDownSec is how long this node has gone without reaching the primary (its vote for automatic failover); 0 when it
+	// can reach it, or on the primary itself.  Absent on older nodes.
+	PrimaryDownSec int64 `json:"primary_down_sec,omitempty"`
 	// Which gateways this node is serving; GwKnown is false for nodes that
 	// predate the field (their health is then assumed).
 	GwKnown  bool      `json:"gw_known,omitempty"`
@@ -150,8 +153,10 @@ type Cluster struct {
 	lastSync   time.Time
 	lastErr    string
 	conflict   string
-	kick       chan struct{}
-	syncMu     sync.Mutex
+	// primaryDownSince is when this replica last began failing to reach the primary without a break (zero: it can)
+	primaryDownSince time.Time
+	kick             chan struct{}
+	syncMu           sync.Mutex
 }
 
 func clusterSelfAddr(cfg ClusterConfig) string {
@@ -619,7 +624,7 @@ func (c *Cluster) statusMsg() PeerStatusMsg {
 		Peer:     c.node.Self(), Epoch: snap.Epoch, Role: snap.Role, PrimaryAddr: snap.PrimaryAddr,
 		Peers: append(c.knownPeers(snap), c.node.Self()), Removed: snap.Removed,
 		Version: version(), SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(),
-		UpdateFailed: c.mg.upd.FailedFor(), UptimeSec: int64(time.Since(processStart) / time.Second), AnycastUp: c.mg.anycastReport(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(),
+		UpdateFailed: c.mg.upd.FailedFor(), UptimeSec: int64(time.Since(processStart) / time.Second), AnycastUp: c.mg.anycastReport(), SharedRev: snap.SharedRev, Intent: c.mg.upd.Intent(), PrimaryDownSec: c.primaryDownSec(),
 		GwKnown: c.mg.gwFn != nil, Gateways: c.mg.localGateways(), NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(), Host: hostLoadPtr(), Addrs: ethernetAddrs(), GwIPs: c.mg.localGwIPs(),
 	}
 }
@@ -1221,6 +1226,7 @@ func (c *Cluster) Run(ctx context.Context) {
 		}
 		c.sampleGwUp()
 		c.sampleAnycastUp()
+		c.failoverTick()
 		c.mg.updateTick(sctx)
 		cancel()
 		c.logStrain()
@@ -1441,6 +1447,9 @@ type ClusterView struct {
 	LastSyncError string     `json:"last_sync_error,omitempty"`
 	Conflict      string     `json:"conflict,omitempty"`
 	Warnings      []string   `json:"warnings"`
+	// Failover is the setting ("" automatic, "on", "off") and FailoverOn whether it is in force with this many members
+	Failover   string `json:"failover"`
+	FailoverOn bool   `json:"failover_on"`
 }
 
 func (c *Cluster) View() ClusterView {
@@ -1455,6 +1464,8 @@ func (c *Cluster) View() ClusterView {
 		Conflict: c.conflict, Peers: []PeerView{}, Warnings: []string{},
 	}
 	v.Joinable = snap.Role == RolePrimary && len(snap.Peers) == 0 && snap.Epoch == 1
+	v.Failover = c.mg.upd.Intent().Failover
+	v.FailoverOn = failoverEnabled(v.Failover, len(snap.Peers)+1)
 	v.Peers = append(v.Peers, PeerView{
 		Addr: snap.SelfAddr, NodeID: snap.NodeID, Fingerprint: c.node.Fingerprint(), Self: true, Reachable: true,
 		Role: snap.Role, Epoch: snap.Epoch, IsPrimary: snap.Role == RolePrimary, Version: version(),

@@ -31,7 +31,7 @@ type cliFlags struct {
 	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                                                                       *bool
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, scanAddr, pingAddr, traceAddr, lookupAddr, cacheFlush, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile, tshootFile *string
 	asn, routerID, asPrepend, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                                                                              *string
-	updateUpload, updatePush, updateCancel, updateAuto, updateRepo                                                                                                                                                                                   *string
+	updateUpload, updatePush, updateCancel, updateAuto, updateRepo, clusterFailover                                                                                                                                                                  *string
 	canvas, vmacTest, tshoot, tshootCapture                                                                                                                                                                                                          *bool
 	canvasPause, canvasResume, canvasMove, canvasAdd, canvasDel, canvasSet, vip, vip6, ifname, server, name, qtype, ecs, label, anycast, address, scope, node, realMACs                                                                              *string
 	pos, group, ecsV4, ecsV6, spreadBand, downPercent, failThreshold, maxAttempts                                                                                                                                                                    *int
@@ -70,7 +70,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		multihop:     s("multihop"),
 		keepalive:    s("keepalive"),
 		hold:         s("hold"),
-		updateUpload: s("update-upload"), updatePush: s("update-push"), updateCancel: s("update-cancel"), updateAuto: s("update-auto"), updateRepo: s("update-repo"),
+		updateUpload: s("update-upload"), updatePush: s("update-push"), updateCancel: s("update-cancel"), updateAuto: s("update-auto"), updateRepo: s("update-repo"), clusterFailover: s("cluster-failover"),
 	}
 }
 
@@ -303,6 +303,10 @@ func (f *cliFlags) run(sock string) bool {
 		decode(op(sock, "cluster.join", map[string]any{"code": *f.clusterJoin}), &v)
 		fmt.Println("Joined.")
 		printCluster(v)
+	case *f.clusterFailover != "":
+		var v ClusterView
+		decode(op(sock, "cluster.failover", map[string]any{"failover": *f.clusterFailover}), &v)
+		fmt.Println("Automatic failover:", failoverWords(v))
 	case *f.clusterPromote:
 		askYes("Promote THIS node to primary? Do this only if the current primary is gone (or you are moving the primary role on purpose).", *f.yes)
 		var r struct {
@@ -518,6 +522,15 @@ func printCert(i CertInfo) {
 	}
 }
 
+// failoverWords says what the automatic failover setting means now.
+func failoverWords(v ClusterView) string {
+	set := map[string]string{"": "automatic", "on": "on", "off": "off"}[v.Failover]
+	if v.Failover == "" {
+		return set + " (" + map[bool]string{true: "on", false: "off"}[v.FailoverOn] + " with " + itoa(len(v.Peers)) + " members; on from three)"
+	}
+	return set
+}
+
 func printCluster(v ClusterView) {
 	if !v.Enabled {
 		fmt.Println("Clustering is disabled on this node (cluster.enabled = false).")
@@ -528,6 +541,7 @@ func printCluster(v ClusterView) {
 	if v.Joinable {
 		fmt.Println("(not part of a multi-node cluster yet — mint a code with --cluster-token on another node and use --cluster-join)")
 	}
+	fmt.Println("Automatic failover:", failoverWords(v))
 	fmt.Println()
 	const f = "%-16s %-40s %-28s %-8s %-9s %-6s %-7s %-7s %-19s %s\n"
 	fmt.Printf(f, "NODE NAME", "NODE IP", "ADDRESS", "ROLE", "REACHABLE", "EPOCH", "RUNNING", "SOURCE", "LAST SEEN", "NOTE")

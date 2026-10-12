@@ -33,6 +33,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		Force    bool     `json:"force"`
 		Enabled  bool     `json:"enabled"`
 		Repo     string   `json:"repo"`
+		Failover string   `json:"failover"`
 		DataB64  string   `json:"data"`
 		Limit    int      `json:"limit"`
 		Hostname string   `json:"hostname"`
@@ -455,6 +456,8 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		return m.UpdateStatus(), m.UpdateAuto(a.Enabled, actor)
 	case "update.repo":
 		return m.UpdateStatus(), m.UpdateRepo(a.Repo, actor)
+	case "cluster.failover":
+		return m.cl.View(), m.UpdateFailover(a.Failover, actor)
 	}
 	return nil, fmt.Errorf("unknown command: %s", cmd)
 }

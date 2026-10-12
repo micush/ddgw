@@ -1,5 +1,17 @@
 # Changelog
 
+## [v362] - 2026-10-11 — Automatic failover of the primary
+
+### Added
+- A replica promotes itself when the primary has not answered for 5 minutes (not while it is installing an update) and a strict majority of the members, counting the primary, report the same (each node's status message carries how long it has been without the primary). One candidate is chosen by a rule every member computes alike: reachable, not updating, the newest shared-settings revision, then the newest version, then the lowest address. A replica cut off from the others never reaches a majority, so it never promotes; the old primary drops to replica when it returns (epoch rule, unchanged).
+- Setting **Failover: Auto / On / Off** (Cluster page, `ddgw --cluster-failover auto|on|off`, `POST /api/cluster/failover`; `--cluster-status` prints it). It is shared like the update settings (set on the primary, followed by every member and kept by replicas, recorded in the update history). **Auto is on from three members and off with two or fewer**; On and Off are as set.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles. New tests: the mode rules and candidate choice, three real in-process nodes where the primary stops answering (exactly one replica promotes, both agree on the epoch and the primary), a lone replica with no majority and a two-node cluster that never promote.
+
+### Not verified
+- Live daemons and a real network split (CLAUDE.md asks for one for cluster changes); the Failover control in a browser. The 5-minute wait is fixed.
+
 ## [v361] - 2026-10-11 — The primary role moves before a planned restart, shut down or update
 
 ### Added

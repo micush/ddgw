@@ -341,12 +341,12 @@ const DDGW_HELP = {
       ["h", "Roles and membership"],
       ["ul", [
         "One node is the **primary**; the others are **replicas**. Shared settings are checked on the primary and copied out within the sync interval.",
-        "If the primary is gone for good, choose **Promote** on the replica you want. Nothing promotes itself after a failure, so a network split can never create two primaries.",
+        "If the primary is gone for good, choose **Promote** on the replica you want. **Failover** (Auto, On, Off, next to Sync now) promotes a replica by itself when the primary has not answered for 5 minutes and more than half of the members, that replica included, agree; the one with the newest settings promotes and the others follow. Auto is on from three members and off with two. A replica cut off from the others never has a majority, so a network split cannot create two primaries; with two members only you can promote.",
         "Right-click a member (not this node) and choose **Remove**: it drops the member (it resets itself to a cluster of one when it next hears from the cluster); it can be allowed back with **Unremove**. **Leave cluster** does it from the node itself.",
         "**Sync now** pulls the latest state immediately.",
       ]],
       ["h", "Epoch"],
-      "The epoch is a counter that says which node is the primary. It starts at 1 and goes up by one each time a node becomes primary: when you **Promote** it, or when the primary is restarted, shut down or updated on purpose and hands the role to the replica with the newest settings (it comes back as a replica, and the role stays where it landed). A primary that goes offline unexpectedly keeps the role until you promote another node; joins, syncs and members going offline never change it. Every member follows the primary with the highest epoch, so an old primary that comes back still claiming a lower epoch is ignored and falls in line as a replica. If two different nodes ever claim the same epoch (two admins promoting on either side of a network split), the nodes refuse the conflict instead of picking one. An epoch of 1 everywhere means nothing has been promoted yet.",
+      "The epoch is a counter that says which node is the primary. It starts at 1 and goes up by one each time a node becomes primary: when you **Promote** it, or when the primary is restarted, shut down or updated on purpose and hands the role to the replica with the newest settings (it comes back as a replica, and the role stays where it landed). A primary that goes offline unexpectedly keeps the role until you promote another node or, with Failover on, the cluster does after 5 minutes; joins, syncs and members going offline never change it. Every member follows the primary with the highest epoch, so an old primary that comes back still claiming a lower epoch is ignored and falls in line as a replica. If two different nodes ever claim the same epoch (two admins promoting on either side of a network split), the nodes refuse the conflict instead of picking one. An epoch of 1 everywhere means nothing has been promoted yet.",
       ["h", "The Members table"],
       ["ul", [
         "**Reachable**: whether this node could ask that member for its status just now; when it says no, the reason is shown.",
@@ -363,7 +363,7 @@ const DDGW_HELP = {
         ["Node", "The menu at the top right of every page. It picks which member the page shows and acts on: this node (the default) or any other member of the cluster."],
         ["Join code", "On the new node: paste the code made by **Create join code** on a member. It is single-use, valid for an hour, and not shown again; the member shows it read only for you to copy."],
       ]],
-      ["cli", "ddgw --cluster-status\nddgw --cluster-token\nddgw --cluster-join CODE\nddgw --cluster-promote\nddgw --cluster-remove ADDR / --cluster-unremove ADDR\nddgw --cluster-leave\nddgw --cluster-sync"],
+      ["cli", "ddgw --cluster-status\nddgw --cluster-token\nddgw --cluster-join CODE\nddgw --cluster-promote\nddgw --cluster-failover auto|on|off\nddgw --cluster-remove ADDR / --cluster-unremove ADDR\nddgw --cluster-leave\nddgw --cluster-sync"],
     ],
   },
   updates: {

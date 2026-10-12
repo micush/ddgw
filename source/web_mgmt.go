@@ -85,6 +85,7 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/update/cancel", w.authed(w.op("update.cancel", nil)))
 	mux.HandleFunc("POST /api/update/auto", w.authed(w.op("update.auto", nil)))
 	mux.HandleFunc("POST /api/update/repo", w.authed(w.op("update.repo", nil)))
+	mux.HandleFunc("POST /api/cluster/failover", w.authed(w.op("cluster.failover", nil)))
 }
 
 // op adapts a Mgmt.Op command to an HTTP handler.  GET handlers take their
