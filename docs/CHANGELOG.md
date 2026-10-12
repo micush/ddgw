@@ -1,15 +1,28 @@
 # Changelog
 
+## [v359] - 2026-10-11 — Version bump
+
+### Changed
+- Version number only. v358 was handed out more than once with later changes in it (small • and ▴ markers, the Primary menu item), so this number identifies the finished set: the v358 entry below describes everything in it. No other change.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js.
+
+### Not verified
+- Nothing beyond the v358 entry.
+
 ## [v358] - 2026-10-11 — Controller dot and primary triangle on the Topology
 
 ### Added
-- A node's shape on the Topology shows a dot (●) after its name while it is the gateway controller (the AGC of at least one gateway), next to the star (*) that marks this node: a node that is both shows both. The cluster's primary has a triangle (▲); a node with every role shows star, dot and triangle, in that order. The node's tooltip says "Gateway controller". Which node holds the role is read from the gateway's serving members, matched to nodes by their addresses.
+- A node's shape on the Topology shows a dot (•) after its name while it is the gateway controller (the AGC of at least one gateway), next to the star (*) that marks this node: a node that is both shows both. The dot and the triangle use the small glyphs (• ▴) so they are the size of the star. The cluster's primary has a triangle (▴); a node with every role shows star, dot and triangle, in that order. The node's tooltip says "Gateway controller". Which node holds the role is read from the gateway's serving members, matched to nodes by their addresses.
+
+- A node's menu has **Primary** (after Controller): it makes that node the cluster's primary (the Cluster page's Promote, aimed at the node clicked, relayed to it). No popup, since no gateway is touched; greyed with "Already the primary" on the current primary.
 
 ### Verified
 - gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
 
 ### Not verified
-- In a browser or a real cluster (the address match for other nodes is the part most likely to need a fix).
+- Promoting another node from the menu in a real cluster. In a browser or a real cluster (the address match for other nodes is the part most likely to need a fix).
 
 ## [v357] - 2026-10-11 — Nothing is written above the Topology drawing
 

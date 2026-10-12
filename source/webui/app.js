@@ -847,7 +847,7 @@
           onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
-          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : "") + (isController(n) ? " ●" : "") + (n.role === "primary" ? " ▲" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
+          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : "") + (isController(n) ? " •" : "") + (n.role === "primary" ? " ▴" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
           label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2"),
           n.soak_sec > 0 ? sv("text", { x: x + NSL + 8, y: y + 17, class: "t1 soak" }, sv("title", {}, soakTip(n.soak_sec)), "⏳") : null));
       });
@@ -1369,11 +1369,17 @@
       return withMembers.length > 0 && (all ? withMembers.every(has) : withMembers.some(has));
     };
     const controllerWhy = (n) => (isController(n, true) ? "Already the controller" : "");
+    // Make a node the cluster's primary (the Cluster page's Promote button, aimed at the node whose shape was clicked): no gateway is
+    // touched, so no question is asked.
+    async function makePrimary(n) {
+      try { await nodeCall(n, "POST", "/api/cluster/promote", {}); } catch (e) { /* the star-dot-triangle marks show the result */ }
+      draw(); refresh();
+    }
     const nodeMenu = (n) => (e) => {
       const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
       const rm = memberItem(n).map(([, f]) => ["Remove", f]);
       openMenu(e, n.self || n.reachable
-        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
+        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ["Primary", () => makePrimary(n), "", null, n.role === "primary" ? "Already the primary" : ""], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
         : [["Cluster page", () => selectTab("cluster")], ...rm]);
     };
     // right-click on a shape: select it, then show what can be done with it
