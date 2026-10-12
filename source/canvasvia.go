@@ -53,6 +53,13 @@ func servingPeers(g CanvasGateway) []CanvasNode {
 func (g *CanvasGateway) takeFrom(p CanvasGateway, from CanvasNode) {
 	g.Status, g.Detail, g.Families, g.Servers, g.Fallback, g.UsingFallback = p.Status, p.Detail, p.Families, p.Servers, p.Fallback, p.UsingFallback
 	g.Members, g.Anycast, g.Uptime, g.LB, g.LBOwn, g.ECS = p.Members, p.Anycast, p.Uptime, p.LB, p.LBOwn, p.ECS
+	// the serving node's own entry is "local" to it, not to this node: nobody is this node here, or the
+	// page would put the controller mark (and the star) on the node it is open on
+	g.Members = make([]CanvasMember, len(p.Members))
+	copy(g.Members, p.Members)
+	for i := range g.Members {
+		g.Members[i].Local = false
+	}
 	g.Via, g.ViaAddr = from.Name, from.Addr
 }
 

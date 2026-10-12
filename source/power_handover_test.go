@@ -41,3 +41,33 @@ func TestScheduledPowerHandsOverThePrimary(t *testing.T) {
 		t.Fatalf("not handed over: A %s, B %s", a.mg.cl.node.Snapshot().Role, b.mg.cl.node.Snapshot().Role)
 	}
 }
+
+// Pausing the primary node hands the primary role over; pausing a replica leaves it where it is; resuming never moves it.
+func TestPausingThePrimaryHandsItOver(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 3; i++ {
+		a.sync()
+		b.sync()
+	}
+	a.mg.othersFn, b.mg.othersFn = func() int { return 1 }, func() int { return 1 }
+	role := func(n *tnode) string { return string(n.mg.cl.node.Snapshot().Role) }
+	if _, err := b.mg.NodePause(true, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if role(a) != string(RolePrimary) {
+		t.Fatalf("pausing a replica moved the role: A %s, B %s", role(a), role(b))
+	}
+	if _, err := a.mg.NodePause(true, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if role(a) != string(RoleReplica) || role(b) != string(RolePrimary) {
+		t.Fatalf("pausing the primary did not hand over: A %s, B %s", role(a), role(b))
+	}
+	if _, err := a.mg.NodePause(false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if role(b) != string(RolePrimary) {
+		t.Fatalf("resuming moved the role back: B %s", role(b))
+	}
+}

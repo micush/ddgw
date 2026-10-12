@@ -51,6 +51,8 @@ func (m *Mgmt) NodePause(pause bool, actor string) (string, error) {
 		return "", err
 	}
 	if pause {
+		// the primary role does not stay on a node that is out of service: it goes to the most up-to-date replica
+		m.handOver(actor, "pausing this node")
 		return "node paused — its gateways stop serving and the other nodes take over; resume it when maintenance is done", nil
 	}
 	return "node resumed — its gateways rejoin once their DNS servers answer", nil

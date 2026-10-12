@@ -108,3 +108,19 @@ func TestAddDNSPoolsTakesTheOtherGatewaysPool(t *testing.T) {
 		t.Fatalf("empty node: %+v", none)
 	}
 }
+
+// The serving node's own member is "local" to it; borrowed by a paused node it must not read as this node,
+// or the controller mark lands on the node the page is open on.
+func TestTakeFromClearsLocalOnMembers(t *testing.T) {
+	mine := CanvasGateway{GroupID: 1, Nodes: viaNodes("paused")}
+	theirs := CanvasGateway{GroupID: 1, Members: []CanvasMember{{IP: "10.0.0.3", Local: true, AGC: true}, {IP: "10.0.0.4"}}}
+	mine.takeFrom(theirs, peer("3", "ok"))
+	for _, m := range mine.Members {
+		if m.Local {
+			t.Errorf("%s still local", m.IP)
+		}
+	}
+	if !mine.Members[0].AGC || !theirs.Members[0].Local {
+		t.Errorf("the controller flag must stay, and the serving node's own copy must not change: %+v %+v", mine.Members, theirs.Members)
+	}
+}

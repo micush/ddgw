@@ -1,5 +1,19 @@
 # Changelog
 
+## [v369] - 2026-10-12 — Pausing the primary hands the role over; controller mark fix
+
+### Added
+- Pausing a node (Topology menu, Operate ▸ Node, `--node-pause`) hands the primary role over when that node is the primary, to the most up-to-date replica, the same hand-over a restart or shut down does. Pausing a replica, or resuming, never moves the role. A failed hand-over is logged and the pause goes ahead.
+
+### Fixed
+- Topology: on a node that is paused (or does not serve a gateway) the drawing shows the picture of a node that does. That node's own member entry still said "local", and the page reads "local" as "this node", so the controller dot landed on the paused node and the real controller had none. The borrowed members are no longer marked local (the Gateways page already did this).
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestTakeFromClearsLocalOnMembers`, `TestPausingThePrimaryHandsItOver`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser, or on a live paused node.
+
 ## [v368] - 2026-10-12 — Fix: nodes refused each other after the rename
 
 ### Fixed

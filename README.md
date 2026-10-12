@@ -381,7 +381,7 @@ Right-click a gateway, server, domain or anycast address ▸ *Pause ▸ This nod
 
 When all but one of a server's domains are paused, the server turns amber, because a single domain is all that is checked. When every domain is paused, it turns red and counts as down; it gets no queries until one is resumed.
 
-CLI: `--canvas-pause|--canvas-resume gateway|server|domain|anycast --group 1 [--server ADDR] [--name DOMAIN] [--address ADDR] --scope node|all`. `--scope` defaults to node for a gateway and all for a server, and is required for a domain or an anycast address. To take the **whole node** out at once (every gateway on it, including ones added later), use Operate ▸ Node ▸ *Maintenance* (or `--node-pause`); see [Operating a node](#operating-a-node).
+CLI: `--canvas-pause|--canvas-resume gateway|server|domain|anycast --group 1 [--server ADDR] [--name DOMAIN] [--address ADDR] --scope node|all`. `--scope` defaults to node for a gateway and all for a server, and is required for a domain or an anycast address. To take the **whole node** out at once (every gateway on it, including ones added later), use Operate ▸ Node ▸ *Maintenance* (or `--node-pause`); see [Operating a node](#operating-a-node). Pausing a node that is the cluster's primary hands the primary role to the most up-to-date replica first, as a restart does; resuming never moves it back.
 
 **Resuming** (and starting the daemon, or adding a gateway) does not put the node back in service at once. It first probes its DNS servers and only joins the gateway when they all answer, or, after 10 seconds, when at least one does (after 60 seconds it starts regardless). Meanwhile the other nodes keep serving and the circle shows "starting — waiting for the DNS servers to answer".
 
