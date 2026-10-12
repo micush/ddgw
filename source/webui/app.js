@@ -1283,7 +1283,7 @@
       const want = !n.node_paused;
       const go = async () => {
         try { await nodeCall(n, "POST", "/api/nodepause", { paused: want }); }
-        catch (e) { clear(noteEl).append("Could not " + (want ? "pause " : "resume ") + n.name + ": " + (e.message || e)); return; }
+        catch (e) { refresh(); return; }   // the menu item is greyed when the server would refuse; no message
         cv.nodeWait = cv.nodeWait || {};
         cv.nodeWait[n.addr] = { want, until: Date.now() + 15000 };
         draw(); refresh();

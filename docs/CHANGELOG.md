@@ -1,5 +1,16 @@
 # Changelog
 
+## [v355] - 2026-10-11 — No message above the Topology when a node pause is refused
+
+### Changed
+- Topology: when pausing a node fails (the server refuses the last node of a gateway), nothing is printed above the drawing any more; the menu item is already greyed for that node, with the reason as its tooltip, and the drawing is re-read.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser or a real cluster.
+
 ## [v354] - 2026-10-11 — Pause node without a popup; amber when one node is left
 
 ### Changed
