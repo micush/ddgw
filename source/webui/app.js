@@ -1328,6 +1328,7 @@
     // node reports it.
     function renameNode(n) {
       const input = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "253", value: n.name || "", "aria-label": "Host name" });
+      const domain = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "253", placeholder: "example.com", "aria-label": "Register in DNS under this domain" });
       const err = h("div", { "aria-live": "polite" });
       const d = h("dialog", { class: "cv-dialog", "aria-label": "Rename " + (n.name || "node") });
       const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
@@ -1337,12 +1338,18 @@
           ev.preventDefault();
           const v = input.value.trim().toLowerCase();
           if (!v || v.length > 253 || !v.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) { errorBox(err, "Use letters, digits and - in parts of up to 63 characters, separated by dots."); return; }
-          if (v === n.name) { close(); return; }
-          try { await nodeCall(n, "POST", "/api/host/rename", { hostname: v }); }
+          const dom = domain.value.trim().toLowerCase();
+          if (dom && (dom.length > 253 || !dom.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))) { errorBox(err, "Use letters, digits and - in the domain, separated by dots."); return; }
+          if (v === n.name && !dom) { close(); return; }
+          let r;
+          try { r = await nodeCall(n, "POST", "/api/host/rename", dom ? { hostname: v, host_domain: dom } : { hostname: v }); }
           catch (e) { errorBox(err, e.message || "Could not rename the host."); return; }
-          close(); draw(); refresh();
+          draw(); refresh();
+          if (r && r.dns_error) { errorBox(err, "Renamed, but DNS: " + r.dns_error); return; }
+          close();
         } },
         h("label", { class: "f wide" }, "Host name", input),
+        h("label", { class: "f wide" }, "Domain (registers the name in DNS)", domain),
         err,
         h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Rename"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
       root.append(d);

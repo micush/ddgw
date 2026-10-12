@@ -1,5 +1,16 @@
 # Changelog
 
+## [v375] - 2026-10-12 — Node Rename can also register the new name in DNS
+
+### Added
+- Rename (node menu, `dnsdir --hostname NAME --host-domain DOMAIN`) has an optional **Domain**. With one, after the host is renamed the node sends the same RFC 2136 update a client name gets (TSIG key and TTL from Settings): `<new first label>.<domain>` gets an A record for the node's first IPv4 address and an AAAA record for its first global IPv6 address, each with its PTR record, and `<old first label>.<domain>` loses its address record. Without a domain nothing is sent to DNS, as before. A DNS failure does not undo the rename: the dialog keeps its red text ("Renamed, but DNS: …") and the CLI prints it. The same name with a domain only registers.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new tests: first v4 and first global v6 are registered with the old name removed, only the first label goes under the domain, no domain sends nothing, a bad domain is refused before anything changes, a DNS failure keeps the rename), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- A real update against a DNS server, and the dialog in a browser. Which of a node's addresses is registered is not configurable (first IPv4, first global IPv6).
+
 ## [v374] - 2026-10-12 — Fix: pausing a DNS server could pause the whole node
 
 ### Fixed

@@ -609,7 +609,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
-| `--hostname NAME` | Topology ▸ right-click a node ▸ **Rename** |
+| `--hostname NAME [--host-domain DOMAIN]` | Topology ▸ right-click a node ▸ **Rename** (Domain field) |
 | `--bgp-disable`, `--bgp-enable`, `--bgp-neighbor-disable ADDR`, `--bgp-neighbor-enable ADDR` | Operate ▸ Anycast (Disable / Enable BGP, and per neighbor) |
 | `--version`, `--help` | version in the header; the **?** at the top right of every page opens a slide-out help panel for that page (including its command-line equivalents and a description of every field on the page) |
 
@@ -907,7 +907,7 @@ When a controller stops (a restart, an update, **Pause this node**), it tells th
 
 ### Maintenance: pause this node
 
-Right-click a node in the Topology ▸ **Rename** (or `dnsdir --hostname NAME`) changes the host name of that node: the operating-system name (`hostnamectl set-hostname`) and the name on its line in `/etc/hosts`; if the file cannot be updated the old name is put back, and a host with no line for its name gets none. The drawing shows the new name once the node reports it.
+Right-click a node in the Topology ▸ **Rename** (or `dnsdir --hostname NAME`) changes the host name of that node: the operating-system name (`hostnamectl set-hostname`) and the name on its line in `/etc/hosts`; if the file cannot be updated the old name is put back, and a host with no line for its name gets none. The drawing shows the new name once the node reports it. With a **Domain** (`--host-domain`) the node also registers `NAME.DOMAIN` in DNS with the same RFC 2136 update as a client name (A and PTR for its first IPv4 address, and for its first global IPv6 address if it has one) and removes the old name's address record; the zone and its primary are found from the SOA records. Only the first label of the host name goes under the domain. A DNS failure is reported but the rename stays; without a domain nothing is sent to DNS.
 
 Operate ▸ Node ▸ *Maintenance* (or `dnsdir --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
 

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Renaming the host (the node menu's Rename, `dnsdir --hostname NAME`): the operating system's host name and its entry in
@@ -83,20 +86,30 @@ func rewriteHosts(body, old, name string) (out string, ok bool) {
 
 // RenameHost changes this host's name and its /etc/hosts entry.  If the entry cannot be written the old host name is put
 // back, so the two never disagree.  The old name must be on a line of /etc/hosts for that line to change; a host with no
-// entry gets none added.
-func (m *Mgmt) RenameHost(name, actor string) (string, error) {
-	name, err := cleanHostname(name)
+// entry gets none added.  With a domain it then registers <new short name>.<domain> in DNS (RFC 2136, like a client name)
+// and removes <old short name>.<domain>; a DNS failure is reported but does not undo the rename.
+func (m *Mgmt) RenameHost(name, domain, actor string) (msg, dnsErr string, err error) {
+	name, err = cleanHostname(name)
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	if strings.TrimSpace(domain) != "" {
+		if domain, err = cleanHostname(domain); err != nil {
+			return "", "", errors.New("the domain: " + err.Error())
+		}
 	}
 	old := hostnameNow()
 	if name == old {
-		return "the host is already called " + name, nil
+		if domain == "" {
+			return "the host is already called " + name, "", nil
+		}
+		reg, bad := m.registerHost(name, old, domain, actor)
+		return "the host is already called " + name + "; " + reg, bad, nil
 	}
 	hosts, herr := os.ReadFile(hostsPath)
 	newHosts, hasEntry := rewriteHosts(string(hosts), old, name)
 	if herr != nil && !os.IsNotExist(herr) {
-		return "", fmt.Errorf("cannot read %s: %v", hostsPath, herr)
+		return "", "", fmt.Errorf("cannot read %s: %v", hostsPath, herr)
 	}
 	setName := func(n string) error {
 		if err := hostRenameRun("hostnamectl", "set-hostname", n); err == nil {
@@ -109,16 +122,70 @@ func (m *Mgmt) RenameHost(name, actor string) (string, error) {
 		return os.WriteFile(hostnamePath, []byte(n+"\n"), 0o644)
 	}
 	if err := setName(name); err != nil {
-		return "", fmt.Errorf("could not change the host name: %v", err)
+		return "", "", fmt.Errorf("could not change the host name: %v", err)
 	}
 	if hasEntry {
 		if err := hostsWrite(hostsPath, []byte(newHosts)); err != nil {
 			_ = setName(old)
-			return "", fmt.Errorf("could not update %s (the host name was put back): %v", hostsPath, err)
+			return "", "", fmt.Errorf("could not update %s (the host name was put back): %v", hostsPath, err)
 		}
 	}
 	warnf("host: %q renamed the host from %s to %s", actor, old, name)
-	return "the host is now called " + name, nil
+	msg = "the host is now called " + name
+	if domain != "" {
+		reg, bad := m.registerHost(name, old, domain, actor)
+		msg, dnsErr = msg+"; "+reg, bad
+	}
+	return msg, dnsErr, nil
+}
+
+// registerHost puts this host's name into DNS under domain: the first IPv4 and the first IPv6 address of the node (the
+// address and PTR records), and removes the old name's records.  It returns one sentence saying how that went and, when something failed, the reason alone.
+func (m *Mgmt) registerHost(name, old, domain, actor string) (msg, failure string) {
+	if m.regNameFn == nil {
+		f := "registration is not available on this node"
+		return "DNS was not updated: " + f, f
+	}
+	short := func(s string) string { return strings.SplitN(s, ".", 2)[0] }
+	fqdn, oldFqdn := short(name)+"."+domain, ""
+	if old != "" && short(old) != short(name) {
+		oldFqdn = short(old) + "." + domain
+	}
+	var addrs []netip.Addr
+	var have4, have6 bool
+	for _, s := range addrList(ethernetAddrs()) {
+		a, err := netip.ParseAddr(s)
+		if err != nil {
+			continue
+		}
+		a = a.Unmap()
+		if a.Is4() && !have4 {
+			have4 = true
+			addrs = append(addrs, a)
+		} else if a.Is6() && !a.IsLinkLocalUnicast() && !have6 {
+			have6 = true
+			addrs = append(addrs, a)
+		}
+	}
+	if len(addrs) == 0 {
+		f := "this node has no address to register"
+		return "DNS was not updated: " + f, f
+	}
+	var fails []string
+	for _, a := range addrs {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		lines, err := m.regNameFn(ctx, fqdn, oldFqdn, a)
+		cancel()
+		warnf("host: %q registered %s as %s in DNS: %s", actor, a, fqdn, strings.Join(lines, "; "))
+		if err != nil {
+			fails = append(fails, err.Error())
+		}
+	}
+	if len(fails) > 0 {
+		f := strings.Join(fails, "; ")
+		return "DNS was not fully updated for " + fqdn + ": " + f, f
+	}
+	return "registered " + fqdn + " in DNS", ""
 }
 
 // writeFileAtomic replaces path with data through a temporary file next to it, keeping the file's mode.

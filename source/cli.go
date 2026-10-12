@@ -25,7 +25,7 @@ type cliFlags struct {
 	certFile, keyFile, cn, san                                                                                                                                                                                                                       *string
 	clusterJoin, clusterRemove, clusterUnremove                                                                                                                                                                                                      *string
 	users                                                                                                                                                                                                                                            *bool
-	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires, hostname                                                                                                                                                               *string
+	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires, hostname, hostDomain                                                                                                                                                   *string
 	power, powerAt                                                                                                                                                                                                                                   *string
 	powerIn                                                                                                                                                                                                                                          *int
 	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                                                                       *bool
@@ -60,7 +60,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		failThreshold: fs.Int("fail-threshold", 0, ""), maxAttempts: fs.Int("max-attempts", 0, ""), latencyAlpha: fs.Float64("latency-alpha", 0, ""),
 		vip: s("vip"), ifname: s("interface"), server: s("server"), name: s("name"), qtype: s("type"),
 		group: fs.Int("group", 0, ""),
-		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"), hostname: s("hostname"),
+		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"), hostname: s("hostname"), hostDomain: s("host-domain"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
 		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsClear: b("stats-clear"), scanAddr: s("scan"), pingAddr: s("ping"), lookupAddr: s("lookup"), cacheFlush: s("cache-flush"), traceAddr: s("traceroute"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
@@ -410,7 +410,7 @@ func (f *cliFlags) run(sock string) bool {
 		var r struct {
 			Message string `json:"message"`
 		}
-		decode(op(sock, "host.rename", map[string]string{"hostname": *f.hostname}), &r)
+		decode(op(sock, "host.rename", map[string]string{"hostname": *f.hostname, "host_domain": *f.hostDomain}), &r)
 		fmt.Println(r.Message)
 	// ── pause the whole node ──
 	case *f.nodePause || *f.nodeResume:

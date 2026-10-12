@@ -94,7 +94,7 @@ the web GUI):
                    --server-stats ADDR --name DOMAIN [--type A]   (one monitored domain on that server)
                    --gateway-stats GROUP [--stats-range 1h|1d|7d]  (one gateway: client latency, errors, traffic, cache, availability)
                    --node-pause | --node-resume | --node-status   (this whole node stops/starts serving)
-                   --hostname NAME   (rename this host: its operating-system name and its /etc/hosts entry)
+                   --hostname NAME [--host-domain DOMAIN]   (rename this host: its operating-system name and its /etc/hosts entry; with a domain also register NAME.DOMAIN in DNS and remove the old name)
                    --canvas-move server  --group N --server ADDR --to N   (its place in the row, 1 = leftmost; the drag in the drawing)
                    --canvas-move domain  --group N --server ADDR --name DOMAIN --to N   (its place under the server, 1 = top)
                    --canvas-move anycast --group N --address ADDR --to N   (its place in the list, 1 = top)
