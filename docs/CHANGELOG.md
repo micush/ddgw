@@ -1,5 +1,16 @@
 # Changelog
 
+## [v370] - 2026-10-12 — The primary role never goes to a paused node
+
+### Fixed
+- Pausing several nodes in turn: pausing the primary handed the role to the best replica without asking whether it was paused, so with A and B paused one after the other the role went back to the paused one. A paused node is now out of service for the hand-over (pause, restart, shut down, scheduled power actions and updates) and for automatic failover: it is never picked, and a paused node does not promote itself. When every other node is paused or down the role stays where it is. The cluster view carries `node_paused` for each node.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new paused cases in `TestPickSuccessor`, `TestPickFailover`, and a three-node `TestPausingThePrimaryHandsItOver`: replica paused, primary paused with one node left, last node paused), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- On a live cluster or in a browser.
+
 ## [v369] - 2026-10-12 — Pausing the primary hands the role over; controller mark fix
 
 ### Added

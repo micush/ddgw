@@ -32,12 +32,12 @@ func failoverEnabled(mode string, members int) bool {
 	return members >= 3
 }
 
-// pickFailover chooses the replica that takes over when the primary is gone: reachable (this node counts), not installing an
+// pickFailover chooses the replica that takes over when the primary is gone: reachable (this node counts), not paused, not installing an
 // update or with one failed; the newest shared settings, then the newest version, then the lowest address.  "" when none.
 func pickFailover(peers []PeerView, primaryAddr string) string {
 	var c []PeerView
 	for _, p := range peers {
-		if p.Addr == primaryAddr || p.IsPrimary || !p.Reachable || p.Updating || p.UpdateFailed != "" {
+		if p.Addr == primaryAddr || p.IsPrimary || !p.Reachable || p.NodePaused || p.Updating || p.UpdateFailed != "" {
 			continue
 		}
 		c = append(c, p)

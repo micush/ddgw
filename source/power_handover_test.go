@@ -42,32 +42,54 @@ func TestScheduledPowerHandsOverThePrimary(t *testing.T) {
 	}
 }
 
-// Pausing the primary node hands the primary role over; pausing a replica leaves it where it is; resuming never moves it.
+// Pausing the primary node hands the primary role over, to a node that is in service; pausing a replica leaves it where it
+// is; resuming never moves it.  With every other node paused the role stays put (never back to a paused node).
 func TestPausingThePrimaryHandsItOver(t *testing.T) {
-	a, b := newTNode(t, "A"), newTNode(t, "B")
+	a, b, c := newTNode(t, "A"), newTNode(t, "B"), newTNode(t, "C")
 	b.join(a)
-	for i := 0; i < 3; i++ {
-		a.sync()
-		b.sync()
+	c.join(a)
+	paused := map[*tnode]*bool{}
+	for _, n := range []*tnode{a, b, c} {
+		v := new(bool)
+		paused[n] = v
+		n.mg.pausedFn = func() bool { return *v }
+		n.mg.othersFn = func() int { return 1 }
 	}
-	a.mg.othersFn, b.mg.othersFn = func() int { return 1 }, func() int { return 1 }
-	role := func(n *tnode) string { return string(n.mg.cl.node.Snapshot().Role) }
-	if _, err := b.mg.NodePause(true, "test"); err != nil {
+	settle := func() {
+		for i := 0; i < 3; i++ {
+			a.sync()
+			b.sync()
+			c.sync()
+		}
+	}
+	pause := func(n *tnode) {
+		t.Helper()
+		if _, err := n.mg.NodePause(true, "test"); err != nil {
+			t.Fatal(err)
+		}
+		*paused[n] = true
+		settle()
+	}
+	role := func(n *tnode) Role { return n.mg.cl.node.Snapshot().Role }
+	settle()
+	pause(b)
+	if role(a) != RolePrimary {
+		t.Fatalf("pausing a replica moved the role")
+	}
+	pause(a) // B is paused: only C is in service
+	if role(c) != RolePrimary || role(a) != RoleReplica {
+		t.Fatalf("the role must go to C, the node in service: A %s, B %s, C %s", role(a), role(b), role(c))
+	}
+	pause(c) // everyone else is paused: nowhere to go, so it stays
+	if role(c) != RolePrimary || role(a) == RolePrimary || role(b) == RolePrimary {
+		t.Fatalf("the role moved to a paused node: A %s, B %s, C %s", role(a), role(b), role(c))
+	}
+	if _, err := c.mg.NodePause(false, "test"); err != nil {
 		t.Fatal(err)
 	}
-	if role(a) != string(RolePrimary) {
-		t.Fatalf("pausing a replica moved the role: A %s, B %s", role(a), role(b))
-	}
-	if _, err := a.mg.NodePause(true, "test"); err != nil {
-		t.Fatal(err)
-	}
-	if role(a) != string(RoleReplica) || role(b) != string(RolePrimary) {
-		t.Fatalf("pausing the primary did not hand over: A %s, B %s", role(a), role(b))
-	}
-	if _, err := a.mg.NodePause(false, "test"); err != nil {
-		t.Fatal(err)
-	}
-	if role(b) != string(RolePrimary) {
-		t.Fatalf("resuming moved the role back: B %s", role(b))
+	*paused[c] = false
+	settle()
+	if role(c) != RolePrimary {
+		t.Fatalf("resuming moved the role: C %s", role(c))
 	}
 }

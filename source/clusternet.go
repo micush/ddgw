@@ -1419,7 +1419,8 @@ type PeerView struct {
 	SourceVersion string `json:"source_version"`
 	Updating      bool   `json:"updating"`
 	UpdateFailed  string `json:"update_failed,omitempty"`
-	SoakSec       int    `json:"soak_sec,omitempty"` // seconds left of the canary soak (0: not soaking)
+	NodePaused    bool   `json:"node_paused,omitempty"` // out of service (Operate ▸ Node): never given the primary role
+	SoakSec       int    `json:"soak_sec,omitempty"`    // seconds left of the canary soak (0: not soaking)
 	// Restarting: not answering, but it was installing an update when it was last seen (a few minutes ago at most): it is
 	// restarting into the new version, which is not the same as being down
 	Restarting bool      `json:"restarting,omitempty"`
@@ -1472,6 +1473,7 @@ func (c *Cluster) View() ClusterView {
 		Role: snap.Role, Epoch: snap.Epoch, IsPrimary: snap.Role == RolePrimary, Version: version(),
 		SourceVersion: c.mg.upd.SourceVersion(), Updating: c.mg.upd.Busy(), UpdateFailed: c.mg.upd.FailedFor(),
 		SharedRev: snap.SharedRev, LastSeen: time.Now(), Hostname: selfHost(), IPs: selfIPs, GwIPs: selfGw,
+		NodePaused: c.mg.pausedFn != nil && c.mg.pausedFn(),
 	})
 	for _, p := range snap.Peers {
 		pv := PeerView{Addr: p.Addr, NodeID: p.NodeID, Fingerprint: p.Fp, IsPrimary: p.Addr == snap.PrimaryAddr}
@@ -1481,7 +1483,7 @@ func (c *Cluster) View() ClusterView {
 			m := pi.Msg
 			pv.Role, pv.Epoch, pv.Version, pv.SourceVersion = m.Role, m.Epoch, m.Version, m.SourceVersion
 			pv.Updating, pv.UpdateFailed, pv.SharedRev = m.Updating, m.UpdateFailed, m.SharedRev
-			pv.Hostname = m.Hostname
+			pv.Hostname, pv.NodePaused = m.Hostname, m.NodePaused
 			pv.IPs, pv.GwIPs = addrList(m.Addrs), m.GwIPs
 		}
 		v.Peers = append(v.Peers, pv)

@@ -8,12 +8,12 @@ import (
 
 // pickSuccessor chooses the member that should take the primary role from a node that is about to go away on purpose: the
 // reachable replica with the newest shared settings (the highest revision), one that is not itself installing an update or
-// failed one; the same version as this node first, then the lowest address, so the choice is the same every time.
+// failed one, and not a paused node (it is out of service); the same version as this node first, then the lowest address, so the choice is the same every time.
 // "" when there is none.
 func pickSuccessor(peers []PeerView, myVersion string) string {
 	var c []PeerView
 	for _, p := range peers {
-		if p.Self || !p.Reachable || p.Updating || p.UpdateFailed != "" || p.IsPrimary {
+		if p.Self || !p.Reachable || p.NodePaused || p.Updating || p.UpdateFailed != "" || p.IsPrimary {
 			continue
 		}
 		c = append(c, p)

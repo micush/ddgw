@@ -963,6 +963,13 @@ func TestPickSuccessor(t *testing.T) {
 	if got != "10.0.0.5" {
 		t.Fatalf("skipping unavailable members: %q", got)
 	}
+	// a paused node is out of service: it never gets the role, even with the newest settings
+	if got := pickSuccessor([]PeerView{self, pv("10.0.0.2", 9, "5", func(p *PeerView) { p.NodePaused = true }), pv("10.0.0.3", 3, "5")}, "5"); got != "10.0.0.3" {
+		t.Fatalf("a paused node was picked: %q", got)
+	}
+	if got := pickSuccessor([]PeerView{self, pv("10.0.0.2", 9, "5", func(p *PeerView) { p.NodePaused = true })}, "5"); got != "" {
+		t.Fatalf("only a paused node left: %q", got)
+	}
 	// a tie goes to the same version, then the lowest address
 	if got := pickSuccessor([]PeerView{self, pv("10.0.0.2", 9, "4"), pv("10.0.0.3", 9, "5"), pv("10.0.0.4", 9, "5")}, "5"); got != "10.0.0.3" {
 		t.Fatalf("tie: %q", got)

@@ -44,6 +44,9 @@ func TestPickFailover(t *testing.T) {
 	if got := pickFailover([]PeerView{prim, pv("10.0.0.3", 9, "5"), pv("10.0.0.2", 9, "5")}, "10.0.0.1"); got != "10.0.0.2" {
 		t.Fatalf("lowest address on a tie: %q", got)
 	}
+	if got := pickFailover([]PeerView{prim, pv("10.0.0.2", 9, "5", func(p *PeerView) { p.NodePaused = true }), pv("10.0.0.3", 3, "5")}, "10.0.0.1"); got != "10.0.0.3" {
+		t.Fatalf("a paused member was picked: %q", got)
+	}
 	if got := pickFailover([]PeerView{prim, pv("10.0.0.2", 9, "5", func(p *PeerView) { p.Updating = true })}, "10.0.0.1"); got != "" {
 		t.Fatalf("an updating member was picked: %q", got)
 	}
