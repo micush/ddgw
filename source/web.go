@@ -799,6 +799,7 @@ func (w *WebServer) handlePutConfig(rw http.ResponseWriter, r *http.Request, s *
 	}
 
 	infof("web: %q saving %s (from %s)", s.user, w.confPath, clientIP(r))
+	w.mg.keepNodePaused(dc) // the page's copy may be older than the last pause or resume of this node
 	if err := w.mg.PutConfig(dc, s.user, req.Note); err != nil {
 		jsonError(rw, http.StatusInternalServerError, err.Error())
 		return

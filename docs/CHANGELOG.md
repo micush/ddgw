@@ -1,5 +1,16 @@
 # Changelog
 
+## [v374] - 2026-10-12 — Fix: pausing a DNS server could pause the whole node
+
+### Fixed
+- Pausing or resuming a server (or anything else) in the Topology saved the page's copy of the whole configuration, which still carried the node's pause flag from before the node was last paused or resumed from its menu. The save then paused the node (the node's history read "Groups changed … servers paused …; Node: paused — this node is out of service", and the gateways on it stopped). Whether the node is paused is now changed only by pausing or resuming the node (node menu, Operate ▸ Node, `--node-pause`/`--node-resume`): a saved configuration from the web page, an import and a restored version all keep the node's live state. Found in a troubleshooting archive of a real node.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestConfigSaveNeverChangesTheNodePause`: a stale paused copy does not pause, a stale unpaused copy does not resume, an import does not resume; the test fails without the fix), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser. A node that was paused by this bug stays paused until it is resumed from its menu.
+
 ## [v373] - 2026-10-12 — New gateways start with the HMAC key "dnsdir"
 
 ### Changed

@@ -573,3 +573,44 @@ func TestSessionsSurviveARestart(t *testing.T) {
 		t.Fatal("no sessions left but the file is still there")
 	}
 }
+
+// Whether the whole node is paused is changed only by pausing or resuming the node.  A page saves the copy of the config it
+// fetched earlier: with a stale node_paused in it, pausing a server must not pause the node (the log of a real node showed
+// "Groups changed … ; Node: paused" for exactly that), and a stale false must not resume a paused node.
+func TestConfigSaveNeverChangesTheNodePause(t *testing.T) {
+	e := newWebEnv(t)
+	e.login("alice", "pw")
+	b, _ := json.Marshal(defaultGroup())
+	var g map[string]any
+	_ = json.Unmarshal(b, &g)
+	cfg := map[string]any{"groups": []any{g}}
+	if r := e.do("PUT", "/api/config", map[string]any{"config": cfg}, withAuth(e, true)); r.code != 200 {
+		t.Fatalf("save: %d %v", r.code, r.body)
+	}
+	paused := func() bool { st, _ := e.mg.NodePauseStatus(); return st.Paused }
+	cfg["node_paused"] = true // a copy from before the node was resumed
+	if r := e.do("PUT", "/api/config", map[string]any{"config": cfg}, withAuth(e, true)); r.code != 200 {
+		t.Fatalf("save: %d %v", r.code, r.body)
+	}
+	if paused() {
+		t.Fatal("a saved configuration paused the node")
+	}
+	e.mg.othersFn = func() int { return 1 }
+	if _, err := e.mg.NodePause(true, "test"); err != nil {
+		t.Fatal(err)
+	}
+	delete(cfg, "node_paused") // a copy from before the node was paused
+	if r := e.do("PUT", "/api/config", map[string]any{"config": cfg}, withAuth(e, true)); r.code != 200 {
+		t.Fatalf("save: %d %v", r.code, r.body)
+	}
+	if !paused() {
+		t.Fatal("a saved configuration resumed the node")
+	}
+	raw, _ := json.Marshal(map[string]any{"groups": []any{g}})
+	if _, err := e.mg.ConfigImport(raw, "test", "import"); err != nil {
+		t.Fatal(err)
+	}
+	if !paused() {
+		t.Fatal("an import resumed the node")
+	}
+}

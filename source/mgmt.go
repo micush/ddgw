@@ -128,6 +128,15 @@ func (m *Mgmt) OnConfigLoaded(dc *DaemonConfig) {
 	m.cl.OnConfig(dc)
 }
 
+// keepNodePaused makes dc carry this node's live pause flag.  Whether the whole node is paused is changed only by
+// NodePause (Operate ▸ Node, the node menu, --node-pause): a configuration that comes from outside (a page that fetched it
+// earlier, an import, an old version) must not flip it, or pausing a server could pause the node, as an old copy said.
+func (m *Mgmt) keepNodePaused(dc *DaemonConfig) {
+	if cur, _, err := m.LiveConfig(); err == nil {
+		dc.NodePaused = cur.NodePaused
+	}
+}
+
 // PutConfig validates dc and makes it the node's configuration.  On a replica,
 // a change to the shared settings is first accepted by the primary.
 func (m *Mgmt) PutConfig(dc *DaemonConfig, actor, note string) error {
@@ -198,6 +207,7 @@ func (m *Mgmt) ConfigImport(raw []byte, actor, note string) (*DaemonConfig, erro
 	if err := json.Unmarshal(raw, dc); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	m.keepNodePaused(dc)
 	if err := m.PutConfig(dc, actor, note); err != nil {
 		return nil, err
 	}
@@ -258,6 +268,7 @@ func (m *Mgmt) VersionRestore(id, by string) (*DaemonConfig, error) {
 			m.versions.Record(raw, by, "before restoring version "+id, false)
 		}
 	}
+	m.keepNodePaused(dc)
 	if err := m.PutConfig(dc, by, "restored version "+meta.ID); err != nil {
 		return nil, err
 	}
