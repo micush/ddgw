@@ -1,5 +1,16 @@
 # Changelog
 
+## [v363] - 2026-10-11 — Scheduled restarts and shut downs hand the primary role over too
+
+### Added
+- A restart or shut down scheduled with `--power restart|shutdown` + `in`/`at` (Operate ▸ Power), or with `shutdown(8)` directly, hands the primary role to the best replica (same choice as in v361) in the minute before it fires. The schedule is read from systemd's own file every sync, so it works after a restart of ddgw and for schedules made outside ddgw; a cancelled schedule (`shutdown -c`) leaves the role where it is. Nothing happens on a replica or when no member can take the role.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles. New test: an hour away does nothing, no schedule does nothing, 30 s away hands over (two real in-process nodes, a fake schedule file).
+
+### Not verified
+- A real scheduled shutdown on live daemons; the one-minute lead is fixed.
+
 ## [v362] - 2026-10-11 — Automatic failover of the primary
 
 ### Added

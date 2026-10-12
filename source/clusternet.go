@@ -1227,6 +1227,7 @@ func (c *Cluster) Run(ctx context.Context) {
 		c.sampleGwUp()
 		c.sampleAnycastUp()
 		c.failoverTick()
+		c.mg.powerHandoverTick()
 		c.mg.updateTick(sctx)
 		cancel()
 		c.logStrain()

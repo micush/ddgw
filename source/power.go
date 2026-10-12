@@ -12,7 +12,7 @@ import (
 // Power: restart or shut down the host this daemon runs on, now or later.
 //
 // The scheduling itself is left to shutdown(8) (and so survives a restart of
-// ddgw and can be cancelled with shutdown -c).  An immediate action waits a
+// ddgw and can be cancelled with shutdown -c; a minute before it fires the primary role is handed over, see powerHandoverTick).  An immediate action waits a
 // moment so the HTTP/CLI reply gets out first.  Unlike the parapet page this
 // came from, an immediate action asks the same question an update does — would
 // a gateway lose its last serving member? — and refuses unless forced.
@@ -50,7 +50,25 @@ var (
 	powerScheduledFile = "/run/systemd/shutdown/scheduled"
 	// powerDelay is how long an immediate action waits so the reply gets out.
 	powerDelay = 800 * time.Millisecond
+	// powerHandoverLead is how long before a scheduled restart or shut down the primary role is handed to another member.
+	powerHandoverLead = time.Minute
 )
+
+// powerHandoverTick hands the primary role over shortly before a scheduled restart or shut down (one made here with --power in/at,
+// or with shutdown(8) directly: the schedule is read from systemd's file, so it also survives a restart of ddgw).  Nothing
+// happens on a replica, or when no member can take the role.
+func (m *Mgmt) powerHandoverTick() {
+	p := m.PowerStatus()
+	if !p.Scheduled {
+		return
+	}
+	at, err := time.Parse(time.RFC3339, p.At)
+	if err != nil || time.Until(at) > powerHandoverLead {
+		return
+	}
+	verb := map[string]string{"restart": "restart", "shutdown": "shut down"}[p.Action]
+	m.handOver("scheduled power action", "the scheduled host "+verb)
+}
 
 func validHHMM(s string) bool {
 	if len(s) != 5 || s[2] != ':' {
