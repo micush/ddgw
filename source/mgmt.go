@@ -371,6 +371,7 @@ func (m *Mgmt) scheduleRestart(force bool) {
 	go func() {
 		time.Sleep(1500 * time.Millisecond) // let the HTTP/socket reply go out
 		waitUntilSafe(m.updateSafeToApply, force, restartRecheck, m.upd.SetWaiting)
+		m.handOver("update", "restarting into the update")
 		m.restartFn()
 	}()
 }

@@ -937,3 +937,60 @@ func TestLabelPausedAll(t *testing.T) {
 		t.Fatalf("a node that is also over the load limit keeps its warning: %+v", nodes[6])
 	}
 }
+
+func TestPickSuccessor(t *testing.T) {
+	pv := func(addr string, rev uint64, ver string, mods ...func(*PeerView)) PeerView {
+		p := PeerView{Addr: addr, Reachable: true, SharedRev: rev, Version: ver}
+		for _, m := range mods {
+			m(&p)
+		}
+		return p
+	}
+	self := pv("10.0.0.1", 9, "5", func(p *PeerView) { p.Self = true; p.IsPrimary = true })
+	if got := pickSuccessor([]PeerView{self}, "5"); got != "" {
+		t.Fatalf("alone: %q", got)
+	}
+	// the newest settings win
+	if got := pickSuccessor([]PeerView{self, pv("10.0.0.2", 7, "5"), pv("10.0.0.3", 9, "5")}, "5"); got != "10.0.0.3" {
+		t.Fatalf("newest revision: %q", got)
+	}
+	// down, updating or failed members are skipped
+	got := pickSuccessor([]PeerView{self,
+		pv("10.0.0.2", 9, "5", func(p *PeerView) { p.Reachable = false }),
+		pv("10.0.0.3", 9, "5", func(p *PeerView) { p.Updating = true }),
+		pv("10.0.0.4", 9, "5", func(p *PeerView) { p.UpdateFailed = "x" }),
+		pv("10.0.0.5", 3, "5")}, "5")
+	if got != "10.0.0.5" {
+		t.Fatalf("skipping unavailable members: %q", got)
+	}
+	// a tie goes to the same version, then the lowest address
+	if got := pickSuccessor([]PeerView{self, pv("10.0.0.2", 9, "4"), pv("10.0.0.3", 9, "5"), pv("10.0.0.4", 9, "5")}, "5"); got != "10.0.0.3" {
+		t.Fatalf("tie: %q", got)
+	}
+}
+
+// A primary that is shut down on purpose gives the role to a replica and comes back as a replica.
+func TestHandOverPrimary(t *testing.T) {
+	a, b := newTNode(t, "A"), newTNode(t, "B")
+	b.join(a)
+	for i := 0; i < 2; i++ {
+		a.sync()
+		b.sync()
+	}
+	before := a.mg.cl.node.Snapshot()
+	if before.Role != RolePrimary {
+		t.Fatalf("A is %s", before.Role)
+	}
+	to, err := a.mg.cl.HandOverPrimary("test", "a test")
+	if err != nil || to != b.addr {
+		t.Fatalf("hand over: %q %v", to, err)
+	}
+	as, bs := a.mg.cl.node.Snapshot(), b.mg.cl.node.Snapshot()
+	if as.Role != RoleReplica || bs.Role != RolePrimary || as.Epoch != before.Epoch+1 || bs.Epoch != as.Epoch || as.PrimaryAddr != b.addr {
+		t.Fatalf("after: A %s epoch %d primary %s; B %s epoch %d", as.Role, as.Epoch, as.PrimaryAddr, bs.Role, bs.Epoch)
+	}
+	// the new primary has no one to give it to except the old one, which is a replica now: handing over again from B works the same
+	if to, _ := a.mg.cl.HandOverPrimary("test", "again"); to != "" {
+		t.Fatalf("a replica handed something over: %q", to)
+	}
+}

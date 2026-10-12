@@ -732,9 +732,9 @@ Nodes authenticate each other with a pinned per-node identity certificate (SHA-2
 
 ### Promotion, removal and the epoch
 
-**Promotion is explicit.** If the primary is gone for good, run `ddgw --cluster-promote` on the replica you want; the others follow. Nothing promotes itself, so a network split cannot silently create two primaries, and a primary that sees a higher epoch becomes a replica.
+**Promotion is explicit.** If the primary is gone for good, run `ddgw --cluster-promote` on the replica you want; the others follow. Nothing promotes itself after a failure, so a network split cannot silently create two primaries, and a primary that sees a higher epoch becomes a replica.
 
-The **epoch** (shown on the Cluster page) is the counter that says which node is the primary. It starts at 1 and goes up by one on every `--cluster-promote`, and at no other time. Members follow the primary with the highest epoch; a returning old primary at a lower epoch is ignored, and two different claims at the same epoch are refused.
+The **epoch** (shown on the Cluster page) is the counter that says which node is the primary. It starts at 1 and goes up by one on every `--cluster-promote` and on every planned hand-over, and at no other time. **Planned hand-over:** when the primary is restarted or shut down from the GUI or `--power now`, or restarts to install an update, it first gives the role to the reachable replica with the newest shared settings (one that is not itself updating); that node is the primary from then on, and the old one comes back as a replica. If no replica can take it, nothing changes. A primary that goes offline unexpectedly keeps the role until you promote another node. Scheduled power actions (`--power in`/`at`) do not hand over. Members follow the primary with the highest epoch; a returning old primary at a lower epoch is ignored, and two different claims at the same epoch are refused.
 
 To manage members: `--cluster-remove ADDR` drops a member (it resets itself to a cluster of one when it next hears from the cluster), `--cluster-unremove` allows it back, `--cluster-leave` leaves from the node itself, and `--cluster-sync` syncs now.
 

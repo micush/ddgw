@@ -136,6 +136,9 @@ func (m *Mgmt) Power(r PowerReq, by string) (PowerResult, error) {
 		return PowerResult{}, errors.New("when must be now, in or at")
 	}
 	warnf("power: host %s %s requested by %s", verb, human, by)
+	if spec == "now" {
+		m.handOver(by, "host "+verb)
+	}
 	go func() {
 		time.Sleep(powerDelay)
 		if spec == "now" && powerStart("systemctl", sysctl) == nil {

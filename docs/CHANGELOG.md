@@ -1,5 +1,19 @@
 # Changelog
 
+## [v361] - 2026-10-11 — The primary role moves before a planned restart, shut down or update
+
+### Added
+- When the primary is restarted or shut down now (Operate ▸ Power, the node menu, `ddgw --power restart|shutdown`) or restarts into an update, it first hands the primary role to the reachable replica with the newest shared settings (not one that is updating or whose update failed; the same version first, then the lowest address). The successor is asked first and the epoch goes up by one; if it does not take the role nothing changes. The old primary comes back as a replica and the role stays where it landed. With no eligible replica, or on a replica, nothing changes. A primary that goes offline unexpectedly keeps the role until you promote another node (unchanged).
+
+### Not changed
+- Scheduled power actions (`--power in` / `at`) do not hand over: the host does the action later, outside the daemon.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles. New tests: `TestPickSuccessor` and `TestHandOverPrimary` (two real in-process nodes: the roles and epoch after the hand-over, and that a replica hands nothing over).
+
+### Not verified
+- A real restart, shut down or update of the primary on live daemons (CLAUDE.md asks for it); an update's hand-over before the re-exec.
+
 ## [v360] - 2026-10-11 — Topology role marks at the star's height; node menu groups
 
 ### Changed
