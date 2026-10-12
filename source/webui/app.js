@@ -847,7 +847,10 @@
           onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
-          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : "") + (isController(n) ? " •" : "") + (n.role === "primary" ? " ▴" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
+          (() => {   // the name, then the star (this node), and the dot (controller) and triangle (primary) raised to the star's height
+            const hi = (isController(n) ? " •" : "") + (n.role === "primary" ? " ▴" : ""), nm = fitPx(n.name, NW - 2 * NSL - 16 - (n.self ? 9 : 0) - hi.length * 6, "600 13px system-ui, sans-serif");
+            return sv("text", { x: mid, y: y + 17, "text-anchor": "middle", class: "t1" }, nm + (n.self ? " *" : ""), hi ? sv("tspan", { dy: "-4" }, hi) : null);
+          })(),
           label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2"),
           n.soak_sec > 0 ? sv("text", { x: x + NSL + 8, y: y + 17, class: "t1 soak" }, sv("title", {}, soakTip(n.soak_sec)), "⏳") : null));
       });
@@ -1379,7 +1382,7 @@
       const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
       const rm = memberItem(n).map(([, f]) => ["Remove", f]);
       openMenu(e, n.self || n.reachable
-        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ["Primary", () => makePrimary(n), "", null, n.role === "primary" ? "Already the primary" : ""], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
+        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ["Primary", () => makePrimary(n), "", null, n.role === "primary" ? "Already the primary" : ""], "-", ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
         : [["Cluster page", () => selectTab("cluster")], ...rm]);
     };
     // right-click on a shape: select it, then show what can be done with it

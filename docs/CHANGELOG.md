@@ -1,5 +1,17 @@
 # Changelog
 
+## [v360] - 2026-10-11 — Topology role marks at the star's height; node menu groups
+
+### Changed
+- Node menu: a separator now sits between Primary and Open (Statistics | Controller, Primary | Open, Pause / Resume, Restart | Shut down, Remove).
+- On a node's shape the dot (controller) and triangle (primary) are raised 4 px so they sit level with the star (*) instead of on the baseline. They are drawn as a separate raised piece of the name's text; the name is shortened first when the shape is narrow.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`. The raised text looked right in a headless Chromium test page (not on the real Topology).
+
+### Not verified
+- On the real Topology drawing.
+
 ## [v359] - 2026-10-11 — Version bump
 
 ### Changed
