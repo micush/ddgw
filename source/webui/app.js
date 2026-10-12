@@ -847,7 +847,7 @@
           onkeydown: (e) => { if (e.key === "Enter") nodeMenu(n)(e); } },
           sv("title", {}, nodeTip(n)),
           sv("polygon", { points: `${x + NSL},${y} ${x + NW},${y} ${x + NW - NSL},${y + AH} ${x},${y + AH}` }),
-          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
+          label(mid, y + 17, fitPx(n.name + (n.self ? " *" : "") + (isController(n) ? " ●" : "") + (n.role === "primary" ? " ▲" : ""), NW - 2 * NSL - 16, "600 13px system-ui, sans-serif"), "t1"),
           label(mid, y + 32, fitPx(n.label, NW - 2 * NSL - 12, "400 11px system-ui, sans-serif"), "t2"),
           n.soak_sec > 0 ? sv("text", { x: x + NSL + 8, y: y + 17, class: "t1 soak" }, sv("title", {}, soakTip(n.soak_sec)), "⏳") : null));
       });
@@ -1265,6 +1265,7 @@
       "Address: " + n.addr + (n.hostname && n.hostname !== n.name ? " (host " + n.hostname + ")" : ""),
       ...(n.addrs || []).filter((i) => (i.v4 || []).length + (i.v6 || []).length).map((i) => i.name + ": " + [...(i.v4 || []), ...(i.v6 || [])].join(", ")),   // Ethernet interfaces: IPv4 and IPv6 GUA
       "Role: " + (n.role === "primary" ? "primary" : "replica"),
+      isController(n) ? "Gateway controller" : "",
       n.self ? "Last seen: just now" : n.reachable ? "Last seen: " + (n.last_seen ? spanText(Date.now() / 1000 - n.last_seen) + " ago" : "just now") : "",
       n.uptime_sec > 0 ? "Up: " + spanText(n.uptime_sec) : "",
       n.version ? "Version: " + n.version + (n.version_differs ? " (not the same as this node's)" : "") : "",
@@ -1360,12 +1361,14 @@
     };
     // Make controller is greyed on the node that already holds the role for every gateway that has serving nodes.  A member is
     // matched to a node by its address on the gateway's subnet (this node's own member is marked local).
-    const controllerWhy = (n) => {
+    const isController = (n, all) => {  // all: holds the role for every gateway (else: for at least one)
       const ips = new Set((n.addrs || []).flatMap((i) => [...(i.v4 || []), ...(i.v6 || [])].map((x) => String(x).split("/")[0])));
       const withMembers = groups().map((g) => statusOf(g).members || []).filter((ms) => ms.length);
       const isIt = (m) => (m.local ? n.self : ips.has(m.ip));
-      return withMembers.length && withMembers.every((ms) => ms.some((m) => m.agc && isIt(m))) ? "Already the controller" : "";
+      const has = (ms) => ms.some((m) => m.agc && isIt(m));
+      return withMembers.length > 0 && (all ? withMembers.every(has) : withMembers.some(has));
     };
+    const controllerWhy = (n) => (isController(n, true) ? "Already the controller" : "");
     const nodeMenu = (n) => (e) => {
       const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
       const rm = memberItem(n).map(([, f]) => ["Remove", f]);

@@ -1,5 +1,16 @@
 # Changelog
 
+## [v358] - 2026-10-11 — Controller dot and primary triangle on the Topology
+
+### Added
+- A node's shape on the Topology shows a dot (●) after its name while it is the gateway controller (the AGC of at least one gateway), next to the star (*) that marks this node: a node that is both shows both. The cluster's primary has a triangle (▲); a node with every role shows star, dot and triangle, in that order. The node's tooltip says "Gateway controller". Which node holds the role is read from the gateway's serving members, matched to nodes by their addresses.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser or a real cluster (the address match for other nodes is the part most likely to need a fix).
+
 ## [v357] - 2026-10-11 — Nothing is written above the Topology drawing
 
 ### Removed
