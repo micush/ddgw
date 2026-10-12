@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Host statistics for Monitor → Host: CPU, memory, disk and network use of the machine ddgw runs
+// Host statistics for Monitor → Host: CPU, memory, disk and network use of the machine dnsdir runs
 // on, sampled every hostSampleEvery and kept in memory for hostRetain (30 days), per minute, like
 // the query statistics.  persist.go saves them with the query statistics.  Everything comes from /proc and
 // /sys (and statfs), so there is nothing to install.
@@ -224,10 +224,10 @@ func (h *HostStats) fsIndex(mount string) int {
 	return -1
 }
 
-// netCounted says whether an interface adds to the network totals: not loopback, not ddgw's own
+// netCounted says whether an interface adds to the network totals: not loopback, not dnsdir's own
 // virtual-MAC links, not container or hypervisor plumbing (their traffic is counted on the real link).
 func netCounted(name string) bool {
-	for _, p := range []string{"lo", "ddgw", "veth", "docker", "br-", "virbr", "cni", "flannel", "cali", "kube", "tun", "tap"} {
+	for _, p := range []string{"lo", "dnsdir", "veth", "docker", "br-", "virbr", "cni", "flannel", "cali", "kube", "tun", "tap"} {
 		if name == p || (p != "lo" && strings.HasPrefix(name, p)) {
 			return false
 		}

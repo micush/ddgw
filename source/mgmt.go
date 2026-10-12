@@ -63,7 +63,7 @@ type Mgmt struct {
 
 // defaultStateDir holds history, certificates, cluster identity and update
 // files.  It is root-only.
-const defaultStateDir = "/var/lib/ddgw"
+const defaultStateDir = "/var/lib/dnsdir"
 
 // NewMgmt builds the management layer for the given initial config.
 func NewMgmt(confPath, stateDir string, dc *DaemonConfig) (*Mgmt, error) {
@@ -342,7 +342,7 @@ func (m *Mgmt) UpdateApplyLocal(by string, force bool) (string, error) {
 		return "", errors.New("an update is already in progress on this node")
 	}
 	if ok, why := m.updateSafeToApply(); !ok && !force {
-		return "", fmt.Errorf("not safe to update this node now: %s (to update anyway: ddgw --update-apply --yes, or confirm in the GUI)", why)
+		return "", fmt.Errorf("not safe to update this node now: %s (to update anyway: dnsdir --update-apply --yes, or confirm in the GUI)", why)
 	}
 	go func() {
 		if _, err := m.upd.Apply(context.Background(), m.cl.selfAddrForEvents(), by); err != nil {
@@ -365,7 +365,7 @@ var restartRecheck = 2 * time.Second
 // failed.  force skips the wait (the operator confirmed it).
 func (m *Mgmt) scheduleRestart(force bool) {
 	if m.restartFn == nil {
-		warnf("update: installed, but this process cannot restart itself — restart ddgw to run the new version")
+		warnf("update: installed, but this process cannot restart itself — restart dnsdir to run the new version")
 		return
 	}
 	go func() {

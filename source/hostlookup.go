@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Name and address lookups for the "add DNS server" form (and `ddgw --dns-lookup`): given an IP address, its reverse
+// Name and address lookups for the "add DNS server" form (and `dnsdir --dns-lookup`): given an IP address, its reverse
 // (PTR) name; given a host name, its address.  They are asked of this node's own resolver, once, when the person fills
 // in one of the two fields, and nothing is stored: the form puts the answer in the other field, where it can be
 // changed freely.

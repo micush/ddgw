@@ -53,7 +53,7 @@ New here? `QUICKSTART.md` at the top of the tarball walks through the install, t
 To install the latest tagged release straight from GitHub (this also upgrades an existing install):
 
 ```
-curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/micush/dnsdir/HEAD/get.sh | sudo bash
 ```
 
 `get.sh` finds the newest GitHub release (or, if there is none, the highest `v<number>` tag), downloads that tag's source archive and runs its `install.sh`. Everything after `--` goes to `install.sh`, except `--version TAG`, which installs that tag instead. It needs `curl` or `wget`, and `tar`. To publish a version, push a tag named `v<VERSION>` (for example `v223`).
@@ -61,9 +61,9 @@ curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
 ### From a tarball
 
 ```
-tar xzf ddgw_vN.tgz && cd ddgw
+tar xzf dnsdir_vN.tgz && cd dnsdir
 sudo ./install.sh [--add-user NAME] [--no-start] [--no-keep-go] [--force] [-y] [--dry-run]
-sudo ddgw-uninstall [--purge] [--remove-group] [-y]
+sudo dnsdir-uninstall [--purge] [--remove-group] [-y]
 ```
 
 Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjaro, and derivatives that list one of them in `ID_LIKE`.
@@ -73,32 +73,34 @@ Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjar
 The installer builds AnyName from the source tree, installing only the prerequisites that are missing:
 
 - **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) **nmap**, **ping** and **mtr** (for Scan, Ping and Traceroute on the Statistics page).
-- **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/ddgw/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
+- **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/dnsdir/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
 - FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and AnyName leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap, ping or mtr install is a warning too; only Scan, Ping and Traceroute need them.
 
-It then installs `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw` systemd unit.
+It then installs `/usr/local/sbin/dnsdir`, the state directory `/var/lib/dnsdir` (mode 0700), the `dnsdir` group, `/etc/pam.d/dnsdir`, a NetworkManager drop-in that leaves the `dnsdir*` macvlan interfaces alone, and the `dnsdir` systemd unit.
 
 ### Upgrading and uninstalling
 
-If AnyName is already installed, the script upgrades it. The config, certificate, group members and an existing PAM file are kept, and the old binary is saved as `/usr/local/share/ddgw/ddgw.prev`. If the new version does not start, the old one is restored. Installing the same version is a no-op, `--force` reinstalls, and a downgrade needs `--force`.
+If AnyName is already installed, the script upgrades it. The config, certificate, group members and an existing PAM file are kept, and the old binary is saved as `/usr/local/share/dnsdir/dnsdir.prev`. If the new version does not start, the old one is restored. Installing the same version is a no-op, `--force` reinstalls, and a downgrade needs `--force`.
 
-The user who ran the installer (the one behind `sudo`) is added to the `ddgw` group so they can log in to the GUI; `--add-user NAME` adds others. Uninstalling keeps `/var/lib/ddgw` (the config, the certificate, config history and the cluster identity) unless you give `--purge`.
+An install from before v367 (when this was called ddgw) is moved to the new names: service, binary, `/var/lib/dnsdir`, `/etc/pam.d/dnsdir`, and the `ddgw` group is renamed to `dnsdir` so its members keep their access. A node that is updated from the GUI or the command line does the same on its first start, and nodes with the old and the new name work together in one cluster. The cluster protocol itself keeps its old identifiers.
+
+The user who ran the installer (the one behind `sudo`) is added to the `dnsdir` group so they can log in to the GUI; `--add-user NAME` adds others. Uninstalling keeps `/var/lib/dnsdir` (the config, the certificate, config history and the cluster identity) unless you give `--purge`.
 
 ### Where things live
 
-Everything AnyName keeps is in `/var/lib/ddgw` (mode 0700): `ddgw.conf`, the GUI certificate, `versions/`, the cluster identity and the update data. The control socket is `/run/ddgw/ddgw.sock`.
+Everything AnyName keeps is in `/var/lib/dnsdir` (mode 0700): `dnsdir.conf`, the GUI certificate, `versions/`, the cluster identity and the update data. The control socket is `/run/dnsdir/dnsdir.sock`.
 
 ### Fresh start or cloned VM
 
-If `ddgw.conf` does not exist, the daemon creates it with the defaults and **no gateways**, then starts. You draw the gateways on the Topology page.
+If `dnsdir.conf` does not exist, the daemon creates it with the defaults and **no gateways**, then starts. You draw the gateways on the Topology page.
 
-To reset a node, stop the service, run `rm -rf /var/lib/ddgw/*` and start it again. The web certificate and the cluster identity are regenerated too, so give a cloned machine its own address first.
+To reset a node, stop the service, run `rm -rf /var/lib/dnsdir/*` and start it again. The web certificate and the cluster identity are regenerated too, so give a cloned machine its own address first.
 
 ## The DNS proxy
 
-Every gateway serves DNS on its VIP; there is no switch for it. Give the gateway its upstream servers, either by drawing them on the Topology page or with a top-level `dns` block (see `source/ddgw.conf.example`). Every node that is AGC or AFN for that group answers DNS on the VIP (UDP and TCP). The VIP's load balancing spreads clients across the nodes, and each node forwards to the best upstream. A gateway with no servers yet answers SERVFAIL and shows amber.
+Every gateway serves DNS on its VIP; there is no switch for it. Give the gateway its upstream servers, either by drawing them on the Topology page or with a top-level `dns` block (see `source/dnsdir.conf.example`). Every node that is AGC or AFN for that group answers DNS on the VIP (UDP and TCP). The VIP's load balancing spreads clients across the nodes, and each node forwards to the best upstream. A gateway with no servers yet answers SERVFAIL and shows amber.
 
-The DNS page (Monitor ▸ DNS, or `ddgw --show-dns`) shows the ranking, health, latency and counters of every pool.
+The DNS page (Monitor ▸ DNS, or `dnsdir --show-dns`) shows the ranking, health, latency and counters of every pool.
 
 ![The DNS page: each server's rank, health, latency and share of the queries, with the answer cache above](snaps/dns.png)
 
@@ -167,7 +169,7 @@ A pool answers a repeated query from memory for as long as the records' TTLs all
 
 **Warm start.** A node that has just started (after a restart or an update; a node that joins later is warmed at its next start) asks a reachable cluster member for each gateway's most recently used answers, up to 20,000 and about 3 MB, with the age they have there so their TTLs go on counting down (`POST /cluster/cache`, signed like every cluster call). It runs in the background a few seconds after start-up, never delays serving, tries again a few times while the cluster comes up, and then stops. Entries are taken only if the peer's cache settings are the same, never replace or push out an answer this node already has, and nothing is replicated afterwards. A node that nobody answers starts empty.
 
-A cache hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries (`ddgw --show-dns`: the `answer cache:` line). The cache does not serve stale answers: with every upstream down, a name whose TTL has run out gets SERVFAIL.
+A cache hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries (`dnsdir --show-dns`: the `answer cache:` line). The cache does not serve stale answers: with every upstream down, a name whose TTL has run out gets SERVFAIL.
 
 ### Sort list
 
@@ -284,7 +286,7 @@ An UPDATE message sent to the VIP (from `nsupdate`, a DHCP server, or Windows an
 - An update is never forwarded to the VIP itself.
 - A primary that filters by source address sees the AnyName node, not the client. Use TSIG keys, which travel with the message.
 
-Every update is logged (INFO when the primary accepted it, WARN otherwise) and counted in Statistics as the type **UPDATE** under the zone name, with its own **Updates** tile (the count and how many failed) and a chart line. Updates are counted in the total but not again under No Error or Refused. Click the **Updates** tile to see only updates (chart, who sent them, which zones), and the last 200 under **Recent dynamic updates** (also `ddgw --dns-updates`): time, client, zone, what it changed (`add host1.example.com A 192.0.2.7`, `delete old.example.com A`), the primary and its answer.
+Every update is logged (INFO when the primary accepted it, WARN otherwise) and counted in Statistics as the type **UPDATE** under the zone name, with its own **Updates** tile (the count and how many failed) and a chart line. Updates are counted in the total but not again under No Error or Refused. Click the **Updates** tile to see only updates (chart, who sent them, which zones), and the last 200 under **Recent dynamic updates** (also `dnsdir --dns-updates`): time, client, zone, what it changed (`add host1.example.com A 192.0.2.7`, `delete old.example.com A`), the primary and its answer.
 
 Switch it off with `"forward_updates": false` (Configure ▸ DNS proxy ▸ Listeners); updates are then answered REFUSED. Note that anyone who can reach the VIP can send updates to your primary this way, so the primary's own authorisation (TSIG, ACL) is what decides.
 
@@ -302,7 +304,7 @@ The drawing has three kinds of shape:
 - a **square** under it for every DNS server it forwards to, and
 - a **trapezoid** under each square for every domain that server has to answer.
 
-**The drawing is the gateway, not the selected node.** When the node picked in the Node menu does not serve the gateway (another subnet, removed from it, or paused there), it has no servers probed of its own. The circle, servers, domains and anycast addresses are then those of a node that does serve it, asked over the cluster channel, and the circle's tooltip says which ("As NODE sees it"). The node shapes still say what each node, this one included, is doing. If no node serves the gateway, or the one asked does not answer within a few seconds, you see the selected node's own view. `ddgw --canvas` is always the node's own view.
+**The drawing is the gateway, not the selected node.** When the node picked in the Node menu does not serve the gateway (another subnet, removed from it, or paused there), it has no servers probed of its own. The circle, servers, domains and anycast addresses are then those of a node that does serve it, asked over the cluster channel, and the circle's tooltip says which ("As NODE sees it"). The node shapes still say what each node, this one included, is doing. If no node serves the gateway, or the one asked does not answer within a few seconds, you see the selected node's own view. `dnsdir --canvas` is always the node's own view.
 
 ![Right-clicking the gateway circle opens its menu](snaps/topology-menu.png)
 
@@ -322,7 +324,7 @@ The circle shows just the address (no prefix length) and sizes itself to fit eve
 
 A **domain** is a health test, not a route. AnyName sends every client query to the fastest healthy server; a server counts as healthy while fewer than `down_percent` (100%, every one) of *its* domains fail.
 
-Every tooltip ends with the item's **uptime**: how long the gateway, anycast address, server or domain has been online since it last came back, or how long it has been down, and how many failures it has had ("Online for 1m 1s - 0 failures"). Green and yellow count as online; paused and grey items show nothing. A sampler in the daemon notes the changes every 2 seconds (no browser needed), in memory only, so the counting, failures included, restarts with ddgw. `ddgw --canvas` prints the same in brackets.
+Every tooltip ends with the item's **uptime**: how long the gateway, anycast address, server or domain has been online since it last came back, or how long it has been down, and how many failures it has had ("Online for 1m 1s - 0 failures"). Green and yellow count as online; paused and grey items show nothing. A sampler in the daemon notes the changes every 2 seconds (no browser needed), in memory only, so the counting, failures included, restarts with dnsdir. `dnsdir --canvas` prints the same in brackets.
 
 ### The cluster nodes
 
@@ -342,13 +344,13 @@ Hover a node for its address, role, last-seen time, version, whether it has caug
 - *Remove from this gateway* (see below),
 - *Host statistics*, and, for another node, *Open this node* (the same as the Node menu, top right).
 
-For an unreachable node the menu offers *Cluster page*. Nodes are read-only here; add or remove them on the Cluster page. `ddgw --canvas` lists them as `/_/ cluster node` lines.
+For an unreachable node the menu offers *Cluster page*. Nodes are read-only here; add or remove them on the Cluster page. `dnsdir --canvas` lists them as `/_/ cluster node` lines.
 
 ### Which nodes serve a gateway
 
 Every node that is in the cluster serves every gateway unless it is removed from it. To change that, right-click a node ▸ *Remove*, or right-click the gateway ▸ *Add node* ▸ the node. On the command line, use `--canvas-del node --group N --node NODE` and `--canvas-add node --group N --node NODE`, where NODE is the node's address or host name.
 
-The removal is **shared** (`excluded_nodes` in the gateway's block, a list of node IDs, absent while empty so older versions still read the file). Any node can change it, every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives up the address, and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any node (`ddgw --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node* on the gateway lists the removed nodes by name.
+The removal is **shared** (`excluded_nodes` in the gateway's block, a list of node IDs, absent while empty so older versions still read the file). Any node can change it, every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives up the address, and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any node (`dnsdir --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node* on the gateway lists the removed nodes by name.
 
 A node that **joins** the cluster later is left out of every gateway when it joins (the primary adds it to each gateway's `excluded_nodes` before the joiner's first sync), so joining changes nothing about who answers. Put it where it should serve with right-click the gateway ▸ *Add node*. Gateways created afterwards are served by every node. The last node serving a gateway cannot be removed; pause the gateway on all nodes instead. This is not the same as *Pause ▸ This node*, which is kept on that node alone, for maintenance.
 
@@ -356,13 +358,13 @@ A node that **joins** the cluster later is left out of every gateway when it joi
 
 The anycast addresses (right of the circle) and the cluster nodes (left) stand four to a column, and the fifth starts a new column further out, and so on. When a four-row side would have a line to a server run through a box, both sides use three rows instead. Anycast addresses can be dragged to any slot, in any column. The drawing grows wider as columns are added (pan with the mouse).
 
-**Zoom, pan and arrange.** Dragging the empty background moves around the drawing in any direction. The mouse wheel over the drawing zooms it (20% to 300%, around the pointer); the zoom is kept across refreshes and reset when you pick another gateway, and a double-click on the empty drawing fits it to the window again. **Drag** a server left or right (it takes its domains along), a domain up or down, or an anycast address up or down to put it in another place. A dashed outline shows where it will land, letting go saves the new order, Escape puts it back, and a click without moving still just selects. The order is only how things are drawn and probed (servers are still chosen by speed). CLI: `ddgw --canvas-move server|domain|anycast … --to N`.
+**Zoom, pan and arrange.** Dragging the empty background moves around the drawing in any direction. The mouse wheel over the drawing zooms it (20% to 300%, around the pointer); the zoom is kept across refreshes and reset when you pick another gateway, and a double-click on the empty drawing fits it to the window again. **Drag** a server left or right (it takes its domains along), a domain up or down, or an anycast address up or down to put it in another place. A dashed outline shows where it will land, letting go saves the new order, Escape puts it back, and a click without moving still just selects. The order is only how things are drawn and probed (servers are still chosen by speed). CLI: `dnsdir --canvas-move server|domain|anycast … --to N`.
 
 ### Editing the drawing
 
 **Right-click** anything. The circle offers *Statistics*, *Edit*, *Add DNS server*, *Add anycast address*, *Add node*, *Pause* and *Delete*. A square offers *Statistics*, *Edit*, *Add domain*, *Pause* and *Delete*. A trapezoid offers *Statistics*, *Edit*, *Pause* and *Delete*. The empty drawing offers *New gateway* and *Add DNS server*. Add and Edit open a popup form; deleting something with things under it asks first and says how many. Left-click selects a shape, and the Delete key deletes it. There is no button row; the right-click menu is the one place for these actions.
 
-**Add DNS server** looks things up for you. Fill in the IP address and the **Name** is filled in from its reverse (PTR) record; fill in a host name as the Name and the address is looked up (IPv4 preferred). The lookup is made once by the node being configured, when you leave the field, and only fills a field that is empty or still holds an earlier lookup. A name or address you typed yourself is never overwritten, and you can change a looked-up name to anything (it is saved as typed). CLI: `ddgw --dns-lookup IP|NAME`. A domain name too long for its trapezoid is cut with "…" so it stays well inside the shape, and so is a long server address or name inside its box (hover for the full text).
+**Add DNS server** looks things up for you. Fill in the IP address and the **Name** is filled in from its reverse (PTR) record; fill in a host name as the Name and the address is looked up (IPv4 preferred). The lookup is made once by the node being configured, when you leave the field, and only fills a field that is empty or still holds an earlier lookup. A name or address you typed yourself is never overwritten, and you can change a looked-up name to anything (it is saved as typed). CLI: `dnsdir --dns-lookup IP|NAME`. A domain name too long for its trapezoid is cut with "…" so it stays well inside the shape, and so is a long server address or name inside its box (hover for the full text).
 
 **Deleting.** Deleting a trapezoid removes just that test, deleting a square removes the server and all its domains, and deleting a circle removes the gateway and everything under it (you are asked first, with counts). Deleting the last circle leaves a configuration with no gateways: `"groups": []`.
 
@@ -385,7 +387,7 @@ CLI: `--canvas-pause|--canvas-resume gateway|server|domain|anycast --group 1 [--
 
 ### Statistics from the drawing
 
-Right-click a square, a trapezoid or the circle ▸ *Statistics* for graphs over the last hour, day or week (per minute for the hour, per 5 minutes for a day, per 30 minutes for a week). CLI: `ddgw --server-stats ADDR [--stats-range 1h|1d|7d]`, `ddgw --server-stats ADDR --name DOMAIN [--type T]`, `ddgw --gateway-stats GROUP`.
+Right-click a square, a trapezoid or the circle ▸ *Statistics* for graphs over the last hour, day or week (per minute for the hour, per 5 minutes for a day, per 30 minutes for a week). CLI: `dnsdir --server-stats ADDR [--stats-range 1h|1d|7d]`, `dnsdir --server-stats ADDR --name DOMAIN [--type T]`, `dnsdir --gateway-stats GROUP`.
 
 ![Statistics for a gateway: answer time, errors, availability and queries per second](snaps/gateway-stats.png)
 
@@ -405,26 +407,26 @@ A server's and a domain's graphs are the picked node's own view. A gateway's gra
 
 ### The same thing on the command line
 
-`ddgw --canvas` prints the same tree and the same colours, and the other commands change it:
+`dnsdir --canvas` prints the same tree and the same colours, and the other commands change it:
 
 ```
-ddgw --canvas                                  # tree with status
-ddgw --canvas-add gateway --vip 10.0.0.53/24 --interface eth0 \
+dnsdir --canvas                                  # tree with status
+dnsdir --canvas-add gateway --vip 10.0.0.53/24 --interface eth0 \
      --server 8.8.8.8 --name google.com        # circle + first square + first trapezoid
-ddgw --canvas-add domain --group 1 --server 8.8.8.8 --name microsoft.com
-ddgw --canvas-add server --group 1 --server 8.8.4.4 --name apple.com
-ddgw --canvas-del domain --group 1 --server 8.8.4.4 --name apple.com
-ddgw --canvas-add fallback --group 1 --server 1.1.1.1   # used only while every server is down
-ddgw --canvas-set gateway --group 1 --vip6 2001:db8::53/64 --ecs on   # add IPv6, turn on ECS
-ddgw --test-vmac --group 1                                  # do virtual MACs reach this node? (changes nothing)
-ddgw --canvas-set gateway --group 1 --real-macs on          # no virtual MACs, on every node (off undoes it)
-ddgw --canvas-set gateway --group 1 --label "Office DNS"   # a name instead of the address (--label - clears)
-ddgw --canvas-set gateway --group 1 --spread-band 200      # this gateway's own load balancing (also --spread on|off, --down-percent,
+dnsdir --canvas-add domain --group 1 --server 8.8.8.8 --name microsoft.com
+dnsdir --canvas-add server --group 1 --server 8.8.4.4 --name apple.com
+dnsdir --canvas-del domain --group 1 --server 8.8.4.4 --name apple.com
+dnsdir --canvas-add fallback --group 1 --server 1.1.1.1   # used only while every server is down
+dnsdir --canvas-set gateway --group 1 --vip6 2001:db8::53/64 --ecs on   # add IPv6, turn on ECS
+dnsdir --test-vmac --group 1                                  # do virtual MACs reach this node? (changes nothing)
+dnsdir --canvas-set gateway --group 1 --real-macs on          # no virtual MACs, on every node (off undoes it)
+dnsdir --canvas-set gateway --group 1 --label "Office DNS"   # a name instead of the address (--label - clears)
+dnsdir --canvas-set gateway --group 1 --spread-band 200      # this gateway's own load balancing (also --spread on|off, --down-percent,
                                                            #   --fail-threshold, --max-attempts, --latency-alpha); --lb settings goes back
-ddgw --canvas-set server --group 1 --server 10.0.0.53 --label dns-a   # a server's name (also on --canvas-add server; - clears)
-ddgw --canvas-add anycast --group 1 --address 203.0.113.53   # an anycast address (--canvas-del anycast removes one)
-ddgw --canvas-set gateway --group 1 --anycast A,B             # or replace the whole list (--anycast - clears)
-ddgw --canvas-del gateway --group 1 --yes
+dnsdir --canvas-set server --group 1 --server 10.0.0.53 --label dns-a   # a server's name (also on --canvas-add server; - clears)
+dnsdir --canvas-add anycast --group 1 --address 203.0.113.53   # an anycast address (--canvas-del anycast removes one)
+dnsdir --canvas-set gateway --group 1 --anycast A,B             # or replace the whole list (--anycast - clears)
+dnsdir --canvas-del gateway --group 1 --yes
 ```
 
 Each CLI step is saved at once, so a new server is added together with its first domain. In the file it is a `dns` block inside the group:
@@ -455,7 +457,7 @@ AnyName can drive FRR on a node so the anycast addresses are announced without a
 
 ![Configure ▸ Anycast: the local AS, router ID, timers and the neighbor table](snaps/anycast.png)
 
-**Turning BGP on.** BGP runs on a node while a local AS number is set. That makes AnyName the owner of the node's `/etc/frr/frr.conf`: it renders the whole file (BGP only), sets `bgpd=yes` and `bfdd=yes` in `/etc/frr/daemons`, and reloads FRR (`systemctl reload frr`; a restart when a daemon is switched on or off). FRR must be installed with its `frr-pythontools` package (the installer adds both). Without it a reload cannot work, so AnyName restarts FRR for every change and the sessions drop briefly. An `frr.conf` that AnyName did not write is saved once as `frr.conf.pre-ddgw` before it is replaced. Do not run this on a host whose FRR is managed by something else; they would overwrite each other.
+**Turning BGP on.** BGP runs on a node while a local AS number is set. That makes AnyName the owner of the node's `/etc/frr/frr.conf`: it renders the whole file (BGP only), sets `bgpd=yes` and `bfdd=yes` in `/etc/frr/daemons`, and reloads FRR (`systemctl reload frr`; a restart when a daemon is switched on or off). FRR must be installed with its `frr-pythontools` package (the installer adds both). Without it a reload cannot work, so AnyName restarts FRR for every change and the sessions drop briefly. An `frr.conf` that AnyName did not write is saved once as `frr.conf.pre-dnsdir` before it is replaced. Do not run this on a host whose FRR is managed by something else; they would overwrite each other.
 
 **Turning it off.** Clearing the AS number removes the BGP section and leaves FRR running (the router ID can only be set while an AS is set, and clearing the AS clears it). **Operate ▸ Anycast** does the same without forgetting any setting (*Disable BGP*), and can shut down a single neighbor (`neighbor … shutdown`; the neighbor stays configured). A node that never set an AS never has its FRR files touched.
 
@@ -467,17 +469,17 @@ AnyName can drive FRR on a node so the anycast addresses are announced without a
 - A neighbor can have a **multihop** limit (2–255, eBGP only) for a peer that is not on a connected subnet. FRR then runs BFD to it in multihop mode, so the peer must be set up the same way.
 
 ```
-ddgw --bgp                                                    # settings, neighbor and BFD state, announced addresses
-ddgw --asn 64512 --router-id 192.0.2.10        # --router-id needs an AS, set now or earlier
-ddgw --keepalive 3 --hold 9
-ddgw --as-prepend on                  # the local AS three more times on every announcement (off undoes it)
-ddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core
-ddgw --bgp-neighbor-add 2001:db8::1 --remote-as 64500
-ddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2   # peer not on a connected subnet (e.g. AWS VPC Route Server)
-ddgw --bgp-neighbor-del 192.0.2.1
-ddgw --asn off                                 # also clears the router id
-ddgw --bgp-disable                             # stop BGP on this node, settings kept (--bgp-enable)
-ddgw --bgp-neighbor-disable 192.0.2.1          # shut one neighbor down, kept (--bgp-neighbor-enable)
+dnsdir --bgp                                                    # settings, neighbor and BFD state, announced addresses
+dnsdir --asn 64512 --router-id 192.0.2.10        # --router-id needs an AS, set now or earlier
+dnsdir --keepalive 3 --hold 9
+dnsdir --as-prepend on                  # the local AS three more times on every announcement (off undoes it)
+dnsdir --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core
+dnsdir --bgp-neighbor-add 2001:db8::1 --remote-as 64500
+dnsdir --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2   # peer not on a connected subnet (e.g. AWS VPC Route Server)
+dnsdir --bgp-neighbor-del 192.0.2.1
+dnsdir --asn off                                 # also clears the router id
+dnsdir --bgp-disable                             # stop BGP on this node, settings kept (--bgp-enable)
+dnsdir --bgp-neighbor-disable 192.0.2.1          # shut one neighbor down, kept (--bgp-neighbor-enable)
 ```
 
 **What the node does, and no more.**
@@ -493,18 +495,18 @@ ddgw --bgp-neighbor-disable 192.0.2.1          # shut one neighbor down, kept (-
 The generated config looks like this:
 
 ```
-ip prefix-list DDGW-ANYCAST-V4 seq 10 permit 203.0.113.53/32
-route-map DDGW-OUT-V4 permit 10
- match ip address prefix-list DDGW-ANYCAST-V4
-route-map DDGW-IN deny 10
+ip prefix-list DNSDIR-ANYCAST-V4 seq 10 permit 203.0.113.53/32
+route-map DNSDIR-OUT-V4 permit 10
+ match ip address prefix-list DNSDIR-ANYCAST-V4
+route-map DNSDIR-IN deny 10
 router bgp 64512
  no bgp default ipv4-unicast
  neighbor 192.0.2.1 remote-as 64500
  address-family ipv4 unicast
   network 203.0.113.53/32
   neighbor 192.0.2.1 activate
-  neighbor 192.0.2.1 route-map DDGW-IN in
-  neighbor 192.0.2.1 route-map DDGW-OUT-V4 out
+  neighbor 192.0.2.1 route-map DNSDIR-IN in
+  neighbor 192.0.2.1 route-map DNSDIR-OUT-V4 out
  exit-address-family
 ```
 
@@ -563,15 +565,15 @@ Saving applies immediately, with the same hot reload as editing the file.
 
 ### Signing in
 
-**Login** is backed by PAM: a user may log in if PAM accepts their password *and* they are a member of the `ddgw` group.
+**Login** is backed by PAM: a user may log in if PAM accepts their password *and* they are a member of the `dnsdir` group.
 
 ```
-groupadd ddgw
-usermod -aG ddgw alice
-cp contrib/pam.d/ddgw.debian /etc/pam.d/ddgw     # or ddgw.rhel
+groupadd dnsdir
+usermod -aG dnsdir alice
+cp contrib/pam.d/dnsdir.debian /etc/pam.d/dnsdir     # or dnsdir.rhel
 ```
 
-Without `/etc/pam.d/ddgw`, PAM falls back to its `other` policy, which usually denies everything. `root` is not special: add it to the group if you want it to log in. Removing a user from the group ends their session within a minute.
+Without `/etc/pam.d/dnsdir`, PAM falls back to its `other` policy, which usually denies everything. `root` is not special: add it to the group if you want it to log in. Removing a user from the group ends their session within a minute.
 
 The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubuntu) or `pam-devel` (RHEL) installed. A build without cgo, including any cross-compile, has no PAM, so it **refuses to start the GUI** rather than serve it unauthenticated. The daemon and the command line work normally.
 
@@ -612,7 +614,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 
 ### TLS and security notes
 
-**TLS.** With no certificate configured, a self-signed one is generated next to the config file (`ddgw-web.crt` and `.key`, key mode 0600) and renewed at start-up when it is within 30 days of expiry. Your browser will warn until you install a real certificate; see [The GUI certificate](#the-gui-certificate).
+**TLS.** With no certificate configured, a self-signed one is generated next to the config file (`dnsdir-web.crt` and `.key`, key mode 0600) and renewed at start-up when it is within 30 days of expiry. Your browser will warn until you install a real certificate; see [The GUI certificate](#the-gui-certificate).
 
 **Exposure.** The GUI can reconfigure a daemon that runs as root and listens on all interfaces by default. Bind it to a management address (`"listen": "10.0.0.5:53853"`) or firewall the port.
 
@@ -626,20 +628,20 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 
 ## Users
 
-Configure ▸ Users (or `ddgw --users`) manages the accounts that may sign in to the GUI: the members of the GUI group (`ddgw`, or `web.group`). They are ordinary operating-system accounts on the node, managed with `useradd`, `usermod`, `userdel` and `chpasswd`, so PAM stays the single place passwords are checked. A new account has no shell and no home directory and exists only to sign in. Each account can have an expiry date, and the operating system refuses it from that day.
+Configure ▸ Users (or `dnsdir --users`) manages the accounts that may sign in to the GUI: the members of the GUI group (`dnsdir`, or `web.group`). They are ordinary operating-system accounts on the node, managed with `useradd`, `usermod`, `userdel` and `chpasswd`, so PAM stays the single place passwords are checked. A new account has no shell and no home directory and exists only to sign in. Each account can have an expiry date, and the operating system refuses it from that day.
 
 The accounts are listed on the left. Pick one to change it on the right: type a new password and/or change the expiry date and press **Save** (leave the date blank and the account never expires). **Disable** takes the account out of the group while keeping it, and **Delete** removes it. **+ New** and **Add an existing account…** open their forms in the same place.
 
 ![Configure ▸ Users: the accounts on the left, the chosen account on the right](snaps/users.png)
 
 ```
-ddgw --users
-ddgw --user-add alice --expires 2027-06-30     # asks for the password
-ddgw --user-passwd alice
-ddgw --user-expiry alice --expires never
-ddgw --user-grant bob                          # an account that already exists joins the group
-ddgw --user-revoke bob                         # leaves the group; the account is kept
-ddgw --user-del alice
+dnsdir --users
+dnsdir --user-add alice --expires 2027-06-30     # asks for the password
+dnsdir --user-passwd alice
+dnsdir --user-expiry alice --expires never
+dnsdir --user-grant bob                          # an account that already exists joins the group
+dnsdir --user-revoke bob                         # leaves the group; the account is kept
+dnsdir --user-del alice
 ```
 
 **The rules.**
@@ -657,18 +659,18 @@ ddgw --user-del alice
 
 ## Config history
 
-Every change to the configuration, whether from the GUI, the CLI, a cluster sync or a hand edit of the file, is stored as a version in `/var/lib/ddgw/versions` (one JSON file each; the newest 200 are kept). A version records when it happened, who made it (`alice`, `cli:root`, `file edit`, `cluster sync` and so on) and a one-line summary such as `DNS settings: probe_interval_ms 5000 → 7777`. Secrets (keys) never appear in summaries, and identical saves are not recorded again.
+Every change to the configuration, whether from the GUI, the CLI, a cluster sync or a hand edit of the file, is stored as a version in `/var/lib/dnsdir/versions` (one JSON file each; the newest 200 are kept). A version records when it happened, who made it (`alice`, `cli:root`, `file edit`, `cluster sync` and so on) and a one-line summary such as `DNS settings: probe_interval_ms 5000 → 7777`. Secrets (keys) never appear in summaries, and identical saves are not recorded again.
 
 ![Configure ▸ History: every saved version, with who made it and what changed](snaps/history.png)
 
 ```
-ddgw --versions                         # list
-ddgw --version-diff 1790827200558       # that version → live config
-ddgw --version-diff A..B                # two versions
-ddgw --version-snapshot --note "before the VIP change"
-ddgw --version-restore 1790827179815    # applies it; the live config is saved first
-ddgw --version-export [ID] > ddgw.conf  # download
-ddgw --config-import ddgw.conf          # validate and apply a file
+dnsdir --versions                         # list
+dnsdir --version-diff 1790827200558       # that version → live config
+dnsdir --version-diff A..B                # two versions
+dnsdir --version-snapshot --note "before the VIP change"
+dnsdir --version-restore 1790827179815    # applies it; the live config is saved first
+dnsdir --version-export [ID] > dnsdir.conf  # download
+dnsdir --config-import dnsdir.conf          # validate and apply a file
 ```
 
 In the GUI, the History tab lets you view a version, diff it against the live config, the previous version or two selected ones, restore, download, upload and snapshot. A snapshot note can only be given on the command line. In a cluster, restoring changes the shared part through the primary, like any other edit.
@@ -680,11 +682,11 @@ In the GUI, the History tab lets you view a version, diff it against the live co
 ![Configure ▸ Web GUI: the certificate card, the listen address and the login limits](snaps/web-certificate.png)
 
 ```
-ddgw --tls-status
-ddgw --tls-csr --cn gw.example.com --san gw.example.com,10.0.0.5   # key stays on the node
-ddgw --tls-install --cert-file gw.pem --key-file gw.key             # key optional after a CSR
-ddgw --tls-revert                                                   # back to self-signed
-ddgw --tls-regenerate                                               # new self-signed
+dnsdir --tls-status
+dnsdir --tls-csr --cn gw.example.com --san gw.example.com,10.0.0.5   # key stays on the node
+dnsdir --tls-install --cert-file gw.pem --key-file gw.key             # key optional after a CSR
+dnsdir --tls-revert                                                   # back to self-signed
+dnsdir --tls-regenerate                                               # new self-signed
 ```
 
 An installed certificate is checked (chain order, key match, validity, server auth, names) and served from the next connection on, with no restart and no logout. The order of precedence is: files named in the config, then the installed certificate (or the one replicated from the cluster), then self-signed. The GUI warns when the certificate expires within 30 days. The primary's certificate is copied to every member, and reverting it on the primary reverts them all.
@@ -711,8 +713,8 @@ IP addresses are tried before names, and a name is looked up for at most 2 secon
 
 One node is the **primary** and the rest are **replicas**. A new node is the primary of a cluster of one. To join:
 
-1. On any member, run `ddgw --cluster-token`. It prints a join code (single use, valid for one hour).
-2. On the new node, run `ddgw --cluster-join 'ddgw-join-v1:…'`. In the GUI, use Cluster tab ▸ Create join code / Join.
+1. On any member, run `dnsdir --cluster-token`. It prints a join code (single use, valid for one hour).
+2. On the new node, run `dnsdir --cluster-join 'ddgw-join-v1:…'`. In the GUI, use Cluster tab ▸ Create join code / Join.
 
 Joining replaces the new node's *shared* settings with the cluster's, after saving a snapshot of what it had.
 
@@ -732,7 +734,7 @@ Nodes authenticate each other with a pinned per-node identity certificate (SHA-2
 
 ### Promotion, removal and the epoch
 
-**Promotion is explicit.** If the primary is gone for good, run `ddgw --cluster-promote` on the replica you want; the others follow. Nothing promotes itself after a failure, so a network split cannot silently create two primaries, and a primary that sees a higher epoch becomes a replica.
+**Promotion is explicit.** If the primary is gone for good, run `dnsdir --cluster-promote` on the replica you want; the others follow. Nothing promotes itself after a failure, so a network split cannot silently create two primaries, and a primary that sees a higher epoch becomes a replica.
 
 The **epoch** (shown on the Cluster page) is the counter that says which node is the primary. It starts at 1 and goes up by one on every `--cluster-promote` and on every planned hand-over, and at no other time. **Planned hand-over:** when the primary is restarted or shut down from the GUI or `--power now`, or restarts to install an update, it first gives the role to the reachable replica with the newest shared settings (one that is not itself updating); that node is the primary from then on, and the old one comes back as a replica. If no replica can take it, nothing changes. A primary that goes offline unexpectedly keeps the role until you promote another node or **automatic failover** does: when the primary has not answered for 5 minutes and a strict majority of the members (this one included) say so, the replica with the newest shared settings (then the newest version, then the lowest address) promotes itself and the others follow. `--cluster-failover auto|on|off` (Cluster page ▸ Failover) sets it for the whole cluster; auto is on from three members and off with two, where each side would see the other as down. A replica cut off from the others never has a majority, so it never promotes. The old primary comes back as a replica and shared-settings edits it took while cut off are overwritten. A restart or shut down scheduled with `--power ... in`/`at` (or with `shutdown` directly) hands the role over in the last minute before it fires; cancelling it before then leaves the role alone. Members follow the primary with the highest epoch; a returning old primary at a lower epoch is ignored, and two different claims at the same epoch are refused.
 
@@ -756,7 +758,7 @@ The Monitor section of the GUI has pages for statistics, the host, packet captur
 
 ### Statistics
 
-Monitor ▸ Statistics (or `ddgw --stats`) shows what the DNS proxy has answered:
+Monitor ▸ Statistics (or `dnsdir --stats`) shows what the DNS proxy has answered:
 
 - the total number of queries and how they ended (No Error, Server Failure, NX Domain, Refused, and dynamic DNS Updates), and the **QPS** (queries per second in the last finished interval, with the peak of the range under it; click it to draw the rate in the chart),
 - the number of different clients,
@@ -797,14 +799,14 @@ Top lists are collected in 10-minute steps for the last day and in hourly steps 
 **In a cluster.** Each node counts its own queries and has its own file; nothing is shared. Pick a member in the top-bar Node menu to see its statistics, or **Cluster** (its last entry, on Statistics and Host only) to see every node's numbers added together (`--all-nodes` on the command line).
 
 ```
-ddgw --stats
-ddgw --stats --stats-rcode nxdomain
-ddgw --stats --stats-client 192.0.2.7        (what that client asked for)
-ddgw --stats --stats-domain example.com      (who asked for it)
-ddgw --whois example.com                     (registration data, from its registry)
-ddgw --stats --stats-range 1d
-ddgw --stats --stats-range 30d
-ddgw --stats --all-nodes                     (every cluster node's numbers added together)
+dnsdir --stats
+dnsdir --stats --stats-rcode nxdomain
+dnsdir --stats --stats-client 192.0.2.7        (what that client asked for)
+dnsdir --stats --stats-domain example.com      (who asked for it)
+dnsdir --whois example.com                     (registration data, from its registry)
+dnsdir --stats --stats-range 1d
+dnsdir --stats --stats-range 30d
+dnsdir --stats --all-nodes                     (every cluster node's numbers added together)
 ```
 
 ### The memory guard
@@ -815,33 +817,33 @@ At **85%** or more it drops the **oldest data**. Each round removes the oldest t
 
 Newer data always outlives older data, and the newest hour of statistics and host history is never dropped. That hour is tiny, and a machine short of memory for another reason should not lose its recent history too. Cuts are made at whole hours so the top lists and the counters go together.
 
-Each time it drops something, the log says so (WARN), and the Statistics and Host pages (and `ddgw --stats`, `ddgw --host`) show a line with the count, the time and what was dropped. What is dropped is gone from the saved file too after the next save.
+Each time it drops something, the log says so (WARN), and the Statistics and Host pages (and `dnsdir --stats`, `dnsdir --host`) show a line with the count, the time and what was dropped. What is dropped is gone from the saved file too after the next save.
 
-The limit is the environment variable `DDGW_MEMORY_LIMIT_PERCENT` of the daemon (1–99, default 85); there is no other switch. It can only drop what AnyName itself holds (at most about 100 MB), so if something else fills the machine, it will keep trimming and cannot fix that.
+The limit is the environment variable `DNSDIR_MEMORY_LIMIT_PERCENT` of the daemon (1–99, default 85); there is no other switch. It can only drop what AnyName itself holds (at most about 100 MB), so if something else fills the machine, it will keep trimming and cannot fix that.
 
 ### Host
 
-Monitor ▸ Host (or `ddgw --host`) shows how busy the machine is: **CPU**, **memory**, **disk** (space used per filesystem, and how busy the busiest disk was) and **network** (traffic in and out of the real interfaces, and each link's use when the driver reports its speed).
+Monitor ▸ Host (or `dnsdir --host`) shows how busy the machine is: **CPU**, **memory**, **disk** (space used per filesystem, and how busy the busiest disk was) and **network** (traffic in and out of the real interfaces, and each link's use when the driver reports its speed).
 
 ![Monitor ▸ Host: CPU, memory, disk and network over time, with the filesystems and interfaces below](snaps/host.png)
 
-The daemon samples `/proc` and `/sys` every 10 seconds and keeps per-minute averages and peaks for **30 days** (about 4 MB in memory; saved with the Statistics file, so a restart keeps them). Tiles show the latest sample, four charts follow the range (Last Hour, Day, Week, Month or custom; hover for value and peak), and two tables list the filesystems and network interfaces. In a cluster the Node menu picks the member. Loopback, ddgw's own `ddgwN.M` links, container and bridge plumbing, and bridge or bond ports are left out of the network totals.
+The daemon samples `/proc` and `/sys` every 10 seconds and keeps per-minute averages and peaks for **30 days** (about 4 MB in memory; saved with the Statistics file, so a restart keeps them). Tiles show the latest sample, four charts follow the range (Last Hour, Day, Week, Month or custom; hover for value and peak), and two tables list the filesystems and network interfaces. In a cluster the Node menu picks the member. Loopback, dnsdir's own `dnsdirN.M` links, container and bridge plumbing, and bridge or bond ports are left out of the network totals.
 
 ```
-ddgw --host
-ddgw --host --host-range 1d
-ddgw --host --all-nodes                      (the cluster as one machine)
+dnsdir --host
+dnsdir --host --host-range 1d
+dnsdir --host --all-nodes                      (the cluster as one machine)
 ```
 
 With **Cluster** chosen in the Node menu (or `--all-nodes`), the nodes are added together. Network rates, load averages, memory, swap, disk sizes and cores are summed; CPU is averaged over all the cores; memory and each filesystem are taken per byte of the whole; disk-busy is the mean. A peak is the busiest node's (the network's is the sum of the nodes' peaks, an upper bound). A node that cannot answer is named and left out.
 
 ### Capture
 
-Monitor ▸ Capture (or `ddgw --capture`) is a `tcpdump` on any node of the cluster, or on all of them at once. It only listens: nothing is sent and nothing is changed. It uses a raw socket (no libpcap), so it needs only the privileges the daemon already has, and it does nothing until you press Start.
+Monitor ▸ Capture (or `dnsdir --capture`) is a `tcpdump` on any node of the cluster, or on all of them at once. It only listens: nothing is sent and nothing is changed. It uses a raw socket (no libpcap), so it needs only the privileges the daemon already has, and it does nothing until you press Start.
 
 ![Monitor ▸ Capture: a live packet list with a filter, on one interface](snaps/capture.png)
 
-**One node** (the Node menu picks it). Choose an interface (a gateway's is marked; the virtual-MAC `ddgwN.M` interfaces are listed too), optionally a filter, and Start. The newest packets are listed live, one line each, with TCP flags, DNS names and answers and, for ARP and IPv6 neighbor discovery, the Ethernet addresses they were sent from and to, so a virtual MAC that is announced but not the one that answers shows at once. The buffer holds the newest 5000 packets or 32 MB. **Download .tgz** saves it as an archive with one `.pcap` in it, for Wireshark. A node has one capture of its own: starting another replaces it.
+**One node** (the Node menu picks it). Choose an interface (a gateway's is marked; the virtual-MAC `dnsdirN.M` interfaces are listed too), optionally a filter, and Start. The newest packets are listed live, one line each, with TCP flags, DNS names and answers and, for ARP and IPv6 neighbor discovery, the Ethernet addresses they were sent from and to, so a virtual MAC that is announced but not the one that answers shows at once. The buffer holds the newest 5000 packets or 32 MB. **Download .tgz** saves it as an archive with one `.pcap` in it, for Wireshark. A node has one capture of its own: starting another replaces it.
 
 **Every node.** Choose **Cluster** in the Node menu, an interface (every node needs one of that name), a filter, and 5, 10, 30 or 60 seconds. All nodes capture at the same moment into a buffer of their own (so nobody's Capture page is disturbed) and keep their newest packets (about 4 MB each). **Download .tgz** gives one `.pcap` per node (this node's ends in `-this-node`), a `summary.txt`, and an `errors.txt` naming any node that could not capture and why (a node on a version without capture says so). One capture of this kind runs at a time. It is the way to see whether what one node sent is what another received.
 
@@ -856,38 +858,38 @@ Monitor ▸ Capture (or `ddgw --capture`) is a `tcpdump` on any node of the clus
 Addresses only, no names. A filter that is not understood is refused when the capture starts. The filter runs in the daemon, not in the kernel, so a very busy interface still costs the daemon every packet; keep captures short.
 
 ```
-ddgw --capture-interfaces
-ddgw --capture eth0 --capture-seconds 10 --capture-filter "host 10.20.0.205 and port 53"
-ddgw --capture eth0 --capture-file /tmp/eth0.pcap
-ddgw --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz
+dnsdir --capture-interfaces
+dnsdir --capture eth0 --capture-seconds 10 --capture-filter "host 10.20.0.205 and port 53"
+dnsdir --capture eth0 --capture-file /tmp/eth0.pcap
+dnsdir --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz
 ```
 
 Without `--capture-file` the packets are printed (the first 500); with `--all-nodes` a file is required. Every start is logged with the name of the user who made it.
 
 ### Log
 
-Monitor ▸ Log (or `ddgw --log`) shows the daemon's log and filters it by words (every word must appear), by level, by time range and by line count, with the matches marked. **Live** mode follows the newest line, and **Download** saves what is on screen. With the Node menu the page shows any member's log. `--log` without `--log-lines` prints the whole matching log.
+Monitor ▸ Log (or `dnsdir --log`) shows the daemon's log and filters it by words (every word must appear), by level, by time range and by line count, with the matches marked. **Live** mode follows the newest line, and **Download** saves what is on screen. With the Node menu the page shows any member's log. `--log` without `--log-lines` prints the whole matching log.
 
 ![Monitor ▸ Log: filtered by level and words, with the matches marked](snaps/log.png)
 
-The text is the same that goes to stderr (the system journal under systemd). AnyName also keeps it in `ddgw.log` in the state directory (`/var/lib/ddgw`, root-only), rotated at 2 MB with the two previous files kept, so it survives restarts and needs no journal access. Besides the usual events, it logs server up and down changes and each domain that starts or stops answering on a server, so one failing domain shows even while the server stays up.
+The text is the same that goes to stderr (the system journal under systemd). AnyName also keeps it in `dnsdir.log` in the state directory (`/var/lib/dnsdir`, root-only), rotated at 2 MB with the two previous files kept, so it survives restarts and needs no journal access. Besides the usual events, it logs server up and down changes and each domain that starts or stops answering on a server, so one failing domain shows even while the server stays up.
 
-**tshoot** (Monitor ▸ Log ▸ tshoot, or `ddgw --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed to find out why something does not work, from every node:
+**tshoot** (Monitor ▸ Log ▸ tshoot, or `dnsdir --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed to find out why something does not work, from every node:
 
 - the log (newest 20000 lines), the configuration and its versions;
 - cluster, gateway, DNS, BGP, anycast, virtual-MAC and update state, and host numbers;
 - addresses, links, routes, rules, neighbors, ARP, sockets, the ARP and routing sysctl settings, firewall rules, and FRR's BGP and BFD output;
 - service status, the journal and the kernel log tail;
 - 8 seconds of ARP and neighbor-discovery traffic per gateway interface (always; `--tshoot-capture` is still accepted and does nothing);
-- a dump of every goroutine of the daemon (`ddgw/goroutines.txt`: what it is busy with, for a node that is up but stuck). `kill -USR1 $(pidof ddgw)` writes the same dump to standard error (`journalctl -u ddgw`), for a daemon whose pages and cluster port do not answer.
+- a dump of every goroutine of the daemon (`dnsdir/goroutines.txt`: what it is busy with, for a node that is up but stuck). `kill -USR1 $(pidof dnsdir)` writes the same dump to standard error (`journalctl -u dnsdir`), for a daemon whose pages and cluster port do not answer.
 
 Passwords, the gateway key, tokens, join codes and private keys are removed (each node's `README.txt` says how many), and other programs' command lines are not included. It is read-only, and a node that cannot be reached has a note in the bundle.
 
 ```
-ddgw --tshoot --all-nodes                # ddgw-tshoot-HOST-TIME.tgz, every node
-ddgw --tshoot --tshoot-file /tmp/t.tgz   # this node only
-ddgw --log --log-min warn --log-since 6h
-ddgw --log --log-grep "server 192.0.2.53" --log-lines 200
+dnsdir --tshoot --all-nodes                # dnsdir-tshoot-HOST-TIME.tgz, every node
+dnsdir --tshoot --tshoot-file /tmp/t.tgz   # this node only
+dnsdir --log --log-min warn --log-since 6h
+dnsdir --log --log-grep "server 192.0.2.53" --log-lines 200
 ```
 
 ## Operating a node
@@ -898,54 +900,54 @@ The Operate section of the GUI is for actions on a node: Node (controller, maint
 
 ### Make this node the gateway controller
 
-Operate ▸ Node (or `ddgw --assert-agc`) asks the current controller to hand the shared address to this node. The node takes the role first (the VIP on its macvlan, announced) and only then asks the old controller to step down. The old controller steps down in place: it keeps its own virtual MAC, the MACs it covers and its DNS up (it only stops answering ARP and neighbour solicitations and moves the VIP onto `lo`), and releases a MAC it no longer needs after a few seconds.
+Operate ▸ Node (or `dnsdir --assert-agc`) asks the current controller to hand the shared address to this node. The node takes the role first (the VIP on its macvlan, announced) and only then asks the old controller to step down. The old controller steps down in place: it keeps its own virtual MAC, the MACs it covers and its DNS up (it only stops answering ARP and neighbour solicitations and moves the VIP onto `lo`), and releases a MAC it no longer needs after a few seconds.
 
 When a controller stops (a restart, an update, **Pause this node**), it tells the group twice, and the node that takes over announces the MAC it inherits again and again for a couple of seconds, so the last word at the switch is the new owner's. A controller that dies is noticed after the hold time, as before. To prefer a node permanently, raise its priority and turn on preemption in Settings.
 
 ### Maintenance: pause this node
 
-Operate ▸ Node ▸ *Maintenance* (or `ddgw --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
+Operate ▸ Node ▸ *Maintenance* (or `dnsdir --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
 
 The flag (`node_paused` in the config file) is local to the node, never replicated, and survives restarts of AnyName and of the host. Resuming brings the gateways back once their DNS servers answer. A gateway you paused on its own stays paused after the node resumes. With the Node menu, the page pauses any member, so to send all traffic to one node (to benchmark it, say), pause the others instead of shutting them down.
 
 ```
-ddgw --node-pause
-ddgw --node-resume
-ddgw --node-status
+dnsdir --node-pause
+dnsdir --node-resume
+dnsdir --node-status
 ```
 
 ### Restart or shut down the host
 
-Operate ▸ Node ▸ *Host* (or `ddgw --power`) restarts or shuts down the whole host: now, in 1–10080 minutes, or at a time of day. A scheduled action is kept by the operating system (`shutdown(8)`, so it survives a restart of AnyName), shows on the page, and can be cancelled. It needs `shutdown` (systemd or sysvinit-compatible) on the host.
+Operate ▸ Node ▸ *Host* (or `dnsdir --power`) restarts or shuts down the whole host: now, in 1–10080 minutes, or at a time of day. A scheduled action is kept by the operating system (`shutdown(8)`, so it survives a restart of AnyName), shows on the page, and can be cancelled. It needs `shutdown` (systemd or sysvinit-compatible) on the host.
 
 An action started *now* is refused when this node is the only member serving one of its gateways (the same check updates use). The GUI asks whether to go ahead anyway, and the CLI needs `--yes`. The check is made when you ask, not at a scheduled time. A stopping controller announces that it is leaving, so another member takes over at once.
 
 ```
-ddgw --power restart --in 10
-ddgw --power shutdown --at 02:30
-ddgw --power status
-ddgw --power cancel
+dnsdir --power restart --in 10
+dnsdir --power shutdown --at 02:30
+dnsdir --power status
+dnsdir --power cancel
 ```
 
 ## Upgrading a running cluster
 
-Upload a release archive (`ddgw_vN.tgz` or `.zip`, the same one you would install from) on the Upgrade tab, or with `ddgw --update-upload FILE`. The node checks it (safe extraction, module `ddgw`, integer `VERSION`), keeps the source under `/var/lib/ddgw/update/source` and offers it to its peers. Instead of a file you can tick **Fetch from online** next to the file box: **Upload** then has this node download the newest release of `micush/ddgw` (or its highest `v<number>` tag when there is no release; the same lookup `get.sh` does) and stage it exactly like an uploaded archive. The node needs to reach api.github.com and github.com.
+Upload a release archive (`dnsdir_vN.tgz` or `.zip`, the same one you would install from) on the Upgrade tab, or with `dnsdir --update-upload FILE`. The node checks it (safe extraction, module `dnsdir`, integer `VERSION`), keeps the source under `/var/lib/dnsdir/update/source` and offers it to its peers. Instead of a file you can tick **Fetch from online** next to the file box: **Upload** then has this node download the newest release of `micush/dnsdir` (or its highest `v<number>` tag when there is no release; the same lookup `get.sh` does) and stage it exactly like an uploaded archive. The node needs to reach api.github.com and github.com.
 
 ![Operate ▸ Upgrade: the update status, the nodes and a history of every update event](snaps/upgrade.png)
 
 ```
-ddgw --update-status
-ddgw --update-apply                 # build and install on this node now
-ddgw --update-push all              # ask nodes (or ADDR,ADDR) to update
-ddgw --update-auto on               # every node follows the newest source
-ddgw --update-repo https://github.com/you/ddgw   # where "fetch online" downloads from (default: micush/ddgw)
-ddgw --update-cancel all
-ddgw --update-history
+dnsdir --update-status
+dnsdir --update-apply                 # build and install on this node now
+dnsdir --update-push all              # ask nodes (or ADDR,ADDR) to update
+dnsdir --update-auto on               # every node follows the newest source
+dnsdir --update-repo https://github.com/you/dnsdir   # where "fetch online" downloads from (default: micush/dnsdir)
+dnsdir --update-cancel all
+dnsdir --update-history
 ```
 
 ### How a node updates
 
-Each node that is asked pulls the source from the peer that has the newest one and **builds it natively** (the Go toolchain, gcc and the PAM headers, which is what `install.sh` sets up). It checks the result (version number, PAM linked), keeps the old binary as `/var/lib/ddgw/update/ddgw.prev`, swaps it in and re-executes itself.
+Each node that is asked pulls the source from the peer that has the newest one and **builds it natively** (the Go toolchain, gcc and the PAM headers, which is what `install.sh` sets up). It checks the result (version number, PAM linked), keeps the old binary as `/var/lib/dnsdir/update/dnsdir.prev`, swaps it in and re-executes itself.
 
 A new binary that does not stay up is rolled back automatically (three boot attempts; it is confirmed after 60 seconds), and the failure is shown in the Upgrade tab. The queue and the auto-update setting are cluster-wide and live on the primary. Run it under a supervisor that restarts the process; the unit does (`Restart=always`).
 
@@ -970,9 +972,9 @@ Measured with two real nodes in network namespaces on a bridge and a client quer
 ```
 # the Go module is in source/; docs/ has the changelog
 cd source
-go build -o ddgw .          # no third-party dependencies
+go build -o dnsdir .          # no third-party dependencies
 go test -race ./...
-./ddgw --config ./ddgw.conf
+./dnsdir --config ./dnsdir.conf
 ```
 
 ## License

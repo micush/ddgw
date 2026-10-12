@@ -39,7 +39,7 @@ func TestEveryPageHasHelp(t *testing.T) {
 
 func TestHelpScriptServedAndOldEndpointGone(t *testing.T) {
 	e := newWebEnv(t)
-	if r := e.do("GET", "/help.js", nil); r.code != 200 || !strings.Contains(string(r.raw), "DDGW_HELP") {
+	if r := e.do("GET", "/help.js", nil); r.code != 200 || !strings.Contains(string(r.raw), "DNSDIR_HELP") {
 		t.Fatalf("help.js: %d", r.code)
 	}
 	e.login("alice", "pw")

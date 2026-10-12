@@ -12,7 +12,7 @@ import (
 // Power: restart or shut down the host this daemon runs on, now or later.
 //
 // The scheduling itself is left to shutdown(8) (and so survives a restart of
-// ddgw and can be cancelled with shutdown -c; a minute before it fires the primary role is handed over, see powerHandoverTick).  An immediate action waits a
+// dnsdir and can be cancelled with shutdown -c; a minute before it fires the primary role is handed over, see powerHandoverTick).  An immediate action waits a
 // moment so the HTTP/CLI reply gets out first.  Unlike the parapet page this
 // came from, an immediate action asks the same question an update does — would
 // a gateway lose its last serving member? — and refuses unless forced.
@@ -55,7 +55,7 @@ var (
 )
 
 // powerHandoverTick hands the primary role over shortly before a scheduled restart or shut down (one made here with --power in/at,
-// or with shutdown(8) directly: the schedule is read from systemd's file, so it also survives a restart of ddgw).  Nothing
+// or with shutdown(8) directly: the schedule is read from systemd's file, so it also survives a restart of dnsdir).  Nothing
 // happens on a replica, or when no member can take the role.
 func (m *Mgmt) powerHandoverTick() {
 	p := m.PowerStatus()
@@ -138,7 +138,7 @@ func (m *Mgmt) Power(r PowerReq, by string) (PowerResult, error) {
 	case "", "now":
 		// An immediate action must not take the last serving member of a gateway down.
 		if ok, why := m.updateSafe(); !ok && !r.Force {
-			return PowerResult{}, fmt.Errorf("not safe to %s this node now: %s (to go ahead anyway: ddgw --power %s --yes, or confirm in the GUI)", verb, why, r.Action)
+			return PowerResult{}, fmt.Errorf("not safe to %s this node now: %s (to go ahead anyway: dnsdir --power %s --yes, or confirm in the GUI)", verb, why, r.Action)
 		}
 	case "in":
 		if r.Minutes < 1 || r.Minutes > maxPowerMinutes {

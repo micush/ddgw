@@ -22,16 +22,16 @@ func fakeGitHub(t *testing.T, release string, tags string, archives map[string][
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n.Add(1)
 		switch {
-		case r.URL.Path == "/repos/micush/ddgw/releases/latest":
+		case r.URL.Path == "/repos/micush/dnsdir/releases/latest":
 			if release == "" {
 				http.NotFound(w, r)
 				return
 			}
 			w.Write([]byte(`{"tag_name":"` + release + `"}`))
-		case r.URL.Path == "/repos/micush/ddgw/tags":
+		case r.URL.Path == "/repos/micush/dnsdir/tags":
 			w.Write([]byte(tags))
-		case strings.HasPrefix(r.URL.Path, "/micush/ddgw/archive/refs/tags/"):
-			tag := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/micush/ddgw/archive/refs/tags/"), ".tar.gz")
+		case strings.HasPrefix(r.URL.Path, "/micush/dnsdir/archive/refs/tags/"):
+			tag := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/micush/dnsdir/archive/refs/tags/"), ".tar.gz")
 			if b, ok := archives[tag]; ok {
 				w.Write(b)
 				return
@@ -90,15 +90,15 @@ func TestUpdateFetchFromGitHub(t *testing.T) {
 
 func TestNormalizeRepo(t *testing.T) {
 	good := map[string]string{
-		"":                                      "",
-		"default":                               "",
-		"https://github.com/micush/ddgw":        "", // the default is stored as empty
-		"https://github.com/micush/ddgw/":       "",
-		"github.com/micush/ddgw.git":            "",
-		"micush/ddgw":                           "",
-		"https://github.com/someone/ddgw-fork":  "someone/ddgw-fork",
-		"  https://www.github.com/a.b/c_d.git ": "a.b/c_d",
-		"someone/fork":                          "someone/fork",
+		"":                                       "",
+		"default":                                "",
+		"https://github.com/micush/dnsdir":       "", // the default is stored as empty
+		"https://github.com/micush/dnsdir/":      "",
+		"github.com/micush/dnsdir.git":           "",
+		"micush/dnsdir":                          "",
+		"https://github.com/someone/dnsdir-fork": "someone/dnsdir-fork",
+		"  https://www.github.com/a.b/c_d.git ":  "a.b/c_d",
+		"someone/fork":                           "someone/fork",
 	}
 	for in, want := range good {
 		got, err := normalizeRepo(in)

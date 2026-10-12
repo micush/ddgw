@@ -310,7 +310,7 @@ func statusRequestTimeout(path string, cmd map[string]any, timeout time.Duration
 	c, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("ddgw is not running (status socket not found)")
+			return nil, errors.New("dnsdir is not running (status socket not found)")
 		}
 		return nil, err
 	}

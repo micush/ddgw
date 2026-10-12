@@ -35,14 +35,14 @@ func TestMinimumPasswordLength(t *testing.T) {
 		t.Fatalf("a 5 character password with the default policy: %v", err)
 	}
 	// configured
-	m.webPolicy.Store(&WebConfig{Group: "ddgw", MinPasswordLength: 12})
+	m.webPolicy.Store(&WebConfig{Group: "dnsdir", MinPasswordLength: 12})
 	if err := m.checkPassword("eleven-char"); err == nil {
 		t.Error("11 characters accepted with a minimum of 12")
 	}
 	if err := m.checkPassword("twelve-chars"); err != nil {
 		t.Errorf("12 characters refused with a minimum of 12: %v", err)
 	}
-	m.webPolicy.Store(&WebConfig{Group: "ddgw", MinPasswordLength: 1})
+	m.webPolicy.Store(&WebConfig{Group: "dnsdir", MinPasswordLength: 1})
 	if err := m.checkPassword("x"); err != nil {
 		t.Errorf("a minimum of 1 refused one character: %v", err)
 	}

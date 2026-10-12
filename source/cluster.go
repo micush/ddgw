@@ -196,11 +196,11 @@ func (n *ClusterNode) loadIdentity() error {
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "ddgw-node-" + n.st.NodeID},
+		Subject:      pkix.Name{CommonName: "dnsdir-node-" + n.st.NodeID},
 		NotBefore:    time.Now().Add(-time.Hour), NotAfter: time.Now().Add(10 * 365 * 24 * time.Hour),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"ddgw-node"},
+		DNSNames:    []string{"dnsdir-node"},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &k.PublicKey, k)
 	if err != nil {

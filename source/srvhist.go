@@ -13,7 +13,7 @@ import (
 // A per-server history of how an upstream server has answered: each minute, how many live queries it answered and
 // failed, how many probe queries passed and failed, and the latency of the answers (average and worst).  It is
 // kept per server address, not per pool, so it survives a pool being rebuilt (any change to a gateway's DNS
-// settings does that) and is what the Topology page's "Statistics…" graphs and `ddgw --server-stats` show.
+// settings does that) and is what the Topology page's "Statistics…" graphs and `dnsdir --server-stats` show.
 // Kept 7 days; persist.go saves it with the other statistics (stats.json.gz), so a restart keeps it and shows the
 // time the daemon was down as a gap.
 //

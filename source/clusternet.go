@@ -897,7 +897,7 @@ type ifaceAddrs struct {
 
 // nodeAddrCandidates is the addresses this node tells the others it can be reached on: its cluster address, its host name
 // and the addresses of its interfaces, each with the cluster port.  Left out: the loopback and its addresses (the anycast
-// addresses live there), the virtual-MAC interfaces ddgwN.M (the VIP lives there), link-local addresses, and any address
+// addresses live there), the virtual-MAC interfaces dnsdirN.M (the VIP lives there), link-local addresses, and any address
 // in shared (the VIPs and anycast addresses of the gateways, which every node answers on).  A peer that dialled one of
 // those would reach whichever node holds it at the moment, and be refused there for the certificate.
 func nodeAddrCandidates(self, host string, ifs []ifaceAddrs, shared map[string]bool) []string {
@@ -907,7 +907,7 @@ func nodeAddrCandidates(self, host string, ifs []ifaceAddrs, shared map[string]b
 		addrs = append(addrs, net.JoinHostPort(host, port))
 	}
 	for _, i := range ifs {
-		if i.Loopback || strings.HasPrefix(i.Name, "ddgw") {
+		if i.Loopback || strings.HasPrefix(i.Name, "dnsdir") {
 			continue
 		}
 		for _, a := range i.Addrs {
@@ -964,7 +964,7 @@ func decodeJoinCode(code string) (joinCode, error) {
 	var jc joinCode
 	code = strings.TrimSpace(code)
 	if !strings.HasPrefix(code, joinCodePrefix) {
-		return jc, errors.New("not a ddgw join code (expected it to start with \"" + joinCodePrefix + "\")")
+		return jc, errors.New("not a dnsdir join code (expected it to start with \"" + joinCodePrefix + "\")")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(code, joinCodePrefix))
 	if err != nil || json.Unmarshal(raw, &jc) != nil || jc.Token == "" || len(jc.Fp) != 64 || len(jc.Addrs) == 0 || len(jc.Addrs) > 32 {

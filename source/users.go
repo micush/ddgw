@@ -16,7 +16,7 @@ import (
 )
 
 // Users: the local accounts that may sign in to the web GUI, which are the
-// members of the GUI group (web.group, "ddgw" by default).  They are managed
+// members of the GUI group (web.group, "dnsdir" by default).  They are managed
 // with the standard shadow-utils tools (useradd, usermod, userdel, chpasswd),
 // so PAM and the operating system stay the one source of truth.  New accounts
 // have no shell and no home directory: they exist only to sign in here.
@@ -81,7 +81,7 @@ func (m *Mgmt) guiGroup() string {
 	if p := m.webPolicy.Load(); p != nil && p.Group != "" {
 		return p.Group
 	}
-	return "ddgw"
+	return "dnsdir"
 }
 
 // groupMembers lists the members of the group: the names on its line in

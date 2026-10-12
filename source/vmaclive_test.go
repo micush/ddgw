@@ -9,10 +9,10 @@ import (
 )
 
 // TestVmacLive runs the real test against a veth pair whose far end sits in a network namespace acting as the router.
-// Needs root, iproute2 and DDGW_LIVE_VMAC=1; skipped otherwise (it creates interfaces).
+// Needs root, iproute2 and DNSDIR_LIVE_VMAC=1; skipped otherwise (it creates interfaces).
 func TestVmacLive(t *testing.T) {
-	if os.Getenv("DDGW_LIVE_VMAC") != "1" || os.Geteuid() != 0 {
-		t.Skip("set DDGW_LIVE_VMAC=1 as root to run")
+	if os.Getenv("DNSDIR_LIVE_VMAC") != "1" || os.Geteuid() != 0 {
+		t.Skip("set DNSDIR_LIVE_VMAC=1 as root to run")
 	}
 	sh := func(cmd string) {
 		t.Helper()
@@ -59,7 +59,7 @@ func TestVmacLive(t *testing.T) {
 	if r.Verdict != vmacInconclusive {
 		t.Fatalf("with a silent router the verdict must be inconclusive, got %+v", r)
 	}
-	if out, _ := exec.Command("ip", "-o", "link").Output(); strings.Contains(string(out), "ddgwt9") {
+	if out, _ := exec.Command("ip", "-o", "link").Output(); strings.Contains(string(out), "dnsdirt9") {
 		t.Fatal("the throwaway interface was left behind")
 	}
 	gc.RealMACs = true

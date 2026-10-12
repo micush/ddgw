@@ -20,7 +20,7 @@ import (
 // relays the request over the existing pinned-TLS, HMAC-signed cluster channel
 // (POST /cluster/proxy), and the target node runs it through its own web
 // handlers as though the user had made it there, attributed "user via node".
-// The user is authenticated and authorised (PAM, group ddgw) on the node they
+// The user is authenticated and authorised (PAM, group dnsdir) on the node they
 // logged in to only; peers trust each other with the cluster secret already.
 // Everything but login, logout and the session can be relayed — the Cluster and
 // Upgrade pages included, so "Leave cluster", "Promote" or "Update now" act on

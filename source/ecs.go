@@ -7,7 +7,7 @@ import (
 )
 
 // EDNS Client Subnet (RFC 7871).  Without it every upstream server sees all
-// queries coming from the ddgw node.  With it the proxy tells the server which
+// queries coming from the dnsdir node.  With it the proxy tells the server which
 // network the client is on (a prefix, /24 for IPv4 and /56 for IPv6 by default
 // — never the full address), so servers that understand the option (Google
 // 8.8.8.8, BIND, Unbound, PowerDNS, ...) can log or answer per client network.

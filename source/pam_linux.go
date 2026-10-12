@@ -8,13 +8,13 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
-struct ddgw_cred { const char *pass; };
+struct dnsdir_cred { const char *pass; };
 
 // Answers every password/echo prompt with the supplied password; text and
 // error messages are ignored.  No callbacks into Go.
-static int ddgw_conv(int n, const struct pam_message **msg,
+static int dnsdir_conv(int n, const struct pam_message **msg,
                      struct pam_response **resp, void *data) {
-	struct ddgw_cred *c = (struct ddgw_cred *)data;
+	struct dnsdir_cred *c = (struct dnsdir_cred *)data;
 	struct pam_response *r = calloc((size_t)n, sizeof(*r));
 	if (!r) return PAM_BUF_ERR;
 	for (int i = 0; i < n; i++) {
@@ -46,9 +46,9 @@ fail:
 
 // Returns a PAM status code; PAM_SUCCESS only if the user authenticated and
 // the account is valid (not expired/locked).
-static int ddgw_pam_auth(const char *service, const char *user, const char *pass) {
-	struct ddgw_cred c = { pass };
-	struct pam_conv conv = { ddgw_conv, &c };
+static int dnsdir_pam_auth(const char *service, const char *user, const char *pass) {
+	struct dnsdir_cred c = { pass };
+	struct pam_conv conv = { dnsdir_conv, &c };
 	pam_handle_t *h = NULL;
 	int rc = pam_start(service, user, &conv, &h);
 	if (rc != PAM_SUCCESS) return rc;
@@ -87,7 +87,7 @@ func pamAuthenticate(service, user, password string) error {
 		C.memset(unsafe.Pointer(cp), 0, C.size_t(len(password)))
 		C.free(unsafe.Pointer(cp))
 	}()
-	if rc := C.ddgw_pam_auth(cs, cu, cp); rc != C.PAM_SUCCESS {
+	if rc := C.dnsdir_pam_auth(cs, cu, cp); rc != C.PAM_SUCCESS {
 		return errors.New("pam: " + C.GoString(C.pam_strerror(nil, rc)))
 	}
 	return nil

@@ -25,7 +25,7 @@ func TestParseProc(t *testing.T) {
 	if n["eth0"].rx != 1000 || n["eth0"].tx != 2000 || len(n) != 2 {
 		t.Fatalf("net %v", n)
 	}
-	for name, want := range map[string]bool{"eth0": true, "ens3": true, "bond0": true, "lo": false, "ddgw1.1": false, "veth12": false, "docker0": false, "br-ab12": false, "virbr0": false} {
+	for name, want := range map[string]bool{"eth0": true, "ens3": true, "bond0": true, "lo": false, "dnsdir1.1": false, "veth12": false, "docker0": false, "br-ab12": false, "virbr0": false} {
 		if netCounted(name) != want {
 			t.Errorf("netCounted(%s) != %v", name, want)
 		}
@@ -37,7 +37,7 @@ func TestParseProc(t *testing.T) {
 
 func fakeHost(t0 time.Time) (*HostStats, *time.Time, *hostReading) {
 	cur := t0
-	rd := &hostReading{cores: 2, memTotal: 1000, memAvail: 600, ioTicks: map[string]uint64{"sda": 0}, net: map[string]netCounters{"eth0": {speed: 1000, up: true}, "lo": {up: true}, "ddgw1.1": {}},
+	rd := &hostReading{cores: 2, memTotal: 1000, memAvail: 600, ioTicks: map[string]uint64{"sda": 0}, net: map[string]netCounters{"eth0": {speed: 1000, up: true}, "lo": {up: true}, "dnsdir1.1": {}},
 		fs: []fsUsage{{Mount: "/", Device: "sda1", Type: "ext4", Total: 1000, Used: 400, Pct: 40}}}
 	h := NewHostStats()
 	h.now = func() time.Time { return cur }

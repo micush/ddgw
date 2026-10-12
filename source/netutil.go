@@ -125,7 +125,7 @@ func vmacStr(groupID, afnID int) string {
 	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", b[0], b[1], b[2], b[3], b[4], b[5])
 }
 
-func vmacName(groupID, afnID int) string { return fmt.Sprintf("ddgw%d.%d", groupID, afnID) }
+func vmacName(groupID, afnID int) string { return fmt.Sprintf("dnsdir%d.%d", groupID, afnID) }
 
 // cmdHook lets a test see, and answer for, the commands the daemon would run (nil in production).
 var cmdHook atomic.Pointer[func(name string, args []string) bool]

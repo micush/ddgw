@@ -37,7 +37,7 @@ func freeAddr(t *testing.T) string {
 func newTNode(t *testing.T, name string) *tnode {
 	t.Helper()
 	d := t.TempDir()
-	n := &tnode{t: t, name: name, dir: d, conf: filepath.Join(d, "etc", "ddgw.conf"), addr: freeAddr(t)}
+	n := &tnode{t: t, name: name, dir: d, conf: filepath.Join(d, "etc", "dnsdir.conf"), addr: freeAddr(t)}
 	dc := newDaemonConfig()
 	dc.Cluster.Listen, dc.Cluster.Self, dc.Cluster.SyncIntervalSec = n.addr, n.addr, 1
 	dc.Groups[0].Interface = "lo"
@@ -341,9 +341,9 @@ func TestClusterCertificateReplication(t *testing.T) {
 func fakeSourceTarball(t *testing.T, ver string) []byte {
 	t.Helper()
 	files := []srcFile{
-		{"ddgw/source/go.mod", []byte("module ddgw\n\ngo 1.24\n"), 0o644},
-		{"ddgw/source/main.go", []byte("package main\nfunc main(){}\n"), 0o644},
-		{"ddgw/source/VERSION", []byte(ver + "\n"), 0o644},
+		{"dnsdir/source/go.mod", []byte("module dnsdir\n\ngo 1.24\n"), 0o644},
+		{"dnsdir/source/main.go", []byte("package main\nfunc main(){}\n"), 0o644},
+		{"dnsdir/source/VERSION", []byte(ver + "\n"), 0o644},
 	}
 	return makeTgz(t, files)
 }

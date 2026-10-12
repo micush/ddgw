@@ -137,7 +137,7 @@ func printBGP(st BGPStatus) {
 		if len(c.Neighbors) > 0 {
 			fmt.Printf("  (%d neighbor(s) kept; turn BGP on with --asn N)\n", len(c.Neighbors))
 		} else {
-			fmt.Println("  Set it up with: ddgw --asn 64512 --bgp-neighbor-add 192.0.2.1 --remote-as 64500")
+			fmt.Println("  Set it up with: dnsdir --asn 64512 --bgp-neighbor-add 192.0.2.1 --remote-as 64500")
 		}
 		return
 	}

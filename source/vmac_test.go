@@ -78,21 +78,21 @@ func TestRelaxReversePath(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		put("ddgw1.2", c.in.dev)
+		put("dnsdir1.2", c.in.dev)
 		put("eth0", c.in.parent)
 		put("all", c.in.all)
-		changed, failed := relaxReversePath("ddgw1.2", "eth0")
+		changed, failed := relaxReversePath("dnsdir1.2", "eth0")
 		get := func(n string) string {
 			b, _ := os.ReadFile(dir + "/" + n + "/rp_filter")
 			return strings.TrimSpace(string(b))
 		}
-		got := vals{get("ddgw1.2"), get("eth0"), get("all")}
+		got := vals{get("dnsdir1.2"), get("eth0"), get("all")}
 		if got != c.want || len(changed) != c.changed || len(failed) != 0 {
 			t.Errorf("in %+v: now %+v changed=%v failed=%v, want %+v (%d changed)", c.in, got, changed, failed, c.want, c.changed)
 		}
 	}
 	// a setting that does not exist or cannot be written is reported, not silently skipped
-	if ensureSysctl("/proc/sys/net/ipv4/conf/ddgw-no-such-dev/arp_ignore", "1") {
+	if ensureSysctl("/proc/sys/net/ipv4/conf/dnsdir-no-such-dev/arp_ignore", "1") {
 		t.Error("ensureSysctl claimed success on a path that does not exist")
 	}
 }

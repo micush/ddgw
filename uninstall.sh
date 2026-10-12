@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 # AnyName DNS Director uninstaller.
 #
-#   sudo ddgw-uninstall [--purge] [--remove-group] [-y] [--dry-run]
+#   sudo dnsdir-uninstall [--purge] [--remove-group] [-y] [--dry-run]
 #
 # Removes the service, binary and support files installed by install.sh.
-# Your configuration and certificates (in /var/lib/ddgw) are
+# Your configuration and certificates (in /var/lib/dnsdir) are
 # kept unless --purge is given. Works without the manifest (falls back to the
 # default layout).
 
 set -euo pipefail
 
-SHARE=/usr/local/share/ddgw
+SHARE=/usr/local/share/dnsdir
 MANIFEST=$SHARE/install.manifest
-BIN=/usr/local/sbin/ddgw
+BIN=/usr/local/sbin/dnsdir
 BIN_DIR=/usr/local/sbin
-UNIT_NAME=ddgw.service
+UNIT_NAME=dnsdir.service
 UNIT=/etc/systemd/system/$UNIT_NAME
-PAM_FILE=/etc/pam.d/ddgw
-NM_FILE=/etc/NetworkManager/conf.d/90-ddgw-unmanaged.conf
-GROUP=ddgw
+PAM_FILE=/etc/pam.d/dnsdir
+NM_FILE=/etc/NetworkManager/conf.d/90-dnsdir-unmanaged.conf
+GROUP=dnsdir
 LEGACY_CONF_DIR=/etc/liras   # where releases before v15 kept the config
-STATE_DIR=/var/lib/ddgw
+STATE_DIR=/var/lib/dnsdir
 CONF_DIR=$STATE_DIR
-SYSTEMCTL=${DDGW_SYSTEMCTL:-systemctl}
+SYSTEMCTL=${DNSDIR_SYSTEMCTL:-systemctl}
 PAM_CREATED=""; NM_CREATED=""; GROUP_CREATED=""; PAM_SHA256=""
 
 PURGE=0; RM_GROUP=0; ASSUME_YES=0; DRY=0
@@ -38,10 +38,10 @@ usage() {
   cat <<EOT
 AnyName DNS Director uninstaller
 
-Usage: sudo ddgw-uninstall [options]
+Usage: sudo dnsdir-uninstall [options]
 
-  --purge         also remove $CONF_DIR/ddgw.conf, the GUI certificate/key,
-                  /etc/pam.d/ddgw even if you edited it, and the '$GROUP' group
+  --purge         also remove $CONF_DIR/dnsdir.conf, the GUI certificate/key,
+                  /etc/pam.d/dnsdir even if you edited it, and the '$GROUP' group
   --remove-group  remove the '$GROUP' group (default: only if the installer
                   created it, and only with --purge)
   -y, --yes       don't ask for confirmation
@@ -76,17 +76,17 @@ else
 fi
 
 HAVE_SYSTEMD=0
-if have "$SYSTEMCTL" && { [ -d /run/systemd/system ] || [ -n "${DDGW_FORCE_SYSTEMD:-}" ]; }; then HAVE_SYSTEMD=1; fi
+if have "$SYSTEMCTL" && { [ -d /run/systemd/system ] || [ -n "${DNSDIR_FORCE_SYSTEMD:-}" ]; }; then HAVE_SYSTEMD=1; fi
 
 [ -e "$BIN" ] || [ -d "$SHARE" ] || [ -e "$UNIT" ] || { echo "AnyName does not appear to be installed."; exit 0; }
 
 step "This will remove AnyName"
-info "service $UNIT_NAME, $BIN, $SHARE, $BIN_DIR/ddgw-uninstall"
-info "leftover ddgw<group>.<slot> network interfaces and the control socket"
+info "service $UNIT_NAME, $BIN, $SHARE, $BIN_DIR/dnsdir-uninstall"
+info "leftover dnsdir<group>.<slot> network interfaces and the control socket"
 if [ "$PURGE" = 1 ]; then
-  info "PURGE: $CONF_DIR/ddgw.conf, GUI certificate/key, $STATE_DIR (config history, cluster identity, update data), $PAM_FILE, group $GROUP"
+  info "PURGE: $CONF_DIR/dnsdir.conf, GUI certificate/key, $STATE_DIR (config history, cluster identity, update data), $PAM_FILE, group $GROUP"
 else
-  info "kept: $CONF_DIR/ddgw.conf, GUI certificate and $STATE_DIR (use --purge to remove)"
+  info "kept: $CONF_DIR/dnsdir.conf, GUI certificate and $STATE_DIR (use --purge to remove)"
 fi
 if [ "$ASSUME_YES" = 0 ] && [ "$DRY" = 0 ]; then
   [ -t 0 ] || die "not a terminal; re-run with --yes to confirm"
@@ -105,25 +105,25 @@ elif [ -e "$UNIT" ]; then
   run rm -f "$UNIT"
 fi
 # a daemon started by hand
-if [ "$DRY" = 0 ] && have pgrep && pgrep -x ddgw >/dev/null 2>&1; then
-  warn "a ddgw process is still running (not started by systemd); stopping it"
-  pkill -x ddgw || true; sleep 1
+if [ "$DRY" = 0 ] && have pgrep && pgrep -x dnsdir >/dev/null 2>&1; then
+  warn "a dnsdir process is still running (not started by systemd); stopping it"
+  pkill -x dnsdir || true; sleep 1
 fi
 
 step "Removing virtual interfaces"
 if have ip; then
-  for l in $(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^ddgw[0-9]+\.[0-9]+$' || true); do
+  for l in $(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^dnsdir[0-9]+\.[0-9]+$' || true); do
     run ip link delete "$l" 2>/dev/null && info "removed $l" || true
   done
 fi
-run rm -f /run/ddgw/ddgw.sock /run/liras/ddgw.sock
-if [ "$DRY" = 0 ]; then rmdir /run/ddgw /run/liras 2>/dev/null || true; fi
+run rm -f /run/dnsdir/dnsdir.sock /run/liras/ddgw.sock
+if [ "$DRY" = 0 ]; then rmdir /run/dnsdir /run/liras 2>/dev/null || true; fi
 
 step "Removing files"
-run rm -f "$BIN" "$BIN.new" "$BIN_DIR/ddgw-uninstall"
+run rm -f "$BIN" "$BIN.new" "$BIN_DIR/dnsdir-uninstall"
 if [ "$DRY" = 1 ]; then info "[dry-run] remove the files in $SHARE and the directory"; else
   # remove only what we put there (plus the rollback copy), then the dir if empty
-  rm -f "$SHARE"/{ddgw.conf.example,README.md,CHANGELOG.md,LICENSE,VERSION,ddgw.prev,install.manifest}
+  rm -f "$SHARE"/{dnsdir.conf.example,README.md,CHANGELOG.md,LICENSE,VERSION,dnsdir.prev,install.manifest}
   rm -rf "$SHARE/go" "$SHARE/go.new"   # the toolchain install.sh downloaded for updates
   # (the running script lives in $SHARE; bash has it open, deleting is safe)
   rm -f "$SHARE/uninstall.sh"
@@ -149,7 +149,7 @@ fi
 
 # config and certificate
 if [ "$PURGE" = 1 ]; then
-  run rm -f "$CONF_DIR/ddgw.conf" "$CONF_DIR/ddgw.conf".* "$CONF_DIR"/ddgw-web.crt "$CONF_DIR"/ddgw-web.key "$CONF_DIR"/ddgw.crt "$CONF_DIR"/ddgw.key
+  run rm -f "$CONF_DIR/dnsdir.conf" "$CONF_DIR/dnsdir.conf".* "$CONF_DIR"/dnsdir-web.crt "$CONF_DIR"/dnsdir-web.key "$CONF_DIR"/dnsdir.crt "$CONF_DIR"/dnsdir.key
   # leftovers of an install from before v15
   run rm -f "$LEGACY_CONF_DIR"/ddgw.conf "$LEGACY_CONF_DIR"/ddgw.conf.* "$LEGACY_CONF_DIR"/ddgw-web.crt* "$LEGACY_CONF_DIR"/ddgw-web.key* "$LEGACY_CONF_DIR"/ddgw.crt "$LEGACY_CONF_DIR"/ddgw.key
   if [ "$DRY" = 0 ]; then rmdir "$LEGACY_CONF_DIR" 2>/dev/null || true; fi
@@ -171,6 +171,6 @@ elif getent group "$GROUP" >/dev/null 2>&1; then
 fi
 
 step "AnyName removed"
-[ -f "$CONF_DIR/ddgw.conf" ] && info "your config is still at $CONF_DIR/ddgw.conf"
+[ -f "$CONF_DIR/dnsdir.conf" ] && info "your config is still at $CONF_DIR/dnsdir.conf"
 [ -f "$LEGACY_CONF_DIR/ddgw.conf" ] && info "your config is still at $LEGACY_CONF_DIR/ddgw.conf"
 exit 0

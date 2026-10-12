@@ -8,10 +8,10 @@
 //   ["ul", ["item", ...]]      a bullet list (items understand the same markup)
 //   ["fields", [["Label", "what it does"], ...]]  a field list; each Label is the field's
 //                              exact on-screen label (test: TestHelpCoversEveryField)
-//   ["cli", "ddgw --x\nddgw --y"]  command-line equivalents, shown as code
+//   ["cli", "dnsdir --x\ndnsdir --y"]  command-line equivalents, shown as code
 // Editing this file IS editing the help system.  Keep a topic's CLI block in step
 // with the page (every GUI function has a command).
-const DDGW_HELP = {
+const DNSDIR_HELP = {
   topology: {
     title: "Topology",
     body: [
@@ -24,7 +24,7 @@ const DDGW_HELP = {
         "The **trapezoids** are the domains each server must answer for it to count as healthy. Green means the test query answered; red means it did not.",
         "The **parallelograms** to the left of the circle are the nodes of the cluster (just this node when it is alone), this node first and marked with a star (*), the gateway controller with a dot (•), the cluster's primary with a triangle (▴): green is serving this gateway, amber is up but not serving it yet, or serving while its own DNS servers are partly down (degraded: the tooltip says why, the same view the circle gives for this node), dashed grey is paused, dashed red is not answering. A node whose CPU, memory or fullest disk goes **over 85%** turns solid yellow (degraded) and says which, until all are back at 85% or below (the tooltip shows the numbers). Hover one for its address, its Ethernet interfaces' IPv4 and IPv6 global (GUA) addresses, last-seen time, how long the daemon on it has been running (Up), version and whether it has the primary's latest settings; right-click for **Controller** (the node takes the controller role for all groups; the one that held it steps down afterwards), **Primary** (makes that node the cluster's primary, at once, like Cluster ▸ Promote; greyed on the current primary), **Pause** / **Resume**, **Restart** and **Shut down** (the host of the node, after you confirm; you are warned when a gateway would lose its last serving member), each for any reachable node, this one or another, **Remove**, **Statistics** or **Open**. A node removed from the gateway is not drawn; right-click the gateway ▸ **Add node** to bring it back.",
         "The **pills** to the right are the gateway's anycast addresses. Both sides stand four to a column (three when four would put a line to a server through a box) and spread outward in new columns after that; drag an anycast pill, or a cluster node, to any slot to change the order. The order of the nodes is saved with the gateway (`node_order`, shared by the cluster); nodes you have not placed come after the placed ones, by name, and the order does not depend on which node you look through.",
-        "Hover any item for its **uptime**: how long it has been online since it last came back (or how long it has been down) and how many failures it has had, for example “Online for 1m 1s - 0 failures”. A gateway, an anycast address, a server or a domain counts as online while it is green or yellow. AnyName notes the changes itself, even with no browser open, but only in memory, so the counting, failures included, starts again when AnyName restarts. Paused and grey items show nothing. `ddgw --canvas` prints the same.",
+        "Hover any item for its **uptime**: how long it has been online since it last came back (or how long it has been down) and how many failures it has had, for example “Online for 1m 1s - 0 failures”. A gateway, an anycast address, a server or a domain counts as online while it is green or yellow. AnyName notes the changes itself, even with no browser open, but only in memory, so the counting, failures included, starts again when AnyName restarts. Paused and grey items show nothing. `dnsdir --canvas` prints the same.",
       ]],
       ["h", "Several subnets"],
       "A node runs a gateway only if its interface has an address in the gateway's subnet (IPv4, and IPv6 when the node has a global IPv6 address). On a node that does not, the gateway shows grey (“not running here”) and starts by itself once the node is addressed there; the cluster members on that subnet serve it meanwhile.",
@@ -93,7 +93,7 @@ const DDGW_HELP = {
         ["Failed queries", "A server's window: the share of client queries sent to it that failed (no answer in time, SERVFAIL or REFUSED). A server that passes its probes can still show some, for names it cannot resolve; they do not take it out of service."],
         ["Time range", "The buttons **Last hour**, **Last day** and **Last week** choose how much history the graphs show. They are per window; the history kept is 7 days."],
       ]],
-      ["cli", "ddgw --canvas\nddgw --canvas-pause gateway|server|domain|anycast ... --scope node|all\nddgw --canvas-add gateway --vip 10.0.0.1/24 --interface eth0\nddgw --canvas-add server --group 1 --server 10.0.0.53 --name example.com\nddgw --canvas-set gateway --group 1 --vip 10.0.0.2/24\nddgw --canvas-set gateway --group 1 --label \"Office DNS\"   (--label - clears it)\nddgw --canvas-add anycast --group 1 --address 203.0.113.53\nddgw --canvas-del anycast --group 1 --address 203.0.113.53\nddgw --canvas-set gateway --group 1 --anycast 203.0.113.53,2001:db8:53::1   (replaces the whole list; - clears it)\nddgw --canvas-del server --group 1 --server 10.0.0.53\nddgw --canvas-set gateway --group 1 --spread-band 200   (this gateway's own load balancing; also --spread on|off, --down-percent, --fail-threshold, --max-attempts, --latency-alpha; --lb settings follows Settings again)\nddgw --canvas-move server --group 1 --server 10.0.0.53 --to 1   (also domain … --name DOMAIN, anycast … --address ADDR: the drag in the drawing)\nddgw --dns-lookup 10.0.0.53   (its reverse name; or give a name for its address — what the Add DNS server form fills in)\nddgw --server-stats 10.0.0.53   (how that server has answered: latency and loss; --stats-range 1h|1d|7d)\nddgw --server-stats 10.0.0.53 --name example.com --type A   (one domain on that server)\nddgw --gateway-stats 1   (the gateway of group 1: answer time, errors, availability, queries, cache)\nddgw --canvas-del node --group 1 --node lsitedns02   (remove a node from a gateway; --node is its address or host name; --canvas-add node puts it back)\nddgw --test-vmac [--group 1]   (do virtual MACs reach this node? changes nothing)\nddgw --canvas-set gateway --group 1 --real-macs on   (run without virtual MACs on every node; off goes back)\nddgw --canvas-pause gateway --group 1\nddgw --canvas-resume server --group 1 --server 10.0.0.53\nddgw --canvas-set server --group 1 --server 10.0.0.53 --label dns-a   (a name shown instead of the address; - clears)"],
+      ["cli", "dnsdir --canvas\ndnsdir --canvas-pause gateway|server|domain|anycast ... --scope node|all\ndnsdir --canvas-add gateway --vip 10.0.0.1/24 --interface eth0\ndnsdir --canvas-add server --group 1 --server 10.0.0.53 --name example.com\ndnsdir --canvas-set gateway --group 1 --vip 10.0.0.2/24\ndnsdir --canvas-set gateway --group 1 --label \"Office DNS\"   (--label - clears it)\ndnsdir --canvas-add anycast --group 1 --address 203.0.113.53\ndnsdir --canvas-del anycast --group 1 --address 203.0.113.53\ndnsdir --canvas-set gateway --group 1 --anycast 203.0.113.53,2001:db8:53::1   (replaces the whole list; - clears it)\ndnsdir --canvas-del server --group 1 --server 10.0.0.53\ndnsdir --canvas-set gateway --group 1 --spread-band 200   (this gateway's own load balancing; also --spread on|off, --down-percent, --fail-threshold, --max-attempts, --latency-alpha; --lb settings follows Settings again)\ndnsdir --canvas-move server --group 1 --server 10.0.0.53 --to 1   (also domain … --name DOMAIN, anycast … --address ADDR: the drag in the drawing)\ndnsdir --dns-lookup 10.0.0.53   (its reverse name; or give a name for its address — what the Add DNS server form fills in)\ndnsdir --server-stats 10.0.0.53   (how that server has answered: latency and loss; --stats-range 1h|1d|7d)\ndnsdir --server-stats 10.0.0.53 --name example.com --type A   (one domain on that server)\ndnsdir --gateway-stats 1   (the gateway of group 1: answer time, errors, availability, queries, cache)\ndnsdir --canvas-del node --group 1 --node lsitedns02   (remove a node from a gateway; --node is its address or host name; --canvas-add node puts it back)\ndnsdir --test-vmac [--group 1]   (do virtual MACs reach this node? changes nothing)\ndnsdir --canvas-set gateway --group 1 --real-macs on   (run without virtual MACs on every node; off goes back)\ndnsdir --canvas-pause gateway --group 1\ndnsdir --canvas-resume server --group 1 --server 10.0.0.53\ndnsdir --canvas-set server --group 1 --server 10.0.0.53 --label dns-a   (a name shown instead of the address; - clears)"],
     ],
   },
   gateways: {
@@ -109,14 +109,14 @@ const DDGW_HELP = {
         "**DNS** says whether the node answers DNS on the address (“answering”) or only has it enabled.",
       ]],
       "If nothing is listed on a network that should have peers, check the group id, the HMAC key and the interface on both nodes, and that multicast (or the unicast neighbour list in Settings) can pass between them.",
-      ["cli", "ddgw --show-gateways\nddgw --show-neighbors"],
+      ["cli", "dnsdir --show-gateways\ndnsdir --show-neighbors"],
     ],
   },
   nodes: {
     title: "Cluster",
     body: [
       "Every node that shares settings with this one: its **name** and **IP** addresses (IPv4, IPv6 global and unique local; hover the name for the node's cluster address), its **role** (primary or replica), whether it is **reachable**, its **epoch**, the version it is **running** and the version of the **source** it holds (they differ while an update is under way), and when it was last seen. The node you are logged in to is marked ★. Adding, removing and promoting nodes is on the Cluster page; this card only watches.",
-      ["cli", "ddgw --cluster-status"],
+      ["cli", "dnsdir --cluster-status"],
     ],
   },
   dns: {
@@ -137,7 +137,7 @@ const DDGW_HELP = {
       ["h", "The answer cache"],
       "Each pool answers a repeated query from memory for as long as the records' TTLs allow, so the servers are asked once per name and TTL instead of once per client. The header of each pool shows the share of queries answered from the cache (hits, out of the queries that could be cached) and how many answers are kept; hover it for the limit, the queries that are never cached and the answers pushed out because it was full. NOERROR answers (also “no data”) and NXDOMAIN are kept, the latter only with the zone's SOA, whose minimum says how long. An answer is kept for its shortest TTL, at most the **Cache: most seconds** setting, and clients see the TTL counting down. SERVFAIL, REFUSED, truncated answers, zone transfers, signed queries and queries with EDNS options other than a cookie are never cached. With client subnet (ECS) on, each client network gets its own entries. Adding, pausing, resuming or removing a server keeps the cache; changing the cache settings (size, most seconds, client subnet) or switching it off and on empties it, which is also the way to clear it. A node that has just started asks another cluster node for its most recently used answers (up to 20,000, with the age they have there) in the background, so it does not start cold; if no node answers it starts empty. The cache never serves an answer past its TTL, so with every server down a name that has expired gets SERVFAIL. Turn it off, or change its size, in Configure ▸ DNS proxy.",
       "Servers and their test domains are edited on the Topology page.",
-      ["cli", "ddgw --show-dns   (includes the answer cache line: hits, misses, entries)"],
+      ["cli", "dnsdir --show-dns   (includes the answer cache line: hits, misses, entries)"],
     ],
   },
   config: {
@@ -160,7 +160,7 @@ const DDGW_HELP = {
       ["fields", [
         ["Log level", "`debug`, `info` (default), `warning` or `error`. The least important lines the daemon writes to the journal and the Log page."],
         ["Update every node automatically when a newer release is staged (one node at a time)", "Auto-update. On (the default), each node builds and installs a staged release by itself, one node at a time (the first node must run it 2 minutes without trouble before the others follow), and rolls back if the new version does not stay up. Ticking it asks you to confirm. Applies to the whole cluster."],
-        ["Online repository", "The GitHub repository **Fetch from online** (Operate ▸ Upgrade) downloads releases from, written as `https://github.com/owner/repo` (the default is `https://github.com/micush/ddgw`; use it to follow a fork or if the repository moves). Saved when you leave the field; an empty field goes back to the default. Only github.com repositories are accepted. Shared: it is kept with the update settings on the primary and followed by every node. Nodes build and install what is downloaded as root, so point it only at a repository you trust. CLI: `--update-repo URL|default`."],
+        ["Online repository", "The GitHub repository **Fetch from online** (Operate ▸ Upgrade) downloads releases from, written as `https://github.com/owner/repo` (the default is `https://github.com/micush/dnsdir`; use it to follow a fork or if the repository moves). Saved when you leave the field; an empty field goes back to the default. Only github.com repositories are accepted. Shared: it is kept with the update settings on the primary and followed by every node. Nodes build and install what is downloaded as root, so point it only at a repository you trust. CLI: `--update-repo URL|default`."],
       ]],
       ["h", "Gateway groups (one card per gateway)"],
       ["fields", [
@@ -185,8 +185,8 @@ const DDGW_HELP = {
       ["h", "Web GUI"],
       ["fields", [
         ["Listen address", "The port the GUI listens on, default `53853`, on every address; to listen on one address only, write it with the port, such as `10.0.0.5:53853` (saved as `listen` in the `web` block, where a bare port is kept as `:53853`). Changing it restarts the GUI and logs everyone out, so you are asked to confirm."],
-        ["Login group", "The operating-system group whose members may sign in (default `ddgw`)."],
-        ["PAM service", "The `/etc/pam.d` service that checks passwords (default `ddgw`)."],
+        ["Login group", "The operating-system group whose members may sign in (default `dnsdir`)."],
+        ["PAM service", "The `/etc/pam.d` service that checks passwords (default `dnsdir`)."],
         ["Session idle timeout (min)", "From 1, default 30. A browser is signed out after this many idle minutes."],
         ["Failed logins before lockout", "1–1000, default 3. Wrong attempts, within the window below, that lock out that address, and that address together with that user name. A user name alone is never locked out, so nobody can lock an administrator out by failing logins for that name."],
         ["…within this many minutes", "From 1, default 1. The window in which the failed logins are counted."],
@@ -219,7 +219,7 @@ const DDGW_HELP = {
         ["Advertised address", "`host:port` the other members use to reach this node. Empty means this host's name with the listen port."],
         ["Sync interval (s)", "1–3600, default 5. How often replicas pull state and members are polled."],
       ]],
-      ["cli", "ddgw --show-config\nddgw --configure       (interactive wizard)\nddgw --config-import FILE\nddgw --tls-status\nddgw --tls-install --cert-file F --key-file F\nddgw --tls-csr --cn NAME [--san NAME_OR_IP,...]\nddgw --tls-revert\nddgw --tls-regenerate"],
+      ["cli", "dnsdir --show-config\ndnsdir --configure       (interactive wizard)\ndnsdir --config-import FILE\ndnsdir --tls-status\ndnsdir --tls-install --cert-file F --key-file F\ndnsdir --tls-csr --cn NAME [--san NAME_OR_IP,...]\ndnsdir --tls-revert\ndnsdir --tls-regenerate"],
     ],
   },
   config_dns0: {
@@ -329,7 +329,7 @@ const DDGW_HELP = {
         ["Compare version", "The tick box on each version. Tick two and choose **Compare ticked** to see what differs between them."],
         ["Configuration file", "What **Upload** asks for: a configuration `.json` file, such as one saved with **Download**. It is checked first and applied only if valid."],
       ]],
-      ["cli", "ddgw --versions\nddgw --version-show ID\nddgw --version-diff A[..B]\nddgw --version-snapshot [--note TEXT]   (a note can only be given here)\nddgw --version-restore ID\nddgw --version-export [ID]\nddgw --config-import FILE"],
+      ["cli", "dnsdir --versions\ndnsdir --version-show ID\ndnsdir --version-diff A[..B]\ndnsdir --version-snapshot [--note TEXT]   (a note can only be given here)\ndnsdir --version-restore ID\ndnsdir --version-export [ID]\ndnsdir --config-import FILE"],
     ],
   },
   cluster: {
@@ -363,13 +363,13 @@ const DDGW_HELP = {
         ["Node", "The menu at the top right of every page. It picks which member the page shows and acts on: this node (the default) or any other member of the cluster."],
         ["Join code", "On the new node: paste the code made by **Create join code** on a member. It is single-use, valid for an hour, and not shown again; the member shows it read only for you to copy."],
       ]],
-      ["cli", "ddgw --cluster-status\nddgw --cluster-token\nddgw --cluster-join CODE\nddgw --cluster-promote\nddgw --cluster-failover auto|on|off\nddgw --cluster-remove ADDR / --cluster-unremove ADDR\nddgw --cluster-leave\nddgw --cluster-sync"],
+      ["cli", "dnsdir --cluster-status\ndnsdir --cluster-token\ndnsdir --cluster-join CODE\ndnsdir --cluster-promote\ndnsdir --cluster-failover auto|on|off\ndnsdir --cluster-remove ADDR / --cluster-unremove ADDR\ndnsdir --cluster-leave\ndnsdir --cluster-sync"],
     ],
   },
   updates: {
     title: "Upgrade",
     body: [
-      "Update AnyName in place. Upload a release archive (`ddgw_vN.tgz` or `.zip`) to any node: it is checked and kept as the **source**, and the other members pull it from there. Auto-update is on by default, so each node installs a newly staged release by itself; turn it off in Configure ▸ General ▸ Upgrade to update nodes by hand. Each node builds the daemon itself, so it needs a Go toolchain, gcc and the PAM headers (the installer sets these up).",
+      "Update AnyName in place. Upload a release archive (`dnsdir_vN.tgz` or `.zip`) to any node: it is checked and kept as the **source**, and the other members pull it from there. Auto-update is on by default, so each node installs a newly staged release by itself; turn it off in Configure ▸ General ▸ Upgrade to update nodes by hand. Each node builds the daemon itself, so it needs a Go toolchain, gcc and the PAM headers (the installer sets these up).",
       ["h", "Updating"],
       ["ul", [
         "**Update this node now** (top right of the Nodes card) installs the source here. In a cluster, tick one or more members first and the button becomes **Update N selected**: those members update one at a time.",
@@ -381,11 +381,11 @@ const DDGW_HELP = {
       "The table (refreshed every 2 seconds) shows each member's version, source, whether it is queued or updating, and failures. The history lists every update event (the newest 500 are kept), newest first, 25 to a page: use **‹ Newer** and **Older ›** to move through them. Use the **Node** menu in the top right to work on another member.",
       ["h", "Fields"],
       ["fields", [
-        ["Release archive", "Select a `ddgw_vN.tgz` (or `.zip`) release archive. It is checked and staged on this node; the other members pull it from here."],
-        ["Fetch from online", "Tick it and **Upload** downloads the newest release of the online repository (Configure ▸ General ▸ Upgrade; `micush/ddgw` unless you changed it) from GitHub (or, when it has no releases, its highest `v<number>` tag) to this node and stages it, instead of using the file you chose. This node needs to reach api.github.com and github.com (a proxy set in its environment is used). The rest is the same as an upload: the version must be newer than the one running before it can be applied."],
+        ["Release archive", "Select a `dnsdir_vN.tgz` (or `.zip`) release archive. It is checked and staged on this node; the other members pull it from here."],
+        ["Fetch from online", "Tick it and **Upload** downloads the newest release of the online repository (Configure ▸ General ▸ Upgrade; `micush/dnsdir` unless you changed it) from GitHub (or, when it has no releases, its highest `v<number>` tag) to this node and stages it, instead of using the file you chose. This node needs to reach api.github.com and github.com (a proxy set in its environment is used). The rest is the same as an upload: the version must be newer than the one running before it can be applied."],
         ["Select (tick box on each member row)", "Ticks a member for **Update N selected**. Disabled while auto-update is on (Configure ▸ General)."],
       ]],
-      ["cli", "ddgw --update-status   (the 50 newest history events)\nddgw --update-history  (all of them)\nddgw --update-upload FILE\nddgw --update-apply\nddgw --update-push all|ADDR,...\nddgw --update-cancel all|ADDR,...\nddgw --update-auto on|off\nddgw --update-repo URL|default"],
+      ["cli", "dnsdir --update-status   (the 50 newest history events)\ndnsdir --update-history  (all of them)\ndnsdir --update-upload FILE\ndnsdir --update-apply\ndnsdir --update-push all|ADDR,...\ndnsdir --update-cancel all|ADDR,...\ndnsdir --update-auto on|off\ndnsdir --update-repo URL|default"],
     ],
   },
   anycaststatus: {
@@ -398,7 +398,7 @@ const DDGW_HELP = {
         "**Neighbors**: the BGP session state read from FRR (*Established* is a working session; a neighbor you disabled shows *disabled*; right-click a neighbor and choose **Disable** or **Enable**), the **BFD** state (*up* means the router answers fast failure detection, *down* means it does not), how long the session has been up and how many prefixes were sent to it.",
         "**Anycast addresses**: every anycast address of every gateway and whether this node announces it. An address is *withdrawn* while no DNS server answers, the gateway is paused or not running here, or the address could not be added to `lo`; the reason is shown.",
       ]],
-      ["cli", "ddgw --bgp"],
+      ["cli", "dnsdir --bgp"],
     ],
   },
   anycast: {
@@ -412,7 +412,7 @@ const DDGW_HELP = {
         "**Announce only.** The node announces its anycast addresses and nothing else, and accepts no routes from its neighbors, so a peer cannot change this host's routing table.",
         "**Withdrawal.** An address exists in FRR's table only while AnyName holds it on `lo` (a DNS server answers, the gateway is not paused, AnyName is running), so the route is withdrawn when the node cannot answer. **BFD** is on for every neighbor; lower the timers on your router to shorten the time it takes to notice a dead node.",
         "An **IPv4** address is announced to IPv4 neighbors and an **IPv6** address to IPv6 neighbors; add a neighbor of each family to announce both.",
-        "**Existing FRR setup.** The first time AnyName takes `frr.conf` over, the old file is kept as `frr.conf.pre-ddgw`. A change is applied with a reload, which needs the `frr-pythontools` package (the installer adds it); without it AnyName restarts FRR instead and the sessions drop briefly.",
+        "**Existing FRR setup.** The first time AnyName takes `frr.conf` over, the old file is kept as `frr.conf.pre-dnsdir`. A change is applied with a reload, which needs the `frr-pythontools` package (the installer adds it); without it AnyName restarts FRR instead and the sessions drop briefly.",
       ]],
       ["h", "Neighbors"],
       ["ul", [
@@ -436,7 +436,7 @@ const DDGW_HELP = {
         ["New neighbor description", "Optional note."],
         ["New neighbor password", "Optional MD5 session password."],
       ]],
-      ["cli", "ddgw --bgp\nddgw --asn 64512 --router-id 192.0.2.10   (--router-id needs an AS, set now or earlier)\nddgw --keepalive 3 --hold 9\nddgw --as-prepend on   (the local AS three more times on every announcement; off undoes it)\nddgw --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core\nddgw --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2\nddgw --bgp-neighbor-del 192.0.2.1\nddgw --asn off   (also clears the router ID)\n(--password on the command line is visible to other users of the host; the page is safer)"],
+      ["cli", "dnsdir --bgp\ndnsdir --asn 64512 --router-id 192.0.2.10   (--router-id needs an AS, set now or earlier)\ndnsdir --keepalive 3 --hold 9\ndnsdir --as-prepend on   (the local AS three more times on every announcement; off undoes it)\ndnsdir --bgp-neighbor-add 192.0.2.1 --remote-as 64500 --description core\ndnsdir --bgp-neighbor-add 10.0.1.5 --remote-as 64512 --multihop 2\ndnsdir --bgp-neighbor-del 192.0.2.1\ndnsdir --asn off   (also clears the router ID)\n(--password on the command line is visible to other users of the host; the page is safer)"],
     ],
   },
   anycastop: {
@@ -449,7 +449,7 @@ const DDGW_HELP = {
         "**Neighbors**: right-click a neighbor and choose *Disable* to shut one session down (`neighbor … shutdown` in `frr.conf`) and nothing is announced to it; the neighbor stays configured and in the list. *Enable* (the same menu) brings it back. Neither works while BGP itself is disabled.",
         "Per node, like the rest of the BGP settings: another node is switched from the node picker at the top right.",
       ]],
-      ["cli", "ddgw --bgp-disable\nddgw --bgp-enable\nddgw --bgp-neighbor-disable 192.0.2.1\nddgw --bgp-neighbor-enable 192.0.2.1"],
+      ["cli", "dnsdir --bgp-disable\ndnsdir --bgp-enable\ndnsdir --bgp-neighbor-disable 192.0.2.1\ndnsdir --bgp-neighbor-enable 192.0.2.1"],
     ],
   },
   stats: {
@@ -470,7 +470,7 @@ const DDGW_HELP = {
         "The page shows the node picked in the **Node** menu at the top; pick another member there to see its own statistics. Each node counts only the queries it answered itself.",
       ]],
       ["h", "Memory guard"],
-      "Statistics, the host history and the answer cache live in memory. Every 30 seconds AnyName checks how much of the machine's memory (or of its container's limit) is in use; at **85%** or more it drops the oldest history — the oldest tenth of what the statistics and the host history cover, per round — and a tenth of the cached answers, measures again, and repeats (at most 5 rounds per check) until use is below the limit. Newer data always stays, and the newest hour is never dropped. When it has done so the footer of this page says when and what. `DDGW_MEMORY_LIMIT_PERCENT` in the daemon's environment changes the limit.",
+      "Statistics, the host history and the answer cache live in memory. Every 30 seconds AnyName checks how much of the machine's memory (or of its container's limit) is in use; at **85%** or more it drops the oldest history — the oldest tenth of what the statistics and the host history cover, per round — and a tenth of the cached answers, measures again, and repeats (at most 5 rounds per check) until use is below the limit. Newer data always stays, and the newest hour is never dropped. When it has done so the footer of this page says when and what. `DNSDIR_MEMORY_LIMIT_PERCENT` in the daemon's environment changes the limit.",
       ["h", "Limits"],
       "Top lists are collected in 10-minute steps for the last day and in hourly steps for the 30 days, and keep the busiest 300 clients and 600 domains of each step; the rest are counted as “(others)” so a flood of random names cannot use up memory. A range longer than a day reads the hourly steps, so its top lists begin and end on a whole hour.",
       ["h", "Fields"],
@@ -479,7 +479,7 @@ const DDGW_HELP = {
         ["From", "With **Custom**: the start of the range, a date and time inside the last 30 days."],
         ["To", "With **Custom**: the end of the range. Press **Apply** to load it."],
       ]],
-      ["cli", "ddgw --stats\nddgw --stats --all-nodes   (every cluster node's numbers added together)\nddgw --stats --stats-range 1d\nddgw --stats --stats-range 7d\nddgw --stats --stats-range 30d\nddgw --stats --stats-rcode nxdomain   (also servfail, refused, noerror, other, update: the lists count only that answer)\nddgw --stats --stats-client ADDR     (the domains that client asked for)\nddgw --stats --stats-domain NAME     (the clients that asked for that domain)\nddgw --lookup ADDR|NAME              (what this node's resolver says about it)\nddgw --cache-flush NAME              (drop a name from the answer cache of every node)\nddgw --ping ADDR                     (ping of a client, run from this node)\nddgw --traceroute ADDR               (mtr report of a client, run from this node)\nddgw --scan ADDR                     (nmap of a client)\nddgw --whois NAME                    (the whois data the tooltip shows)\nddgw --dns-updates                   (the recent dynamic DNS updates, newest first)\n(the same totals, query types, transports and top 10 lists)"],
+      ["cli", "dnsdir --stats\ndnsdir --stats --all-nodes   (every cluster node's numbers added together)\ndnsdir --stats --stats-range 1d\ndnsdir --stats --stats-range 7d\ndnsdir --stats --stats-range 30d\ndnsdir --stats --stats-rcode nxdomain   (also servfail, refused, noerror, other, update: the lists count only that answer)\ndnsdir --stats --stats-client ADDR     (the domains that client asked for)\ndnsdir --stats --stats-domain NAME     (the clients that asked for that domain)\ndnsdir --lookup ADDR|NAME              (what this node's resolver says about it)\ndnsdir --cache-flush NAME              (drop a name from the answer cache of every node)\ndnsdir --ping ADDR                     (ping of a client, run from this node)\ndnsdir --traceroute ADDR               (mtr report of a client, run from this node)\ndnsdir --scan ADDR                     (nmap of a client)\ndnsdir --whois NAME                    (the whois data the tooltip shows)\ndnsdir --dns-updates                   (the recent dynamic DNS updates, newest first)\n(the same totals, query types, transports and top 10 lists)"],
     ],
   },
   host: {
@@ -492,17 +492,17 @@ const DDGW_HELP = {
         "The **charts** follow the range at the top (Last Hour to Last Month, or a custom start and end). Each point is an average; hover for the value and the peak (the busiest 10-second sample in that point). A gap means the daemon was not running.",
         "In a cluster, the **Node** menu's last entry, **Cluster**, shows the nodes as one machine: network rates, load averages, memory, swap and disk sizes and cores are **added**; CPU is the average over all the cores (a 12-core node counts three times a 4-core one), memory and each filesystem are per byte of the whole, disk busy is the mean, and a peak is the busiest node's (for the network, the sum of the nodes' peaks, an upper bound). The interface table lists every node's interfaces under its name. A line above the tiles appears only when a node could not answer, and names it.",
         "**Disk utilization** shows each filesystem's space in use (up to six, the largest first) together with how busy the disks were.",
-        "**Network utilization** adds up the real interfaces. Loopback, ddgw's own virtual-MAC links (`ddgw1.1`), container and bridge plumbing (`veth*`, `docker*`, `br-*`, `virbr*`) and ports of a bridge or bond are left out so traffic is not counted twice. The interface table lists them all with the link speed the driver reports and each link's use (the busier direction as a share of that speed; “–” when the speed is unknown, as on most virtual machines).",
+        "**Network utilization** adds up the real interfaces. Loopback, dnsdir's own virtual-MAC links (`dnsdir1.1`), container and bridge plumbing (`veth*`, `docker*`, `br-*`, `virbr*`) and ports of a bridge or bond are left out so traffic is not counted twice. The interface table lists them all with the link speed the driver reports and each link's use (the busier direction as a share of that speed; “–” when the speed is unknown, as on most virtual machines).",
       ]],
       ["h", "Limits"],
-      "Memory use is the machine's, not ddgw's. In a container or VM the numbers are what that system reports. Counters that go backwards (a reboot, an interface reset) give a gap instead of a spike.",
+      "Memory use is the machine's, not dnsdir's. In a container or VM the numbers are what that system reports. Counters that go backwards (a reboot, an interface reset) give a gap instead of a spike.",
       ["h", "Fields"],
       ["fields", [
         ["Time range", "The buttons at the top (**Last Hour** to **Last Month**, or **Custom**) set the range of the charts."],
         ["From", "With **Custom**: the start of the range, inside the last 30 days."],
         ["To", "With **Custom**: the end of the range. Press **Apply** to load it."],
       ]],
-      ["cli", "ddgw --host\nddgw --host --all-nodes   (the cluster as one machine)\nddgw --host --host-range 1d\nddgw --host --host-range 7d\nddgw --host --host-range 30d\n(now, average and peak of CPU, memory, disk I/O and network, plus the filesystems and interfaces)"],
+      ["cli", "dnsdir --host\ndnsdir --host --all-nodes   (the cluster as one machine)\ndnsdir --host --host-range 1d\ndnsdir --host --host-range 7d\ndnsdir --host --host-range 30d\n(now, average and peak of CPU, memory, disk I/O and network, plus the filesystems and interfaces)"],
     ],
   },
   capture: {
@@ -511,7 +511,7 @@ const DDGW_HELP = {
       "A packet capture, like `tcpdump`, on one node or on every node of the cluster at once. It only listens: nothing is sent, nothing is changed. It needs the daemon's own privileges and it is off until you press Start.",
       ["h", "One node"],
       ["ul", [
-        "The capture runs on the node chosen in the **Node** menu. Pick an **interface** (a gateway's interface is marked, and the virtual-MAC interfaces `ddgwN.M` are there too), optionally a **filter**, and press **Start**.",
+        "The capture runs on the node chosen in the **Node** menu. Pick an **interface** (a gateway's interface is marked, and the virtual-MAC interfaces `dnsdirN.M` are there too), optionally a **filter**, and press **Start**.",
         "The newest packets are listed live, one line each: TCP flags, DNS names and answers (`DNS A? example.com`, `DNS NXDOMAIN 0 ans`), ARP and IPv6 neighbor discovery with the Ethernet addresses they were sent from and to (`ARP, 10.20.0.205 is-at 00:1a:7c:01:02:00 (eth 02:… > …)`), which shows at once whether the virtual MAC a client is told about is the one that answers.",
         "The buffer holds the newest 5000 packets, or 32 MB. **Download .tgz** saves it as an archive with one `.pcap` in it, for Wireshark or tcpdump (through another node, the newest part that fits about 5 MB). **Clear** empties the list, **Stop** ends the capture (what was captured stays until you start again). A node has one capture: starting another replaces it.",
       ]],
@@ -525,13 +525,13 @@ const DDGW_HELP = {
         ["Filter", "Optional, up to 300 characters, as above. Press Enter to start."],
         ["How long", "Cluster mode only: 5, 10 (default), 30 or 60 seconds."],
       ]],
-      ["cli", "ddgw --capture-interfaces\nddgw --capture eth0 --capture-seconds 10 --capture-filter \"host 10.20.0.205 and port 53\"\nddgw --capture eth0 --capture-file /tmp/eth0.pcap\nddgw --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz\n(without --capture-file the packets are printed, the first 500; with --all-nodes a file is needed)"],
+      ["cli", "dnsdir --capture-interfaces\ndnsdir --capture eth0 --capture-seconds 10 --capture-filter \"host 10.20.0.205 and port 53\"\ndnsdir --capture eth0 --capture-file /tmp/eth0.pcap\ndnsdir --capture eth0 --capture-seconds 30 --all-nodes --capture-file /tmp/cluster.tgz\n(without --capture-file the packets are printed, the first 500; with --all-nodes a file is needed)"],
     ],
   },
   log: {
     title: "Log",
     body: [
-      "The daemon's log on the node this page is acting on (use the **Node** menu to pick another member). It is the same text that goes to the system journal, kept as well in a file in the state directory (`ddgw.log`, rotated at 2 MB with the two previous files kept), so it survives a restart.",
+      "The daemon's log on the node this page is acting on (use the **Node** menu to pick another member). It is the same text that goes to the system journal, kept as well in a file in the state directory (`dnsdir.log`, rotated at 2 MB with the two previous files kept), so it survives a restart.",
       ["h", "Finding things"],
       ["ul", [
         "**Filter** takes words; a line must contain every one of them (any case), for example `10.0.0.5 DOWN` or `domain google.com`.",
@@ -551,7 +551,7 @@ const DDGW_HELP = {
         ["Lines", "The most lines shown: 200, 1000 (default) or 5000, newest kept."],
         ["Live", "Ticked (the default): the list refreshes every few seconds and follows the newest line while you are at the bottom."],
       ]],
-      ["cli", "ddgw --tshoot --all-nodes   (the tshoot bundle of every node, written to ddgw-tshoot-HOST-TIME.tgz; without --all-nodes just this node; --tshoot-file F.tgz names the file; the ARP / neighbor-discovery capture is always taken)\nkill -USR1 $(pidof ddgw)   (writes every goroutine's stack to the journal: journalctl -u ddgw; for a daemon that is up but not answering)\nddgw --log\nddgw --log --log-min warn --log-since 6h\nddgw --log --log-grep \"server 192.0.2.53\" --log-lines 200\n(without --log-lines the whole matching log is printed; redirect it to a file to keep it)"],
+      ["cli", "dnsdir --tshoot --all-nodes   (the tshoot bundle of every node, written to dnsdir-tshoot-HOST-TIME.tgz; without --all-nodes just this node; --tshoot-file F.tgz names the file; the ARP / neighbor-discovery capture is always taken)\nkill -USR1 $(pidof dnsdir)   (writes every goroutine's stack to the journal: journalctl -u dnsdir; for a daemon that is up but not answering)\ndnsdir --log\ndnsdir --log --log-min warn --log-since 6h\ndnsdir --log --log-grep \"server 192.0.2.53\" --log-lines 200\n(without --log-lines the whole matching log is printed; redirect it to a file to keep it)"],
     ],
   },
   node: {
@@ -563,12 +563,12 @@ const DDGW_HELP = {
       ["h", "Maintenance"],
       "**Pause this node** pauses every gateway on it at once (the same as pausing each gateway on the Topology page, but it also covers gateways added later). The node resigns, stops answering DNS and stops probing; the other nodes carry the traffic. Nothing is shut down, and the setting is kept across restarts of AnyName and of the host. **Resume this node** brings its gateways back once their DNS servers answer. It is useful for sending all traffic to one node, for example to benchmark it: pause the others instead of shutting them down. A gateway you paused yourself stays paused after the node is resumed.",
       ["h", "Host"],
-      "It is the machine that reboots, not just ddgw.",
+      "It is the machine that reboots, not just dnsdir.",
       ["h", "Restart or shut down"],
       ["ul", [
         "Choose **Restart** or **Shut down**, then **Now**, **In** a number of minutes (up to 7 days) or **At** a time of day (24-hour, the host's clock), and press **Execute**. You are asked to confirm.",
         "A shut-down host stays off until it is powered on again, from its console or out-of-band.",
-        "A scheduled action is kept by the operating system, so it survives a restart of ddgw. It shows here as a notice with **Cancel it**.",
+        "A scheduled action is kept by the operating system, so it survives a restart of dnsdir. It shows here as a notice with **Cancel it**.",
       ]],
       ["h", "Protecting the gateway"],
       "An action started **now** is refused when this node is the only member serving one of its gateways, so a reboot never leaves clients without an answer; you are asked whether to go ahead anyway. The check is made when you press Execute, not at the scheduled time, so for a later time make sure another member will be serving by then. When a node stops, a controller announces that it is leaving, so another member takes over at once.",
@@ -579,13 +579,13 @@ const DDGW_HELP = {
         ["Minutes", "With **In**: 1–10080 minutes (up to 7 days), default 5."],
         ["Time of day", "With **At**: a 24-hour time on the host's clock; if it has passed today it means tomorrow."],
       ]],
-      ["cli", "ddgw --assert-agc\nddgw --node-pause\nddgw --node-resume\nddgw --node-status\nddgw --power restart|shutdown\nddgw --power restart --in 10\nddgw --power shutdown --at 02:30\nddgw --power status\nddgw --power cancel\n(--yes skips the question and goes ahead even if a gateway would be left unserved)"],
+      ["cli", "dnsdir --assert-agc\ndnsdir --node-pause\ndnsdir --node-resume\ndnsdir --node-status\ndnsdir --power restart|shutdown\ndnsdir --power restart --in 10\ndnsdir --power shutdown --at 02:30\ndnsdir --power status\ndnsdir --power cancel\n(--yes skips the question and goes ahead even if a gateway would be left unserved)"],
     ],
   },
   users: {
     title: "Users",
     body: [
-      "The accounts that may sign in to this web GUI: the members of the GUI group (`ddgw` unless `web.group` says otherwise). They are ordinary operating-system accounts, so a password set here is the one PAM checks. In a cluster every change here is made on **every node** (the password hash is sent, not the password); if a node could not be reached the message says which, and the change can be repeated when it is back.",
+      "The accounts that may sign in to this web GUI: the members of the GUI group (`dnsdir` unless `web.group` says otherwise). They are ordinary operating-system accounts, so a password set here is the one PAM checks. In a cluster every change here is made on **every node** (the password hash is sent, not the password); if a node could not be reached the message says which, and the change can be repeated when it is back.",
       ["h", "What it does"],
       ["ul", [
         "The accounts are listed on the left (with a filter box); pick one to work on it on the right. **+ New** opens the form for a new account.",
@@ -595,7 +595,7 @@ const DDGW_HELP = {
         "**Disable** takes the account out of the GUI group and keeps the account (it just cannot sign in here any more). It works for any listed account except yourself and the last one; an account that is in the group only because it is its primary group is refused, with the reason.",
         "**Delete** removes the account. You cannot delete yourself or the last account that can sign in.",
         "Only accounts in the GUI group are listed, and `root` never is. *Add user* never changes an account that already exists on a machine; use *Add an existing account…* for that.",
-        "A node that was down misses a change. Setting the password sends the whole account again (and creates it where it is missing), so setting the password again brings it back in line; `ddgw --user-del NAME` can repeat a delete.",
+        "A node that was down misses a change. Setting the password sends the whole account again (and creates it where it is missing), so setting the password again brings it back in line; `dnsdir --user-del NAME` can repeat a delete.",
         "A node that **joins** a cluster gets its existing accounts copied (with their passwords and expiry); an account that already exists on the new node is left as it is.",
         "Every member can manage every other member, which is the same power they already have over the daemon. Changes are logged with who made them.",
       ]],
@@ -605,7 +605,7 @@ const DDGW_HELP = {
         ["Password", "The new account's password. It is passed to the system on standard input, never on a command line."],
         ["Expires", "Optional date after which the account cannot sign in. Empty means never."],
       ]],
-      ["cli", "ddgw --users\nddgw --user-add NAME [--expires YYYY-MM-DD]\nddgw --user-passwd NAME\nddgw --user-expiry NAME --expires YYYY-MM-DD|never\nddgw --user-del NAME\nddgw --user-grant NAME\nddgw --user-revoke NAME"],
+      ["cli", "dnsdir --users\ndnsdir --user-add NAME [--expires YYYY-MM-DD]\ndnsdir --user-passwd NAME\ndnsdir --user-expiry NAME --expires YYYY-MM-DD|never\ndnsdir --user-del NAME\ndnsdir --user-grant NAME\ndnsdir --user-revoke NAME"],
     ],
   },
   _default: { title: "Help", body: ["No help has been written for this page yet."] },

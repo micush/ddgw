@@ -101,14 +101,14 @@ func devType(name string) string {
 
 // isEthernetIface says whether name is an Ethernet interface of this node: ARPHRD_ETHER, and either a physical
 // device or a virtual link of one of the kinds in ethernetDevTypes (a bridge, a bond, a VLAN, a veth: the network
-// card of a container is one).  Other virtual links (macvlan such as ddgw's own ddgwN.M, vxlan, tap, dummy) are
+// card of a container is one).  Other virtual links (macvlan such as dnsdir's own dnsdirN.M, vxlan, tap, dummy) are
 // left out.
 func isEthernetIface(name string) bool {
 	base := sysClassNet + name + "/"
 	if b, err := os.ReadFile(base + "type"); err != nil || strings.TrimSpace(string(b)) != "1" {
 		return false
 	}
-	if strings.HasPrefix(name, "ddgw") {
+	if strings.HasPrefix(name, "dnsdir") {
 		return false
 	}
 	if _, err := os.Stat(sysVirtualNet + name); err != nil {
@@ -127,14 +127,14 @@ func isEthernetIface(name string) bool {
 
 // ethernetAddrs lists the Ethernet interfaces that hold an IPv4 address or an IPv6 GUA, sorted by name.  When no
 // interface of a kind counted as Ethernet has one (a virtual link of a kind not known, say), every other interface
-// that is not the loopback or ddgw's own holds the addresses instead, so the tooltip shows what the node has rather
+// that is not the loopback or dnsdir's own holds the addresses instead, so the tooltip shows what the node has rather
 // than nothing.
 func ethernetAddrs() []NodeIface {
 	raw := nodeIfacesFn()
 	if out := collectAddrs(raw, func(r nodeIfaceRaw) bool { return r.Ethernet }); len(out) > 0 {
 		return out
 	}
-	return collectAddrs(raw, func(r nodeIfaceRaw) bool { return !strings.HasPrefix(r.Name, "ddgw") })
+	return collectAddrs(raw, func(r nodeIfaceRaw) bool { return !strings.HasPrefix(r.Name, "dnsdir") })
 }
 
 // collectAddrs lists the interfaces chosen by keep (never the loopback) that hold an IPv4 address or an IPv6 GUA.

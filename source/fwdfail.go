@@ -8,7 +8,7 @@ import (
 
 // The last forwarding failures (a server did not answer a client's query in time), with who asked what.  A server is
 // marked DOWN by these, so when it flaps this says which queries, from which clients, it failed on.  Kept in memory
-// only; the troubleshooting bundle lists them (ddgw/dns-forward-failures.json).
+// only; the troubleshooting bundle lists them (dnsdir/dns-forward-failures.json).
 
 type fwdFailure struct {
 	Time   string `json:"time"`

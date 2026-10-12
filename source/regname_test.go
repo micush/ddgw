@@ -122,7 +122,7 @@ func TestRegisterHostNameSigned(t *testing.T) {
 	p := NewPool(testDNSCfg(res.addr))
 	p.ProbeNow(context.Background())
 	key := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
-	if _, err := registerHostName(context.Background(), p, "ann-pc.corp.test", "", mustAddr("10.1.2.3"), 120, "ddgw-key", key); err != nil {
+	if _, err := registerHostName(context.Background(), p, "ann-pc.corp.test", "", mustAddr("10.1.2.3"), 120, "dnsdir-key", key); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range pr.msgs() {
@@ -149,13 +149,13 @@ func TestRegisterHostNameNoZone(t *testing.T) {
 	}
 }
 
-// TestWriteSignedUpdate leaves a signed message for an outside check when DDGW_TSIG_OUT names a file.
+// TestWriteSignedUpdate leaves a signed message for an outside check when DNSDIR_TSIG_OUT names a file.
 func TestWriteSignedUpdate(t *testing.T) {
-	out := os.Getenv("DDGW_TSIG_OUT")
+	out := os.Getenv("DNSDIR_TSIG_OUT")
 	if out == "" {
-		t.Skip("DDGW_TSIG_OUT not set")
+		t.Skip("DNSDIR_TSIG_OUT not set")
 	}
-	m := buildUpdate(0x1234, "corp.test", []updRR{{name: "ann-pc.corp.test", typ: typeA, class: classIN, ttl: 300, rdata: []byte{10, 1, 2, 3}}}, "ddgw-key", []byte("0123456789abcdef0123456789abcdef"), time.Now())
+	m := buildUpdate(0x1234, "corp.test", []updRR{{name: "ann-pc.corp.test", typ: typeA, class: classIN, ttl: 300, rdata: []byte{10, 1, 2, 3}}}, "dnsdir-key", []byte("0123456789abcdef0123456789abcdef"), time.Now())
 	if err := os.WriteFile(out, m, 0o600); err != nil {
 		t.Fatal(err)
 	}

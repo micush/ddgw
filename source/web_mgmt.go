@@ -142,7 +142,7 @@ func (w *WebServer) handleVersionDownload(rw http.ResponseWriter, r *http.Reques
 		jsonError(rw, code, err.Error())
 		return
 	}
-	name := "ddgw-config-" + meta.ID + ".json"
+	name := "dnsdir-config-" + meta.ID + ".json"
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	rw.Write(append([]byte(cfg), '\n'))

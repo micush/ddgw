@@ -311,7 +311,7 @@ func sendUDP(t *testing.T, port int, n int) {
 	}
 	defer c.Close()
 	for i := 0; i < n; i++ {
-		c.Write([]byte("ddgw capture test"))
+		c.Write([]byte("dnsdir capture test"))
 		time.Sleep(5 * time.Millisecond)
 	}
 }
@@ -714,7 +714,7 @@ func TestNodeAddrCandidatesLeaveOutSharedAddresses(t *testing.T) {
 	ifs := []ifaceAddrs{
 		{Name: "lo", Loopback: true, Addrs: []net.Addr{ipn("127.0.0.1/8"), ipn("192.168.168.168/32")}}, // the anycast address is on lo
 		{Name: "eth0", Addrs: []net.Addr{ipn("192.0.2.5/24"), ipn("2001:db8::5/64"), ipn("fe80::1/64"), ipn("192.0.2.9/24")}},
-		{Name: "ddgw1.2", Addrs: []net.Addr{ipn("192.0.2.9/24"), ipn("2001:db8::9/64")}}, // the VIPs, on the virtual-MAC interface
+		{Name: "dnsdir1.2", Addrs: []net.Addr{ipn("192.0.2.9/24"), ipn("2001:db8::9/64")}}, // the VIPs, on the virtual-MAC interface
 		{Name: "eth1", Addrs: []net.Addr{ipn("198.51.100.7/24")}},
 	}
 	got := nodeAddrCandidates("192.0.2.5:53854", "ns1", ifs, map[string]bool{"192.0.2.9": true, "2001:db8::9": true, "192.168.168.168": true})

@@ -17,18 +17,18 @@ import (
 	"time"
 )
 
-// BGP: ddgw drives FRR on this node so the anycast addresses (anycast.go) can be
+// BGP: dnsdir drives FRR on this node so the anycast addresses (anycast.go) can be
 // announced without hand-written routing config.
 //
 // The BGP settings are per node (a node usually peers with its own upstream
 // router) and are never replicated; only the anycast addresses themselves are
-// shared.  ddgw owns /etc/frr/frr.conf on a node where BGP is enabled: it renders
+// shared.  dnsdir owns /etc/frr/frr.conf on a node where BGP is enabled: it renders
 // the whole file (BGP only), enables bgpd in /etc/frr/daemons and reloads FRR.
 //
 // The posture is deliberately narrow: this node announces its anycast addresses
 // and nothing else, and accepts nothing from its peers (an inbound route-map
 // denies every route), so a peer cannot change this host's routing table.
-// An announced prefix exists in FRR's table only while ddgw holds the address on
+// An announced prefix exists in FRR's table only while dnsdir holds the address on
 // lo, so withdrawal follows anycast.go.
 
 // BGPNeighbor is one BGP peer.
@@ -195,7 +195,7 @@ func anycastAddresses(dc *DaemonConfig) (v4, v6 []string) {
 // only the header, which is what a node that turned BGP off is left with.
 func renderFRR(b *BGPConfig, v4, v6 []string, hostname string) string {
 	var o strings.Builder
-	o.WriteString("! Written by ddgw. Changes made here are overwritten; use ddgw --bgp or the BGP page.\n")
+	o.WriteString("! Written by dnsdir. Changes made here are overwritten; use dnsdir --bgp or the BGP page.\n")
 	o.WriteString("frr defaults traditional\n")
 	if h := safeHostname(hostname); h != "" {
 		o.WriteString("hostname " + h + "\n")
@@ -205,21 +205,21 @@ func renderFRR(b *BGPConfig, v4, v6 []string, hostname string) string {
 		return o.String()
 	}
 	// what this node may announce: its anycast addresses, nothing else
-	o.WriteString("ip prefix-list DDGW-ANYCAST-V4 seq 1000 deny any\n")
+	o.WriteString("ip prefix-list DNSDIR-ANYCAST-V4 seq 1000 deny any\n")
 	for i, a := range v4 {
-		o.WriteString(fmt.Sprintf("ip prefix-list DDGW-ANYCAST-V4 seq %d permit %s/32\n", 10+i, a))
+		o.WriteString(fmt.Sprintf("ip prefix-list DNSDIR-ANYCAST-V4 seq %d permit %s/32\n", 10+i, a))
 	}
-	o.WriteString("ipv6 prefix-list DDGW-ANYCAST-V6 seq 1000 deny any\n")
+	o.WriteString("ipv6 prefix-list DNSDIR-ANYCAST-V6 seq 1000 deny any\n")
 	for i, a := range v6 {
-		o.WriteString(fmt.Sprintf("ipv6 prefix-list DDGW-ANYCAST-V6 seq %d permit %s/128\n", 10+i, a))
+		o.WriteString(fmt.Sprintf("ipv6 prefix-list DNSDIR-ANYCAST-V6 seq %d permit %s/128\n", 10+i, a))
 	}
 	prepend := ""
 	if b.ASPrepend {
 		prepend = fmt.Sprintf(" set as-path prepend %d %d %d\n", b.ASN, b.ASN, b.ASN)
 	}
-	o.WriteString("!\nroute-map DDGW-OUT-V4 permit 10\n match ip address prefix-list DDGW-ANYCAST-V4\n" + prepend)
-	o.WriteString("route-map DDGW-OUT-V6 permit 10\n match ipv6 address prefix-list DDGW-ANYCAST-V6\n" + prepend)
-	o.WriteString("route-map DDGW-IN deny 10\n!\n")
+	o.WriteString("!\nroute-map DNSDIR-OUT-V4 permit 10\n match ip address prefix-list DNSDIR-ANYCAST-V4\n" + prepend)
+	o.WriteString("route-map DNSDIR-OUT-V6 permit 10\n match ipv6 address prefix-list DNSDIR-ANYCAST-V6\n" + prepend)
+	o.WriteString("route-map DNSDIR-IN deny 10\n!\n")
 	o.WriteString(fmt.Sprintf("router bgp %d\n no bgp default ipv4-unicast\n", b.ASN))
 	if b.RouterID != "" {
 		o.WriteString(" bgp router-id " + b.RouterID + "\n")
@@ -254,14 +254,14 @@ func renderFRR(b *BGPConfig, v4, v6 []string, hostname string) string {
 		o.WriteString("  network " + a + "/32\n")
 	}
 	for _, n := range n4 {
-		o.WriteString(fmt.Sprintf("  neighbor %s activate\n  neighbor %s route-map DDGW-IN in\n  neighbor %s route-map DDGW-OUT-V4 out\n", n.Peer, n.Peer, n.Peer))
+		o.WriteString(fmt.Sprintf("  neighbor %s activate\n  neighbor %s route-map DNSDIR-IN in\n  neighbor %s route-map DNSDIR-OUT-V4 out\n", n.Peer, n.Peer, n.Peer))
 	}
 	o.WriteString(" exit-address-family\n address-family ipv6 unicast\n")
 	for _, a := range v6 {
 		o.WriteString("  network " + a + "/128\n")
 	}
 	for _, n := range n6 {
-		o.WriteString(fmt.Sprintf("  neighbor %s activate\n  neighbor %s route-map DDGW-IN in\n  neighbor %s route-map DDGW-OUT-V6 out\n", n.Peer, n.Peer, n.Peer))
+		o.WriteString(fmt.Sprintf("  neighbor %s activate\n  neighbor %s route-map DNSDIR-IN in\n  neighbor %s route-map DNSDIR-OUT-V6 out\n", n.Peer, n.Peer, n.Peer))
 	}
 	o.WriteString(" exit-address-family\n!\nline vty\n!\n")
 	return o.String()
@@ -499,13 +499,13 @@ func frrJournalTail() string {
 	return " [journal: " + strings.Join(keep, " | ") + "]"
 }
 
-// backupForeignFRRConf keeps a copy of an frr.conf that ddgw did not write, the
-// first time ddgw takes the file over, so a host's earlier FRR setup is not lost.
+// backupForeignFRRConf keeps a copy of an frr.conf that dnsdir did not write, the
+// first time dnsdir takes the file over, so a host's earlier FRR setup is not lost.
 func backupForeignFRRConf(old []byte) {
-	if len(old) == 0 || strings.HasPrefix(string(old), "! Written by ddgw") {
+	if len(old) == 0 || strings.HasPrefix(string(old), "! Written by dnsdir") || strings.HasPrefix(string(old), "! Written by ddgw") {
 		return
 	}
-	p := frrConfPath() + ".pre-ddgw"
+	p := frrConfPath() + ".pre-dnsdir"
 	if _, err := os.Stat(p); err == nil {
 		return
 	}
@@ -518,7 +518,7 @@ func backupForeignFRRConf(old []byte) {
 
 // writeFRRFile replaces a file atomically, readable by FRR's group.
 func writeFRRFile(path string, data []byte) error {
-	tmp := path + ".ddgw.tmp"
+	tmp := path + ".dnsdir.tmp"
 	if err := os.WriteFile(tmp, data, 0o640); err != nil {
 		return err
 	}

@@ -10,35 +10,38 @@
 #
 #   sudo ./install.sh [options]        see --help
 #
-# Test hooks (not for normal use): DDGW_OS_RELEASE, DDGW_SYSTEMCTL,
-# DDGW_FORCE_SYSTEMD, DDGW_ASSUME_MISSING, DDGW_FORCE_GO_DOWNLOAD,
-# DDGW_GO_BASE_URL, DDGW_SETTLE.
+# Test hooks (not for normal use): DNSDIR_OS_RELEASE, DNSDIR_SYSTEMCTL,
+# DNSDIR_FORCE_SYSTEMD, DNSDIR_ASSUME_MISSING, DNSDIR_FORCE_GO_DOWNLOAD,
+# DNSDIR_GO_BASE_URL, DNSDIR_SETTLE.
 
 set -euo pipefail
 umask 022
 
 # ── fixed layout (the daemon's own defaults) ─────────────────────────────────
 BIN_DIR=/usr/local/sbin
-BIN=$BIN_DIR/ddgw
-SHARE=/usr/local/share/ddgw
+BIN=$BIN_DIR/dnsdir
+SHARE=/usr/local/share/dnsdir
 MANIFEST=$SHARE/install.manifest
 LEGACY_CONF_DIR=/etc/liras   # where releases before v15 kept the config
-UNIT_NAME=ddgw.service
+OLD_BIN=$BIN_DIR/ddgw        # releases before v367 were called ddgw
+OLD_SHARE=/usr/local/share/ddgw
+OLD_UNIT_NAME=ddgw.service
+UNIT_NAME=dnsdir.service
 UNIT=/etc/systemd/system/$UNIT_NAME
-PAM_FILE=/etc/pam.d/ddgw
-NM_FILE=/etc/NetworkManager/conf.d/90-ddgw-unmanaged.conf
-GROUP=ddgw
+PAM_FILE=/etc/pam.d/dnsdir
+NM_FILE=/etc/NetworkManager/conf.d/90-dnsdir-unmanaged.conf
+GROUP=dnsdir
 GUI_PORT=53853
 CLUSTER_PORT=53854
-STATE_DIR=/var/lib/ddgw
-CONF_DIR=$STATE_DIR   # the config lives with everything else ddgw keeps
+STATE_DIR=/var/lib/dnsdir
+CONF_DIR=$STATE_DIR   # the config lives with everything else dnsdir keeps
 
 GO_MIN=1.24
 GO_VERSION=1.24.7
-GO_BASE=${DDGW_GO_BASE_URL:-https://go.dev/dl}
-SYSTEMCTL=${DDGW_SYSTEMCTL:-systemctl}
-OS_RELEASE=${DDGW_OS_RELEASE:-/etc/os-release}
-SETTLE=${DDGW_SETTLE:-3}
+GO_BASE=${DNSDIR_GO_BASE_URL:-https://go.dev/dl}
+SYSTEMCTL=${DNSDIR_SYSTEMCTL:-systemctl}
+OS_RELEASE=${DNSDIR_OS_RELEASE:-/etc/os-release}
+SETTLE=${DNSDIR_SETTLE:-3}
 
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -129,7 +132,7 @@ write_file() {
 sha() { sha256sum "$1" | awk '{print $1}'; }
 
 # Treat a tool/header as missing when the test hook says so.
-assumed_missing() { [[ ",${DDGW_ASSUME_MISSING:-}," == *",$1,"* ]]; }
+assumed_missing() { [[ ",${DNSDIR_ASSUME_MISSING:-}," == *",$1,"* ]]; }
 
 # ── root ─────────────────────────────────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ] && [ "$DRY" = 0 ]; then
@@ -170,7 +173,7 @@ case $FAMILY in
   arch)   PM=pacman;;
 esac
 
-if { [ -d /run/systemd/system ] && have "$SYSTEMCTL"; } || [ -n "${DDGW_FORCE_SYSTEMD:-}" ]; then
+if { [ -d /run/systemd/system ] && have "$SYSTEMCTL"; } || [ -n "${DNSDIR_FORCE_SYSTEMD:-}" ]; then
   HAVE_SYSTEMD=1
 else
   HAVE_SYSTEMD=0
@@ -182,8 +185,11 @@ step "AnyName v$NEW_VER on $OS_NAME ($FAMILY family, package manager: $PM)"
 # ── existing installation? ───────────────────────────────────────────────────
 OLD_VER=""; MODE=fresh
 if [ -x "$BIN" ]; then
-  OLD_VER=$("$BIN" --version 2>/dev/null | sed -n 's/^ddgw v\([0-9][0-9]*\).*/\1/p' | head -1 || true)
+  OLD_VER=$("$BIN" --version 2>/dev/null | sed -n 's/^dnsdir v\([0-9][0-9]*\).*/\1/p' | head -1 || true)
   OLD_VER=${OLD_VER:-0}   # present but too old to report a version
+elif [ -x "$OLD_BIN" ]; then   # an install from before v367, when this was called ddgw
+  OLD_VER=$("$OLD_BIN" --version 2>/dev/null | sed -n 's/^ddgw v\([0-9][0-9]*\).*/\1/p' | head -1 || true)
+  OLD_VER=${OLD_VER:-0}
 fi
 if [ -n "$OLD_VER" ]; then
   if [ "$OLD_VER" -lt "$NEW_VER" ]; then
@@ -199,9 +205,9 @@ if [ -n "$OLD_VER" ]; then
 else
   info "no existing installation found: fresh install"
 fi
-OTHER=$(command -v ddgw 2>/dev/null || true)
+OTHER=$(command -v dnsdir 2>/dev/null || true)
 if [ -n "$OTHER" ] && [ "$OTHER" != "$BIN" ]; then
-  warn "another ddgw exists at $OTHER and may shadow $BIN in PATH"
+  warn "another dnsdir exists at $OTHER and may shadow $BIN in PATH"
 fi
 
 # values remembered from a previous install (so upgrades keep them)
@@ -224,7 +230,7 @@ fi
 TMP=""
 cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; }
 trap cleanup EXIT
-TMP=$(mktemp -d /var/tmp/ddgw-build.XXXXXX)
+TMP=$(mktemp -d /var/tmp/dnsdir-build.XXXXXX)
 
 pkg_install() {
   [ $# -gt 0 ] || return 0
@@ -291,7 +297,7 @@ install_deps() {
 }
 
 # FRR is what the BGP page configures (anycast addresses announced to routers).
-# It is installed here so the page works at once, but ddgw does not touch FRR
+# It is installed here so the page works at once, but dnsdir does not touch FRR
 # until a local AS number is set, so an install on a host that never uses BGP is
 # unchanged.  A failure to install it is only a warning: everything else works.
 install_frr() {
@@ -311,9 +317,9 @@ install_frr() {
     fi
     [ "$DRY" = 1 ] || have vtysh || warn "FRR installed but 'vtysh' is not on the PATH"
   fi
-  # FRR's reload (how ddgw applies a changed BGP setting without dropping the sessions)
+  # FRR's reload (how dnsdir applies a changed BGP setting without dropping the sessions)
   # needs frr-reload.py, which Debian and the RHEL family ship in a separate package;
-  # on Arch it is part of frr.  Without it ddgw has to restart FRR for every change.
+  # on Arch it is part of frr.  Without it dnsdir has to restart FRR for every change.
   if [ "$FAMILY" != arch ] && { assumed_missing frr-reload || [ ! -e /usr/lib/frr/frr-reload.py ]; }; then
     info "installing frr-pythontools (lets FRR reload a changed config without dropping BGP sessions)"
     (pkg_install frr-pythontools) || warn "frr-pythontools could not be installed; AnyName will restart FRR (briefly dropping BGP sessions) when the BGP setting changes."
@@ -362,7 +368,7 @@ find_go() {
     go_ok "$OPT_GO" || die "$OPT_GO is not a Go >= $GO_MIN"
     GO=$OPT_GO; return 0
   fi
-  [ -n "${DDGW_FORCE_GO_DOWNLOAD:-}" ] && return 1
+  [ -n "${DNSDIR_FORCE_GO_DOWNLOAD:-}" ] && return 1
   for c in "$(command -v go 2>/dev/null || true)" /usr/local/go/bin/go /usr/lib/go/bin/go /usr/lib/golang/bin/go /snap/bin/go /usr/lib/go-*/bin/go "$SHARE/go/bin/go"; do
     [ -n "$c" ] && go_ok "$c" && { GO=$c; return 0; }
   done
@@ -406,7 +412,7 @@ pkg_version_ok() { # pkg_version_ok VERSION-STRING -> 0 if >= GO_MIN
 }
 try_distro_go() {
   local p cand
-  [ -z "${DDGW_FORCE_GO_DOWNLOAD:-}" ] || return 1
+  [ -z "${DNSDIR_FORCE_GO_DOWNLOAD:-}" ] || return 1
   case $FAMILY in
     debian) set -- golang-1.25-go golang-1.24-go golang-go;;
     fedora|rhel) set -- golang;;
@@ -445,23 +451,53 @@ if find_go; then info "using $GO ($("$GO" version | awk '{print $3}'))"
 elif [ "$SKIP_DEPS" = 0 ] && [ -z "$OPT_GO" ] && try_distro_go && [ "$DRY" = 0 ]; then
   find_go; info "using $GO ($("$GO" version | awk '{print $3}'))"
 else
-  [ "$DRY" = 1 ] && [ "$SKIP_DEPS" = 0 ] && [ -z "$OPT_GO" ] && [ -z "${DDGW_FORCE_GO_DOWNLOAD:-}" ] && info "[dry-run] (if the package gives no Go >= $GO_MIN, the official toolchain is downloaded instead)"
+  [ "$DRY" = 1 ] && [ "$SKIP_DEPS" = 0 ] && [ -z "$OPT_GO" ] && [ -z "${DNSDIR_FORCE_GO_DOWNLOAD:-}" ] && info "[dry-run] (if the package gives no Go >= $GO_MIN, the official toolchain is downloaded instead)"
   download_go
 fi
 
 # ── build (before touching the installed system) ─────────────────────────────
 step "Building AnyName v$NEW_VER (with PAM)"
-NEWBIN=$TMP/ddgw
+NEWBIN=$TMP/dnsdir
 if [ "$DRY" = 1 ]; then
-  info "[dry-run] CGO_ENABLED=1 $GO build -trimpath -o ddgw ."
+  info "[dry-run] CGO_ENABLED=1 $GO build -trimpath -o dnsdir ."
 else
   ( cd "$SRC/source" &&
     GOTOOLCHAIN=local CGO_ENABLED=1 GOCACHE="$TMP/gocache" GOPATH="$TMP/gopath" GOFLAGS=-mod=mod \
     "$GO" build -trimpath -ldflags='-s -w' -o "$NEWBIN" . ) ||
     die "build failed — the installed version (if any) was not touched"
   grep -aq 'libpam\.so' "$NEWBIN" || die "built binary has no PAM support (cgo disabled?) — web GUI logins would not work"
-  [ "$("$NEWBIN" --version)" = "ddgw v$NEW_VER" ] || die "built binary reports '$("$NEWBIN" --version)', expected 'ddgw v$NEW_VER'"
+  [ "$("$NEWBIN" --version)" = "dnsdir v$NEW_VER" ] || die "built binary reports '$("$NEWBIN" --version)', expected 'dnsdir v$NEW_VER'"
   info "built $(du -h "$NEWBIN" | cut -f1) binary, PAM linked"
+fi
+
+# an install from before v367 was called ddgw: stop and remove the old service, binary and
+# helper link, move its files, and let the new binary move the state, the PAM service, the GUI
+# group (renamed, so its members stay) and the NetworkManager/FRR files before they are created
+# again below.  Everything is moved, never overwritten.
+if [ -x "$OLD_BIN" ] || [ -d "$OLD_SHARE" ] || [ -f "/etc/systemd/system/$OLD_UNIT_NAME" ] || [ -d /var/lib/ddgw ]; then
+  step "Moving the old ddgw install to dnsdir"
+  if [ "$HAVE_SYSTEMD" = 1 ] && [ -f "/etc/systemd/system/$OLD_UNIT_NAME" ]; then
+    run "$SYSTEMCTL" stop "$OLD_UNIT_NAME" >/dev/null 2>&1 || true
+    run "$SYSTEMCTL" disable "$OLD_UNIT_NAME" >/dev/null 2>&1 || true
+    run rm -f "/etc/systemd/system/$OLD_UNIT_NAME"
+    run "$SYSTEMCTL" daemon-reload || true
+    run "$SYSTEMCTL" reset-failed "$OLD_UNIT_NAME" >/dev/null 2>&1 || true
+  fi
+  run rm -f "$OLD_BIN" "$OLD_BIN.new" "$BIN_DIR/ddgw-uninstall"
+  if [ -d "$OLD_SHARE" ] && [ ! -e "$SHARE" ]; then
+    run mv "$OLD_SHARE" "$SHARE"
+    if [ "$DRY" = 0 ]; then
+      [ -f "$SHARE/ddgw.prev" ] && mv -f "$SHARE/ddgw.prev" "$SHARE/dnsdir.prev"
+      [ -f "$SHARE/ddgw.conf.example" ] && mv -f "$SHARE/ddgw.conf.example" "$SHARE/dnsdir.conf.example"
+      [ -f "$SHARE/install.manifest" ] && sed -i 's/ddgw/dnsdir/g' "$SHARE/install.manifest"
+    fi
+  fi
+  if [ "$DRY" = 1 ]; then
+    info "[dry-run] move /var/lib/ddgw, /etc/pam.d/ddgw and the group ddgw to the dnsdir names"
+  else
+    mkdir -p "$SHARE"
+    "$NEWBIN" --migrate-old-install || warn "could not move everything from the old ddgw install (see above)"
+  fi
 fi
 
 # ── install files ────────────────────────────────────────────────────────────
@@ -472,14 +508,17 @@ run install -d -m 0700 "$STATE_DIR"   # config, history, cluster identity, certi
 # an install from before v15 kept its config in /etc/liras: move it over (never
 # overwrite a config that is already here; each old file is removed once its copy
 # is in place, and /etc/liras goes when it is empty)
-if [ -f "$LEGACY_CONF_DIR/ddgw.conf" ] && [ ! -f "$CONF_DIR/ddgw.conf" ]; then
+if [ -f "$LEGACY_CONF_DIR/ddgw.conf" ] && [ ! -f "$CONF_DIR/dnsdir.conf" ]; then
   if [ "$DRY" = 1 ]; then
     info "[dry-run] move $LEGACY_CONF_DIR/ddgw.conf (and ddgw-web.crt/.key) to $CONF_DIR"
   else
-    for f in ddgw.conf ddgw-web.crt ddgw-web.key; do
-      if [ -f "$LEGACY_CONF_DIR/$f" ] && [ ! -e "$CONF_DIR/$f" ]; then
-        cp -p "$LEGACY_CONF_DIR/$f" "$CONF_DIR/$f" && chmod 0600 "$CONF_DIR/$f" &&
-          cmp -s "$LEGACY_CONF_DIR/$f" "$CONF_DIR/$f" && rm -f "$LEGACY_CONF_DIR/$f"
+    for f in conf web.crt web.key; do
+      if [ -f "$LEGACY_CONF_DIR/ddgw.$f" ] || [ -f "$LEGACY_CONF_DIR/ddgw-$f" ]; then
+        if [ "$f" = conf ]; then from="$LEGACY_CONF_DIR/ddgw.conf"; to="$CONF_DIR/dnsdir.conf"
+        else from="$LEGACY_CONF_DIR/ddgw-$f"; to="$CONF_DIR/dnsdir-$f"; fi
+        if [ ! -e "$to" ]; then
+          cp -p "$from" "$to" && chmod 0600 "$to" && cmp -s "$from" "$to" && rm -f "$from"
+        fi
       fi
     done
     rmdir "$LEGACY_CONF_DIR" 2>/dev/null || true
@@ -492,8 +531,8 @@ run rm -f /run/liras/ddgw.sock   # control socket of an older release
 HAD_BIN=0
 if [ -x "$BIN" ]; then
   HAD_BIN=1
-  run cp -p "$BIN" "$SHARE/ddgw.prev"
-  info "previous binary saved to $SHARE/ddgw.prev"
+  run cp -p "$BIN" "$SHARE/dnsdir.prev"
+  info "previous binary saved to $SHARE/dnsdir.prev"
 fi
 run install -m 0755 "$NEWBIN" "$BIN.new"
 run mv -f "$BIN.new" "$BIN"
@@ -515,7 +554,7 @@ elif [ "$GO" = "$SHARE/go/bin/go" ]; then
 fi
 
 # docs, examples, and the uninstaller (so removal works without the source tree)
-run install -m 0644 "$SRC/source/ddgw.conf.example" "$SHARE/ddgw.conf.example"
+run install -m 0644 "$SRC/source/dnsdir.conf.example" "$SHARE/dnsdir.conf.example"
 for f in README.md CHANGELOG.md LICENSE; do
   src="$SRC/docs/$f"; [ "$f" = CHANGELOG.md ] || src="$SRC/$f"
   [ -f "$src" ] && run install -m 0644 "$src" "$SHARE/$f"
@@ -523,7 +562,7 @@ done
 run install -m 0644 "$SRC/source/VERSION" "$SHARE/VERSION"
 if [ -f "$SRC/uninstall.sh" ]; then
   run install -m 0755 "$SRC/uninstall.sh" "$SHARE/uninstall.sh"
-  run ln -sf "$SHARE/uninstall.sh" "$BIN_DIR/ddgw-uninstall"
+  run ln -sf "$SHARE/uninstall.sh" "$BIN_DIR/dnsdir-uninstall"
 fi
 
 # group
@@ -549,22 +588,22 @@ step "PAM service $PAM_FILE"
 case $FAMILY in
   debian)
     PAM_STACK=common-auth
-    PAM_BODY='# /etc/pam.d/ddgw — installed by ddgw install.sh
-# Password check for the ddgw web GUI. Group membership is enforced by ddgw.
+    PAM_BODY='# /etc/pam.d/dnsdir — installed by dnsdir install.sh
+# Password check for the dnsdir web GUI. Group membership is enforced by dnsdir.
 @include common-auth
 @include common-account';;
   fedora|rhel)
     PAM_STACK=system-auth
     PAM_BODY='#%PAM-1.0
-# /etc/pam.d/ddgw — installed by ddgw install.sh
-# Password check for the ddgw web GUI. Group membership is enforced by ddgw.
+# /etc/pam.d/dnsdir — installed by dnsdir install.sh
+# Password check for the dnsdir web GUI. Group membership is enforced by dnsdir.
 auth       substack     system-auth
 account    include      system-auth';;
   arch)
     PAM_STACK=system-auth
     PAM_BODY='#%PAM-1.0
-# /etc/pam.d/ddgw — installed by ddgw install.sh
-# Password check for the ddgw web GUI. Group membership is enforced by ddgw.
+# /etc/pam.d/dnsdir — installed by dnsdir install.sh
+# Password check for the dnsdir web GUI. Group membership is enforced by dnsdir.
 auth       include      system-auth
 account    include      system-auth';;
 esac
@@ -585,11 +624,11 @@ fi
 # NetworkManager: keep it away from the virtual MAC interfaces
 if [ -d /etc/NetworkManager ] && { [ "$HAVE_SYSTEMD" = 0 ] || "$SYSTEMCTL" is-active --quiet NetworkManager 2>/dev/null || [ -d /etc/NetworkManager/conf.d ]; }; then
   mkdir -p /etc/NetworkManager/conf.d 2>/dev/null || true
-  res=$(printf '%s\n' '# installed by ddgw: the gateway creates macvlan interfaces named ddgw<group>.<slot>;' \
+  res=$(printf '%s\n' '# installed by dnsdir: the gateway creates macvlan interfaces named dnsdir<group>.<slot>;' \
                       '# NetworkManager must not try to configure them.' \
-                      '[keyfile]' 'unmanaged-devices=interface-name:ddgw*' | write_file "$NM_FILE" 0644)
+                      '[keyfile]' 'unmanaged-devices=interface-name:dnsdir*' | write_file "$NM_FILE" 0644)
   if [ "$res" != unchanged ]; then
-    NM_CREATED=1; info "NetworkManager: marked ddgw* interfaces unmanaged ($res)"
+    NM_CREATED=1; info "NetworkManager: marked dnsdir* interfaces unmanaged ($res)"
     [ "$HAVE_SYSTEMD" = 1 ] && run "$SYSTEMCTL" reload NetworkManager >/dev/null 2>&1 || true
   fi
 fi
@@ -599,7 +638,7 @@ if have restorecon; then run restorecon -F "$BIN" "$PAM_FILE" "$SHARE" >/dev/nul
 
 # ── systemd unit ─────────────────────────────────────────────────────────────
 UNIT_BODY="[Unit]
-Description=ddgw - DNS Distributed Gateway
+Description=dnsdir - DNS Distributed Gateway
 Documentation=file://$SHARE/README.md
 After=network-online.target
 Wants=network-online.target
@@ -607,7 +646,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=$BIN --config $CONF_DIR/ddgw.conf
+ExecStart=$BIN --config $CONF_DIR/dnsdir.conf
 Restart=always
 RestartSec=2
 TimeoutStopSec=15
@@ -634,20 +673,20 @@ if [ "$HAVE_SYSTEMD" = 1 ]; then
     if [ "$DRY" = 0 ]; then
       sleep "$SETTLE"
       if ! "$SYSTEMCTL" is-active --quiet "$UNIT_NAME"; then
-        errmsg="ddgw v$NEW_VER failed to start"
-        if [ "$HAD_BIN" = 1 ] && [ -x "$SHARE/ddgw.prev" ]; then
+        errmsg="dnsdir v$NEW_VER failed to start"
+        if [ "$HAD_BIN" = 1 ] && [ -x "$SHARE/dnsdir.prev" ]; then
           warn "$errmsg — rolling back to the previous binary"
-          cp -p "$SHARE/ddgw.prev" "$BIN.new" && mv -f "$BIN.new" "$BIN"
+          cp -p "$SHARE/dnsdir.prev" "$BIN.new" && mv -f "$BIN.new" "$BIN"
           [ "${OLD_VER:-0}" != 0 ] && echo "$OLD_VER" >"$SHARE/VERSION"
           "$SYSTEMCTL" restart "$UNIT_NAME" || true
           sleep "$SETTLE"
           ROLLED_BACK=1
           if "$SYSTEMCTL" is-active --quiet "$UNIT_NAME"; then
-            die "$errmsg; the previous version was restored and is running. See: journalctl -u ddgw -n 50"
+            die "$errmsg; the previous version was restored and is running. See: journalctl -u dnsdir -n 50"
           fi
-          die "$errmsg and the restored previous version is not running either. See: journalctl -u ddgw -n 50"
+          die "$errmsg and the restored previous version is not running either. See: journalctl -u dnsdir -n 50"
         fi
-        die "$errmsg. See: journalctl -u ddgw -n 50"
+        die "$errmsg. See: journalctl -u dnsdir -n 50"
       fi
       info "service is running"
     fi
@@ -656,7 +695,7 @@ if [ "$HAVE_SYSTEMD" = 1 ]; then
   fi
 else
   step "systemd"
-  warn "systemd is not running here — unit file not installed. Start it yourself: $BIN --config $CONF_DIR/ddgw.conf"
+  warn "systemd is not running here — unit file not installed. Start it yourself: $BIN --config $CONF_DIR/dnsdir.conf"
 fi
 
 # ── manifest ─────────────────────────────────────────────────────────────────
@@ -685,10 +724,10 @@ fi
 # ── summary ──────────────────────────────────────────────────────────────────
 step "Done: AnyName v$NEW_VER ($MODE)"
 HOST=$(hostname -f 2>/dev/null || hostname)
-if [ ! -f "$CONF_DIR/ddgw.conf" ]; then
-  info "no config yet ($CONF_DIR/ddgw.conf): the daemon runs with no gateway groups until you create one."
+if [ ! -f "$CONF_DIR/dnsdir.conf" ]; then
+  info "no config yet ($CONF_DIR/dnsdir.conf): the daemon runs with no gateway groups until you create one."
   info "  - in the web GUI: https://$HOST:$GUI_PORT  → Configuration"
-  info "  - or by hand: cp $SHARE/ddgw.conf.example $CONF_DIR/ddgw.conf && chmod 600 $CONF_DIR/ddgw.conf  (edits apply live)"
+  info "  - or by hand: cp $SHARE/dnsdir.conf.example $CONF_DIR/dnsdir.conf && chmod 600 $CONF_DIR/dnsdir.conf  (edits apply live)"
 fi
 # The user who ran the installer (the one behind sudo, or root itself) can log in to the GUI.
 INVOKER="${SUDO_USER:-${DOAS_USER:-}}"
@@ -707,7 +746,7 @@ elif have ufw && ufw status 2>/dev/null | grep -q '^Status: active'; then
 else
   info "ports used: GUI tcp/$GUI_PORT, cluster tcp/$CLUSTER_PORT (only if clustering is on), DNS proxy udp+tcp/53, gateway protocol udp/4729 (open them if a firewall is active)"
 fi
-info "status: ddgw --show-gateways | ddgw --show-dns     logs: journalctl -u ddgw -f"
-info "uninstall: sudo ddgw-uninstall   (add --purge to remove config and certificate too)"
+info "status: dnsdir --show-gateways | dnsdir --show-dns     logs: journalctl -u dnsdir -f"
+info "uninstall: sudo dnsdir-uninstall   (add --purge to remove config and certificate too)"
 [ "$ROLLED_BACK" = 1 ] && warn "rolled back"
 exit 0

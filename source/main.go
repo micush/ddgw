@@ -1,4 +1,4 @@
-// ddgw — DNS Distributed Gateway: a Distributed Gateway Load Balancing Protocol
+// dnsdir — DNS Distributed Gateway: a Distributed Gateway Load Balancing Protocol
 // daemon with a built-in DNS proxy that serves the VIP and forwards to the
 // fastest healthy upstream.
 package main
@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -23,15 +24,15 @@ import (
 	"time"
 )
 
-const usageText = `ddgw — DNS Distributed Gateway (Distributed Gateway Load Balancing Protocol + DNS proxy)
+const usageText = `dnsdir — DNS Distributed Gateway (Distributed Gateway Load Balancing Protocol + DNS proxy)
 Run as a systemd service or directly. All options are runtime-configurable
-and persisted to /var/lib/ddgw/ddgw.conf.
+and persisted to /var/lib/dnsdir/dnsdir.conf.
 
 Usage:
-    ddgw [options]
-    ddgw ?|-h|--help
-    ddgw --configure       interactive configuration wizard
-    ddgw --show-config     print current configuration
+    dnsdir [options]
+    dnsdir ?|-h|--help
+    dnsdir --configure       interactive configuration wizard
+    dnsdir --show-config     print current configuration
 
 Options:
   --log-level LEVEL     debug|info|warning|error (default: info)
@@ -43,13 +44,13 @@ Options:
   --canvas              Print the gateway diagram as a tree with live status
   --version             Print the release number and exit
   --assert-agc          Make this node the active gateway (AGC) for all groups
-  --config FILE         Config file path (default: /var/lib/ddgw/ddgw.conf)
-  --status-socket PATH  Status socket path (default: /run/ddgw/ddgw.sock)
+  --config FILE         Config file path (default: /var/lib/dnsdir/dnsdir.conf)
+  --status-socket PATH  Status socket path (default: /run/dnsdir/dnsdir.sock)
   --state-dir DIR       Where history, cluster identity, certificates and update
-                        data live (default: /var/lib/ddgw)
+                        data live (default: /var/lib/dnsdir)
 
 Environment of the daemon:
-  DDGW_MEMORY_LIMIT_PERCENT  memory use (1-99, default 85) at which the memory guard drops the
+  DNSDIR_MEMORY_LIMIT_PERCENT  memory use (1-99, default 85) at which the memory guard drops the
                         oldest statistics, host history and cached answers
 
 Management commands (talk to the running daemon; root only; every one is also in
@@ -116,7 +117,7 @@ the web GUI):
                    --bgp-neighbor-del ADDR
                    --bgp-disable | --bgp-enable   (stop / restart BGP on this node, settings kept)
                    --bgp-neighbor-disable ADDR | --bgp-neighbor-enable ADDR
-                                                 (per node; ddgw then owns /etc/frr/frr.conf; BFD is always on)
+                                                 (per node; dnsdir then owns /etc/frr/frr.conf; BFD is always on)
   Cluster          --cluster-status  --cluster-token  --cluster-join CODE
                    --cluster-promote  --cluster-remove ADDR
                    --cluster-failover auto|on|off   (the primary promotes a replica by itself
@@ -127,7 +128,7 @@ the web GUI):
                    --update-apply  --update-push all|ADDR,...
                    --update-cancel all|ADDR,...  --update-auto on|off
                    --update-repo URL|default   (where "fetch online" downloads from;
-                   default https://github.com/micush/ddgw)
+                   default https://github.com/micush/dnsdir)
   Statistics       --stats [--stats-range 1h|1d|7d|30d]
                    [--stats-rcode nxdomain|servfail|refused|noerror|other|update]
                    [--stats-client ADDR | --stats-domain NAME]
@@ -164,7 +165,7 @@ file directly. Each group entry supports:
   vip4: IPv4 VIP with prefix, e.g. 10.0.0.1/24  (required when no vip6)
   vip6: IPv6 VIP with prefix, e.g. 2001:db8::1/64 (required when no vip4)
   neighbors: list of peer IP addresses for unicast mode (optional).
-    When present, ddgw sends hellos directly to each neighbor via unicast
+    When present, dnsdir sends hellos directly to each neighbor via unicast
     instead of multicast — required when peers are on different VNIs or
     separated by a routed boundary.
   Every ACTIVE/FORWARD node answers DNS on the VIP (there is no switch for it; an old
@@ -222,10 +223,10 @@ latency feeds the same estimate). An explicit "groups": [] means no gateways.
 
 Web GUI ("web" block): everything above is also available in a browser.
   Served over HTTPS (default port 53853). Log in with a system account that
-  is a member of the ddgw group; passwords are checked through PAM (service
-  "ddgw", see contrib/pam.d/). The page follows the system light/dark theme.
+  is a member of the dnsdir group; passwords are checked through PAM (service
+  "dnsdir", see contrib/pam.d/). The page follows the system light/dark theme.
   The GUI is always on.      listen   default ":53853"
-  group                default "ddgw"      pam_service  default "ddgw"
+  group                default "dnsdir"      pam_service  default "dnsdir"
   session_idle_minutes default 30
   max_failed_logins    default 3   wrong passwords ...
   failed_login_window_minutes default 1    ... within this window lock the
@@ -258,14 +259,14 @@ Cluster ("cluster" block; management only, independent of the AGC/AFN election):
   automatic failover (--cluster-failover) and the hand-over before a planned restart.
   The primary's GUI certificate is replicated to every member.
 
-Updates: upload ddgw_vN.tgz (or .zip) on any node (--update-upload); the node
+Updates: upload dnsdir_vN.tgz (or .zip) on any node (--update-upload); the node
   checks it, keeps the source, and each member that is asked to update (or all of
   them with --update-auto on) pulls it from a peer, builds it with its own Go
   toolchain (gcc + PAM headers needed), swaps the binary and restarts - one node
   at a time. A new binary that fails to start is rolled back automatically.
 
 Live reload: the daemon watches the config file via inotify.
-  Edit and save ddgw.conf — changes apply within ~50ms, no restart needed.
+  Edit and save dnsdir.conf — changes apply within ~50ms, no restart needed.
   Live fields (no engine restart): priority, lb_method, weight,
     hello_ms, hold_ms, preempt, max_afns, log_level, the whole "dns" block,
     web group/pam_service/session timeout, web cert/key (only listen restarts the GUI)
@@ -285,7 +286,7 @@ func main() {
 		fmt.Println(usageText)
 		return
 	}
-	fs := flag.NewFlagSet("ddgw", flag.ContinueOnError)
+	fs := flag.NewFlagSet("dnsdir", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
 		configure    = fs.Bool("configure", false, "")
@@ -301,32 +302,57 @@ func main() {
 		stateDir     = fs.String("state-dir", defaultStateDir, "")
 		cli          = registerCLIFlags(fs)
 	)
+	// install.sh runs this once, as root, before it creates the group and the PAM service, so an
+	// install that was called ddgw keeps its group members and settings (not a user-facing flag)
+	if len(os.Args) == 2 && os.Args[1] == "--migrate-old-install" {
+		did, err := migrateOldInstall(filepath.Dir(confPath))
+		for _, d := range did {
+			fmt.Println("    moved: " + d)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "dnsdir:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Println(usageText)
 			return
 		}
-		fmt.Fprintln(os.Stderr, "ddgw:", err)
-		fmt.Fprintln(os.Stderr, "try: ddgw --help")
+		fmt.Fprintln(os.Stderr, "dnsdir:", err)
+		fmt.Fprintln(os.Stderr, "try: dnsdir --help")
 		os.Exit(2)
 	}
 
 	if *showVersion {
-		fmt.Println("ddgw v" + version())
+		name := "dnsdir"
+		// a node still running a pre-v367 updater builds this tree under its old cache name
+		// (ddgw-v…) and accepts only a binary that calls itself ddgw
+		if strings.HasPrefix(filepath.Base(os.Args[0]), "ddgw-v") {
+			name = "ddgw"
+		}
+		fmt.Println(name + " v" + version())
 		return
 	}
 
 	// pre-v15 installs kept the config in /etc/liras: bring it over once, and never
 	// use that location again, even if an old service unit still names it
 	if *conf == legacyConfPath {
-		fmt.Fprintf(os.Stderr, "ddgw: %s is no longer used; using %s (update the service unit's --config, or re-run install.sh)\n", legacyConfPath, confPath)
+		fmt.Fprintf(os.Stderr, "dnsdir: %s is no longer used; using %s (update the service unit's --config, or re-run install.sh)\n", legacyConfPath, confPath)
 	}
 	*conf = canonicalConf(*conf)
 	if *conf == confPath && os.Geteuid() == 0 {
+		// releases before v367 were called ddgw: take their state over under the new names
+		if did, err := migrateOldInstall(filepath.Dir(confPath)); err != nil {
+			fmt.Fprintf(os.Stderr, "dnsdir: moving the old ddgw install: %v\n", err)
+		} else if len(did) > 0 {
+			fmt.Fprintf(os.Stderr, "dnsdir: this install was called ddgw before: %s\n", strings.Join(did, "; "))
+		}
 		if moved, err := migrateLegacyConfig(confPath, legacyConfPath); err != nil {
-			fmt.Fprintf(os.Stderr, "ddgw: could not move %s to %s: %v\n", legacyConfPath, confPath, err)
+			fmt.Fprintf(os.Stderr, "dnsdir: could not move %s to %s: %v\n", legacyConfPath, confPath, err)
 		} else if moved {
-			fmt.Fprintf(os.Stderr, "ddgw: moved your configuration from %s to %s and removed the old files\n",
+			fmt.Fprintf(os.Stderr, "dnsdir: moved your configuration from %s to %s and removed the old files\n",
 				legacyConfPath, confPath)
 		}
 	}
@@ -392,9 +418,9 @@ func main() {
 	setupLogging(dc.LogLevel)
 	startLogFile(*stateDir)
 	if !created {
-		infof("ddgw starting — %d group(s)", len(dc.Groups))
+		infof("dnsdir starting — %d group(s)", len(dc.Groups))
 	} else {
-		infof("ddgw starting — config file %s not found, created it with the defaults", *conf)
+		infof("dnsdir starting — config file %s not found, created it with the defaults", *conf)
 	}
 	if err := run(dc, *conf, *sock, *stateDir); err != nil {
 		fatal(err)
@@ -415,7 +441,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 			case <-ctx.Done():
 				return
 			case <-usr1:
-				warnf("SIGUSR1: every goroutine's stack is written to standard error (journalctl -u ddgw)")
+				warnf("SIGUSR1: every goroutine's stack is written to standard error (journalctl -u dnsdir)")
 				fmt.Fprintf(os.Stderr, "--- goroutine dump (SIGUSR1) %s ---\n%s--- end of goroutine dump ---\n", time.Now().Format(time.RFC3339), goroutineDump())
 			}
 		}
@@ -552,7 +578,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 		warnf("config watch unavailable: %v — edits need a restart", err)
 	}
 
-	infof("ddgw running — %d group(s), watching %s", len(dc.Groups), confFile)
+	infof("dnsdir running — %d group(s), watching %s", len(dc.Groups), confFile)
 	if cpuProcs > 0 {
 		infof("CPU limit of %.2f in this cgroup: using %d scheduler threads instead of %d", cpuQuota, cpuProcs, runtime.NumCPU())
 	}
@@ -581,7 +607,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 func certExpiryWatch(ctx context.Context, mg *Mgmt) {
 	for {
 		if w := mg.certs.ExpiryWarning(); w != "" {
-			warnf("web: %s — replace it under Configure ▸ Web GUI or with ddgw --tls-install", w)
+			warnf("web: %s — replace it under Configure ▸ Web GUI or with dnsdir --tls-install", w)
 		}
 		select {
 		case <-ctx.Done():

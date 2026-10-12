@@ -20,7 +20,7 @@ import (
 // the limit.  If it is still above, the next check carries on.  Newer data always outlives older data, and the newest hour is never dropped (it is tiny, and a machine that
 // is short of memory for another reason should not lose its recent history as well).
 //
-// The limit can be changed with the environment variable DDGW_MEMORY_LIMIT_PERCENT (1-99) of the daemon.
+// The limit can be changed with the environment variable DNSDIR_MEMORY_LIMIT_PERCENT (1-99) of the daemon.
 
 const (
 	memGuardEvery  = 30 * time.Second
@@ -29,7 +29,7 @@ const (
 	memGuardRounds = 5         // rounds per check
 	memGuardKeep   = time.Hour // the newest hour of statistics and host history is never dropped
 	memGuardSettle = time.Second
-	memGuardEnv    = "DDGW_MEMORY_LIMIT_PERCENT"
+	memGuardEnv    = "DNSDIR_MEMORY_LIMIT_PERCENT"
 )
 
 // MemGuardInfo is what the Host page and --host say about the guard.

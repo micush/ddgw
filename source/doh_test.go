@@ -256,7 +256,7 @@ func TestDoHFrontendServesClients(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPut, base, strings.NewReader(string(q)))
 		return cl.Do(req)
 	})
-	// ddgw's own DoH client against it, end to end
+	// dnsdir's own DoH client against it, end to end
 	if _, _, err := exchange(context.Background(), base, q, false, time.Second); err != nil {
 		t.Fatalf("own client: %v", err)
 	}

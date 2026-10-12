@@ -266,7 +266,7 @@
         items.map(([id, label]) => h("button", { type: "button", class: "nav-item", "data-tab": id, onclick: () => selectTab(id) }, label)))));
     const nav = h("nav", { class: "side", "aria-label": "Sections" },
       h("div", { class: "mark" }, h("div", { class: "brand" }, "AnyName DNS Director"),
-        h("div", { class: "muted small" }, "v" + s.version + (s.hostname && s.hostname.toLowerCase() !== "ddgw" ? " · " + s.hostname : ""))),
+        h("div", { class: "muted small" }, "v" + s.version + (s.hostname && s.hostname.toLowerCase() !== "dnsdir" ? " · " + s.hostname : ""))),
       h("div", { class: "nav-section" }, groups),
       h("div", { class: "nav-footer" },
         h("div", { class: "who" }, "Signed in as ", h("strong", {}, s.user)),
@@ -328,7 +328,7 @@
   }
 
   // ── help: the "?" in the top right, a slide-out panel for the current page ──
-  // Content is data in help.js (DDGW_HELP); this builds it with DOM calls only.
+  // Content is data in help.js (DNSDIR_HELP); this builds it with DOM calls only.
   function richText(str) {
     const out = [];
     for (const part of String(str).split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/)) {
@@ -341,7 +341,7 @@
     return out;
   }
   function helpBody(topic) {
-    const t = DDGW_HELP[topic] || DDGW_HELP._default;
+    const t = DNSDIR_HELP[topic] || DNSDIR_HELP._default;
     const kids = t.body.map((blk) => {
       if (typeof blk === "string") return h("p", {}, richText(blk));
       if (blk[0] === "h") return h("h3", {}, blk[1]);
@@ -377,7 +377,7 @@
   }
   function fillHelp() {
     // the DNS proxy page has a help page for each of its tabs
-    const topic = state.tab === "cfg_dns" && DDGW_HELP["config_dns" + state.dnsTab] ? "config_dns" + state.dnsTab : state.tab.startsWith("cfg_") ? "config" : state.tab;
+    const topic = state.tab === "cfg_dns" && DNSDIR_HELP["config_dns" + state.dnsTab] ? "config_dns" + state.dnsTab : state.tab.startsWith("cfg_") ? "config" : state.tab;
     const [t, kids] = helpBody(topic);
     document.getElementById("help-title").textContent = t;
     const body = clear(document.getElementById("help-body"));
@@ -477,7 +477,7 @@
   const VIEWS = {};
 
 
-  // Topology  (CLI: ddgw --canvas …)
+  // Topology  (CLI: dnsdir --canvas …)
   // One tab per gateway.  Circle = the gateway and its shared address, squares =
   // the DNS servers it forwards to, trapezoids = the domains each server must
   // answer to count as healthy.  Every change is saved as soon as it is made.
@@ -1928,7 +1928,7 @@
     { shared: true, k: "probe_timeout_ms", l: "Probe timeout (ms)", t: "int", min: 1 },
     { shared: true, k: "query_timeout_ms", l: "Forward timeout (ms)", t: "int", min: 1 },
     { section: "Client names", note: "Top clients ▸ right-click ▸ Name… sends a dynamic update (RFC 2136) for the name and its reverse record to the primary server of the zone." },
-    { shared: true, k: "register_key_name", l: "Registration key name", t: "text", hint: "optional TSIG key name, e.g. ddgw-key; empty sends the update unsigned" },
+    { shared: true, k: "register_key_name", l: "Registration key name", t: "text", hint: "optional TSIG key name, e.g. dnsdir-key; empty sends the update unsigned" },
     { shared: true, k: "register_key", l: "Registration key (base64)", t: "text", hint: "the key's secret as base64 (HMAC-SHA256)" },
     { shared: true, k: "register_ttl", l: "Registered record TTL (s)", t: "int", min: 0, max: 604800, hint: "0 = 300" },
   ];
@@ -2282,7 +2282,7 @@
           catch (e) { cb.checked = !on; say("bad", "Not changed: " + (e.message || e)); }
         });
         // the repository "Fetch from online" downloads from: shared, saved when the field is left; empty goes back to the default
-        const DEFAULT_REPO = "https://github.com/micush/ddgw";
+        const DEFAULT_REPO = "https://github.com/micush/dnsdir";
         const repoIn = h("input", { type: "text", value: state.updateRepo ? "https://github.com/" + state.updateRepo : DEFAULT_REPO, spellcheck: "false", autocomplete: "off", "aria-label": "Online repository" });
         const repoErr = h("span", { class: "notice bad", role: "alert" });
         repoIn.addEventListener("change", async (ev) => {
@@ -2579,7 +2579,7 @@
   // ── Certificate  (CLI: --tls-status/-install/-csr/-revert/-regenerate) ─────
   VIEWS.certificate = (() => {
     let info, status, csrBox, tools;
-    const sourceLabel = { files: "Files set in the configuration file", installed: "Uploaded on this page", cluster: "Copied from the cluster's main node", "self-signed": "Created automatically by ddgw" };
+    const sourceLabel = { files: "Files set in the configuration file", installed: "Uploaded on this page", cluster: "Copied from the cluster's main node", "self-signed": "Created automatically by dnsdir" };
     const fold = (title, ...kids) => h("details", { class: "card fold" }, h("summary", {}, title), h("div", { class: "body" }, ...kids));
 
     function drawInfo(c) {
@@ -2604,7 +2604,7 @@
         ta.value = c.pending_csr;
         csrBox.append(
           ta, h("div", { class: "toolbar" }, copyBtn(() => ta.value),
-            h("button", { class: "btn small", type: "button", onclick: () => saveText("ddgw.csr", ta.value) }, "Download"),
+            h("button", { class: "btn small", type: "button", onclick: () => saveText("dnsdir.csr", ta.value) }, "Download"),
             h("button", { class: "btn small", type: "button", onclick: async () => {
               if (!confirm("Throw away the pending request?")) return;
               try { await api("POST", "/api/tls/csr/cancel", {}); await load(); } catch (e) { fail(status)(e); }
@@ -2728,7 +2728,7 @@
                 const ta = h("textarea", { rows: 4, readonly: true, class: "pem", "aria-label": "Join code" }); ta.value = r.code;
                 clear(tokenBox).append(h("div", { class: "card" }, h("header", {}, h("h2", {}, "Join code"), h("span", { class: "muted" }, "single use, valid until " + when(r.expires))),
                   h("div", { class: "body" }, ta, h("div", { class: "toolbar" }, copyBtn(() => ta.value),
-                    h("span", { class: "hint" }, "Paste it on the new node (Cluster → Join) or run: ddgw --cluster-join '<code>'")))));
+                    h("span", { class: "hint" }, "Paste it on the new node (Cluster → Join) or run: dnsdir --cluster-join '<code>'")))));
               } catch (e) { fail(status)(e); }
             } }, "Create join code"),
             h("button", { class: "btn", type: "button", onclick: () => act("/api/cluster/sync", {}, null, "Synced.") }, "Sync now"),
@@ -2762,7 +2762,7 @@
     function draw(v) { const real = dyn; dyn = h("div", {}); try { build(v); } finally { morph(real, dyn); dyn = real; } }
     // built into a detached copy and morphed in: the page keeps its elements (and so its scroll boxes) from one poll to the next
     function build(v) {
-      if (!v.toolchain) dyn.append(h("div", { class: "notice bad", role: "alert" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/ddgw/go."));
+      if (!v.toolchain) dyn.append(h("div", { class: "notice bad", role: "alert" }, "No Go toolchain (≥ 1.24) was found on this node, so it cannot build updates itself. Re-run install.sh, which keeps one under /usr/local/share/dnsdir/go."));
       const newer = v.source_version && Number(v.source_version) > Number(v.running);
       fill(stats, 
         stat("Running", "v" + v.running), stat("Staged source", v.source_version ? "v" + v.source_version : "none"),
@@ -3695,14 +3695,14 @@
       tsBtn.disabled = true; tsHold = Infinity;
       say(status, "info", "Collecting from every node… this takes up to a minute.");
       try {
-        await apiDownload("/api/tshoot/download?capture=1", "ddgw-tshoot.tgz");
+        await apiDownload("/api/tshoot/download?capture=1", "dnsdir-tshoot.tgz");
         say(status, "info", "Downloaded. Passwords, the gateway key, tokens and join codes are removed; README.txt in it lists what it holds.");
       } catch (e) { fail(status)(e); }
       tsBtn.disabled = false; tsHold = Date.now() + 20000;
     }
     function download() {
       const text = shown.map((l) => l.raw).join("\n") + "\n";
-      const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: "ddgw-log.txt" });
+      const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: "dnsdir-log.txt" });
       document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
@@ -3843,7 +3843,7 @@
           durSel = h("select", { "aria-label": "How long" }, [["5", "5 seconds"], ["10", "10 seconds"], ["30", "30 seconds"], ["60", "60 seconds"]].map(([v, t]) => h("option", { value: v }, t)));
           durSel.value = "10";
           goBtn = h("button", { class: "btn primary", type: "button", onclick: goAll }, "Capture on all nodes");
-          dlJob = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/clustercapture/download", "ddgw-cluster-capture.tgz").catch(fail(status)) }, "Download .tgz");
+          dlJob = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/clustercapture/download", "dnsdir-cluster-capture.tgz").catch(fail(status)) }, "Download .tgz");
           jobBox = h("div", {});
           main.append(status, section("Capture on every node",
             h("div", { class: "hint nomargin" }, "Runs the same capture on every node of the cluster at the same time, for the time you choose, and bundles one .pcap per node in a .tgz. Each node keeps its newest packets (about 4 MB). The capture only listens."),
@@ -3854,7 +3854,7 @@
         }
         startBtn = h("button", { class: "btn primary", type: "button", onclick: start }, "Start");
         stopBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: stop }, "Stop");
-        dlBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/capture/download", "ddgw-capture.tgz").catch(fail(status)) }, "Download .tgz");
+        dlBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => apiDownload("/api/capture/download", "dnsdir-capture.tgz").catch(fail(status)) }, "Download .tgz");
         info = h("div", { class: "hint nomargin" });
         box = h("div", { class: "logbox capbox", tabindex: "0", role: "log", "aria-label": "Captured packets" });
         main.append(status, section("Packet capture",

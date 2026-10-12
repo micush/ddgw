@@ -17,7 +17,7 @@ import (
 // ticked.  It looks for the tag the way get.sh does: the newest published release, otherwise the highest v<number> tag,
 // downloads that tag's source archive and hands it to the same staging as an uploaded file.  Variables only so tests can
 // point them at a fake server.
-const defaultRepo = "micush/ddgw"
+const defaultRepo = "micush/dnsdir"
 
 var (
 	ghRepo = defaultRepo
@@ -37,7 +37,7 @@ func ghGet(ctx context.Context, url string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "ddgw/"+version())
+	req.Header.Set("User-Agent", "dnsdir/"+version())
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := (&http.Client{Timeout: fetchTimeout}).Do(req)
 	if err != nil {

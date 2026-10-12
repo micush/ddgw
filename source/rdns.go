@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-// Reverse lookups for the client list (qstats.go) ask the DNS servers ddgw itself forwards to, through
+// Reverse lookups for the client list (qstats.go) ask the DNS servers dnsdir itself forwards to, through
 // the pools, before they try the machine's own resolver: the node's /etc/resolv.conf may point at
 // nothing useful (a resolver that moved to another port, the VIP before it is up), while the servers
-// ddgw probes and forwards to are known to answer and are the ones that hold the PTR records.
+// dnsdir probes and forwards to are known to answer and are the ones that hold the PTR records.
 
 // reverseName is the PTR owner name of an address: d.c.b.a.in-addr.arpa, or the 32 nibbles under ip6.arpa.
 func reverseName(ip string) (string, bool) {

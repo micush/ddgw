@@ -135,7 +135,7 @@ type QStats struct {
 	names map[string]string // names given by hand (Settings), under rmu
 	rdns  map[string]rdnsEntry
 	rwork map[string]bool
-	// ptrVia asks the DNS servers ddgw forwards to for the names of an address (rdns.go); set by the daemon.
+	// ptrVia asks the DNS servers dnsdir forwards to for the names of an address (rdns.go); set by the daemon.
 	ptrVia func(ctx context.Context, ip string) []string
 }
 
@@ -730,7 +730,7 @@ func (s *QStats) lookup(ip string) {
 			}
 		}
 	}
-	if s.ptrVia != nil { // the servers ddgw forwards to first
+	if s.ptrVia != nil { // the servers dnsdir forwards to first
 		ctx, cancel := context.WithTimeout(context.Background(), qsRDNSTimeout)
 		add(s.ptrVia(ctx, ip))
 		cancel()

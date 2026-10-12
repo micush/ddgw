@@ -19,21 +19,24 @@ import (
 )
 
 const (
-	// Everything ddgw keeps lives in /var/lib/ddgw: the config, the GUI
+	// Everything dnsdir keeps lives in /var/lib/dnsdir: the config, the GUI
 	// certificate, config history, cluster identity and update data.
-	confPath     = "/var/lib/ddgw/ddgw.conf"
-	statusSocket = "/run/ddgw/ddgw.sock"
+	confPath     = "/var/lib/dnsdir/dnsdir.conf"
+	statusSocket = "/run/dnsdir/dnsdir.sock"
 
 	// Releases before v15 kept the config under /etc/liras.
 	legacyConfPath = "/etc/liras/ddgw.conf"
+
+	// Releases before v367 were called ddgw and kept everything under /var/lib/ddgw.
+	oldConfPath = "/var/lib/ddgw/ddgw.conf"
 )
 
 // canonicalConf turns the pre-v15 path into the real one.  A service unit that was
 // never rewritten (an in-place update does not touch it) still starts the daemon
-// with `--config /etc/liras/ddgw.conf`; nothing may be read from or written to
-// /etc/liras any more, so that path means the config in /var/lib/ddgw.
+// with `--config /etc/liras/ddgw.conf` (or, before v367, /var/lib/ddgw/ddgw.conf); nothing may be
+// read from or written to those places any more, so both mean the config in /var/lib/dnsdir.
 func canonicalConf(path string) string {
-	if filepath.Clean(path) == legacyConfPath {
+	if c := filepath.Clean(path); c == legacyConfPath || c == oldConfPath {
 		return confPath
 	}
 	return path
@@ -63,8 +66,8 @@ func migrateLegacyConfig(dst, legacy string) (moved bool, err error) {
 	if err := os.WriteFile(dst, b, mode); err != nil {
 		return false, err
 	}
-	for _, f := range []string{"ddgw-web.crt", "ddgw-web.key"} {
-		src, to := filepath.Join(filepath.Dir(legacy), f), filepath.Join(filepath.Dir(dst), f)
+	for _, f := range []string{"web.crt", "web.key"} {
+		src, to := filepath.Join(filepath.Dir(legacy), "ddgw-"+f), filepath.Join(filepath.Dir(dst), "dnsdir-"+f)
 		if _, err := os.Stat(to); err == nil {
 			continue
 		}
@@ -517,7 +520,7 @@ type DNSConfig struct {
 	// default) is off. The certificate is the web GUI's.
 	DoHPort int `json:"doh_port,omitempty"`
 	// ECS passes the client's network to the servers (EDNS Client Subnet,
-	// RFC 7871) so they do not see every query coming from the ddgw node.  Only
+	// RFC 7871) so they do not see every query coming from the dnsdir node.  Only
 	// a prefix is sent: ecs_prefix4 bits of an IPv4 client (default 24),
 	// ecs_prefix6 bits of an IPv6 client (default 56).  On by default: a server that answers FORMERR or REFUSED to
 	// it is asked again without it and then left alone (dns.go forward).
@@ -1241,8 +1244,8 @@ func (w WebConfig) minPassword() int {
 func defaultWeb() WebConfig {
 	return WebConfig{
 		Listen:                   fmt.Sprintf(":%d", defaultWebPort),
-		Group:                    "ddgw",
-		PAMService:               "ddgw",
+		Group:                    "dnsdir",
+		PAMService:               "dnsdir",
 		SessionIdleMinutes:       30,
 		MaxFailedLogins:          3,
 		FailedLoginWindowMinutes: 1,

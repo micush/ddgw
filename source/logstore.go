@@ -15,11 +15,11 @@ import (
 )
 
 // The daemon's log goes to stderr (journald under systemd) and, so that the GUI and
-// `ddgw --log` can show and filter all of it, also to a size-rotated file in the state
-// directory: ddgw.log, plus ddgw.log.1 and ddgw.log.2 (the two previous files).
+// `dnsdir --log` can show and filter all of it, also to a size-rotated file in the state
+// directory: dnsdir.log, plus dnsdir.log.1 and dnsdir.log.2 (the two previous files).
 
 const (
-	logFileName    = "ddgw.log"
+	logFileName    = "dnsdir.log"
 	logFileMax     = 2 << 20 // rotate when the current file reaches this size
 	logFileKeep    = 2       // rotated files kept
 	logReadMax     = 5000    // most lines one GUI request returns

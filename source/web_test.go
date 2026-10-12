@@ -26,7 +26,7 @@ type fakeAuth struct {
 
 func (f *fakeAuth) Authenticate(service, user, pass string) error {
 	f.authCalls.Add(1)
-	if service != "ddgw" {
+	if service != "dnsdir" {
 		return errors.New("wrong service " + service)
 	}
 	if (user == "alice" || user == "bob") && pass == "pw" {
@@ -36,7 +36,7 @@ func (f *fakeAuth) Authenticate(service, user, pass string) error {
 }
 
 func (f *fakeAuth) InGroup(user, group string) (bool, error) {
-	if group != "ddgw" {
+	if group != "dnsdir" {
 		return false, errors.New("wrong group")
 	}
 	return user == "alice" && !f.removed.Load(), nil
@@ -59,7 +59,7 @@ func newWebEnv(t *testing.T) *webEnv {
 	failDelay = time.Millisecond
 	e := &webEnv{t: t, auth: &fakeAuth{}}
 	dir := t.TempDir()
-	e.conf = filepath.Join(dir, "ddgw.conf")
+	e.conf = filepath.Join(dir, "dnsdir.conf")
 	dc := newDaemonConfig()
 	dc.Cluster.Enabled = false
 	mg, err := NewMgmt(e.conf, filepath.Join(dir, "state"), dc)
@@ -161,14 +161,14 @@ func TestLoginRules(t *testing.T) {
 			t.Fatalf("%v: code %d", c, r.code)
 		}
 		// identical message for every cause
-		if !strings.Contains(r.body["error"].(string), "Login failed") || strings.Contains(r.body["error"].(string), "ddgw") {
+		if !strings.Contains(r.body["error"].(string), "Login failed") || strings.Contains(r.body["error"].(string), "dnsdir") {
 			t.Fatalf("%v: %v", c, r.body)
 		}
 		if _, has := r.body["attempts_left"]; has {
 			t.Fatalf("%v: attempts left is reported: %v", c, r.body)
 		}
 	}
-	// bob authenticated in PAM but is not in the ddgw group → still refused
+	// bob authenticated in PAM but is not in the dnsdir group → still refused
 	if r := e.login("alice", "pw"); r.code != 200 || r.body["user"] != "alice" || r.body["version"] != version() {
 		t.Fatalf("alice login: %d %v", r.code, r.body)
 	}
@@ -260,7 +260,7 @@ func TestSessionIdleTimeoutAndGroupRevocation(t *testing.T) {
 	}
 
 	e.login("alice", "pw")
-	e.auth.removed.Store(true) // alice leaves the ddgw group
+	e.auth.removed.Store(true) // alice leaves the dnsdir group
 	e.ws.mu.Lock()
 	for _, s := range e.ws.sessions {
 		s.checked = time.Now().Add(-time.Hour) // force the periodic re-check
@@ -279,7 +279,7 @@ func TestLoginThrottle(t *testing.T) {
 		// a guesser is not told how many tries it has left, nor what the policy is, nor which group is needed
 		msg, _ := r.body["error"].(string)
 		if _, has := r.body["attempts_left"]; has || r.code != 401 || strings.ContainsAny(msg, "0123456789") ||
-			strings.Contains(msg, "left") || strings.Contains(msg, "ddgw") || strings.Contains(msg, "lockout") {
+			strings.Contains(msg, "left") || strings.Contains(msg, "dnsdir") || strings.Contains(msg, "lockout") {
 			t.Fatalf("attempt %d of %d leaks something: %d %v", i, max, r.code, r.body)
 		}
 	}
@@ -455,7 +455,7 @@ func TestWebConfigValidation(t *testing.T) {
 	if err := ok.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if ok.Listen != ":53853" || ok.Group != "ddgw" || ok.PAMService != "ddgw" || ok.MaxFailedLogins != 3 || ok.FailedLoginWindowMinutes != 1 || ok.LockoutMinutes != 15 {
+	if ok.Listen != ":53853" || ok.Group != "dnsdir" || ok.PAMService != "dnsdir" || ok.MaxFailedLogins != 3 || ok.FailedLoginWindowMinutes != 1 || ok.LockoutMinutes != 15 {
 		t.Fatalf("defaults wrong: %+v", ok)
 	}
 	for name, mod := range map[string]func(*WebConfig){
@@ -505,10 +505,10 @@ func TestHTTPSListenerSelfSigned(t *testing.T) {
 	e.ws.Apply(cfg)
 	defer e.ws.Stop()
 
-	if _, err := os.Stat(filepath.Join(filepath.Dir(e.conf), "ddgw-web.key")); err != nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(e.conf), "dnsdir-web.key")); err != nil {
 		t.Fatalf("self-signed key not stored: %v", err)
 	}
-	if st, _ := os.Stat(filepath.Join(filepath.Dir(e.conf), "ddgw-web.key")); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(filepath.Join(filepath.Dir(e.conf), "dnsdir-web.key")); st.Mode().Perm() != 0o600 {
 		t.Fatalf("key mode %v", st.Mode())
 	}
 	c := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, Timeout: 5 * time.Second}

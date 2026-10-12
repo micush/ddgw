@@ -55,7 +55,7 @@ func (ca *testCA) issue(t *testing.T, pub *ecdsa.PublicKey, notAfter time.Time, 
 func newTestCertMgr(t *testing.T) (*CertManager, string) {
 	t.Helper()
 	d := t.TempDir()
-	conf := filepath.Join(d, "etc", "ddgw.conf")
+	conf := filepath.Join(d, "etc", "dnsdir.conf")
 	wc := defaultWeb()
 	return NewCertManager(filepath.Join(d, "state"), conf, func() WebConfig { return wc }), d
 }
@@ -182,7 +182,7 @@ func TestCertCSRFlow(t *testing.T) {
 
 func TestCertFilesPrecedenceAndReload(t *testing.T) {
 	d := t.TempDir()
-	conf := filepath.Join(d, "ddgw.conf")
+	conf := filepath.Join(d, "dnsdir.conf")
 	ca := newTestCA(t)
 	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	crt, key := filepath.Join(d, "c.pem"), filepath.Join(d, "k.pem")

@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Tag the current directory's git repo with v<version>, read straight from
+# source/VERSION -- so the tag always matches whatever was actually just
+# committed, never typed by hand, never drifts.
+# A no-op if that tag already exists (e.g. this run had nothing new to
+# commit), so re-running the script is always safe.
+tag_version() {
+    local VERSION TAG
+    VERSION=$(cat source/VERSION)
+    if [ -z "$VERSION" ]; then
+        echo "Warning: could not read version from source/VERSION -- skipping tag"
+        return
+    fi
+    TAG="v${VERSION}"
+    if git rev-parse "$TAG" >/dev/null 2>&1; then
+        echo "Tag $TAG already exists -- skipping"
+        return
+    fi
+    git tag "$TAG"
+    timeout 10 git push origin "$TAG"
+}
+
+echo "Starting Git sync..."
+cd ~/projects/ddgw || exit 1
+chmod 755 install.sh uninstall.sh
+git add .
+git commit -m "see docs/changelog.md for release info"
+timeout 10 git push
+tag_version
+
+rsync -avh --exclude .git --exclude distribute-ddgw --delete ~/projects/ddgw/ ~/projects/github-ddgw/
+cd ~/projects/github-ddgw || exit 1
+git add .
+git commit -m "see changelog for release info"
+timeout 10 git push
+tag_version
+
+echo "Requested operations completed successfully!"
+echo ""
+
+echo -e "\n\n\n*** COMPLETE ***\n\n\n"

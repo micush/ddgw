@@ -514,7 +514,7 @@ func (w *WebServer) handleCaptureDownload(rw http.ResponseWriter, r *http.Reques
 	}
 	host, _ := hostnameShort()
 	now := time.Now()
-	base := fmt.Sprintf("ddgw-%s-%s-%s", host, capNameRe.ReplaceAllString(iface, "_"), now.Format("20060102-150405"))
+	base := fmt.Sprintf("dnsdir-%s-%s-%s", host, capNameRe.ReplaceAllString(iface, "_"), now.Format("20060102-150405"))
 	var pcap bytes.Buffer
 	w.mg.capture.writePcap(&pcap, limit)
 	var out bytes.Buffer
@@ -537,7 +537,7 @@ func (w *WebServer) handleClusterCaptureDownload(rw http.ResponseWriter, r *http
 		return
 	}
 	rw.Header().Set("Content-Type", "application/gzip")
-	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "ddgw-cluster-capture-"+time.Now().Format("20060102-150405")+".tgz"))
+	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "dnsdir-cluster-capture-"+time.Now().Format("20060102-150405")+".tgz"))
 	rw.Write(b)
 }
 

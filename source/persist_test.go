@@ -141,7 +141,7 @@ func TestPersistMissingStaleAndDamaged(t *testing.T) {
 	}
 
 	// not gzip, a wrong format and a missing header are refused without loading anything
-	for name, body := range map[string]string{"text": "hello", "format": `{"k":"hdr","hdr":{"ddgw_stats":99}}` + "\n", "nohdr": `{"k":"mins","mins":[[1,1,1,0,0,0,0,0,0]]}` + "\n"} {
+	for name, body := range map[string]string{"text": "hello", "format": `{"k":"hdr","hdr":{"dnsdir_stats":99}}` + "\n", "nohdr": `{"k":"mins","mins":[[1,1,1,0,0,0,0,0,0]]}` + "\n"} {
 		f, _ := os.Create(filepath.Join(dir, persistFile))
 		if name == "text" {
 			f.WriteString(body)
@@ -191,7 +191,7 @@ func TestPersistLoadsFileWithFewerKinds(t *testing.T) {
 	f, _ := os.Create(filepath.Join(dir, persistFile))
 	zw := gzip.NewWriter(f)
 	m := t0.Unix() / 60 / qsFineSpan
-	zw.Write([]byte(`{"k":"hdr","hdr":{"ddgw_stats":1}}` + "\n"))
+	zw.Write([]byte(`{"k":"hdr","hdr":{"dnsdir_stats":1}}` + "\n"))
 	zw.Write([]byte(`{"k":"fine","s":` + strconv.FormatInt(m, 10) + `,"top":[{"c":{"192.0.2.5":2},"d":{"a.example":2},"t":{"A":2},"p":{"192.0.2.5":{"a.example":2}},"np":1,"u":2},{},{},{},{}]}` + "\n"))
 	zw.Close()
 	f.Close()

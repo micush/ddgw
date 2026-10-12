@@ -138,7 +138,7 @@ func freeUDPPort(t *testing.T) int {
 }
 
 // The address is on lo only while a DNS server answers, is renewed while it
-// does, and is taken off when the pool goes down, the gateway stops or ddgw stops.
+// does, and is taken off when the pool goes down, the gateway stops or dnsdir stops.
 func TestAnycastFollowsDNSHealth(t *testing.T) {
 	lo := hookLo(t)
 	up := newFakeDNS(t)
@@ -215,7 +215,7 @@ func TestSupervisorHoldsAnycastWithGateway(t *testing.T) {
 	lo := hookLo(t)
 	up := newFakeDNS(t)
 	g := defaultGroup()
-	g.Interface = "ddgwnone0"
+	g.Interface = "dnsdirnone0"
 	d := testDNSCfg(up.addr)
 	d.ListenPort = freeUDPPort(t)
 	g.DNSProxy, g.DNS, g.ExtraVIPs = true, &d, []string{"127.0.0.9"}
@@ -252,7 +252,7 @@ func TestReloadChangesAnycastInPlace(t *testing.T) {
 	lo := hookLo(t)
 	up := newFakeDNS(t)
 	g := defaultGroup()
-	g.Interface = "ddgwnone0"
+	g.Interface = "dnsdirnone0"
 	d := testDNSCfg(up.addr)
 	d.ListenPort = freeUDPPort(t)
 	g.DNSProxy, g.DNS, g.ExtraVIPs = true, &d, []string{"127.0.0.9"}

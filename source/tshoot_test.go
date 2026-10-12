@@ -70,15 +70,15 @@ func TestTshootNodeBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"README.txt", "ddgw/config.json", "ddgw/cluster.json", "system/system.txt", "net/ip-addr.txt", "ddgw/virtual-mac-tests.json", "ddgw/goroutines.txt"} {
+	for _, want := range []string{"README.txt", "dnsdir/config.json", "dnsdir/cluster.json", "system/system.txt", "net/ip-addr.txt", "dnsdir/virtual-mac-tests.json", "dnsdir/goroutines.txt"} {
 		if _, ok := files[want]; !ok {
 			t.Errorf("%s is missing; have %d files", want, len(files))
 		}
 	}
-	if g := string(files["ddgw/goroutines.txt"]); !strings.Contains(g, "goroutine ") || !strings.Contains(g, "TestTshootNodeBundle") {
+	if g := string(files["dnsdir/goroutines.txt"]); !strings.Contains(g, "goroutine ") || !strings.Contains(g, "TestTshootNodeBundle") {
 		t.Fatalf("the goroutine dump is missing or empty: %.200s", g)
 	}
-	if c := string(files["ddgw/config.json"]); strings.Contains(c, `"key": "dgw"`) {
+	if c := string(files["dnsdir/config.json"]); strings.Contains(c, `"key": "dgw"`) {
 		t.Errorf("the gateway key is in the bundle: %s", c)
 	}
 	if !strings.Contains(string(files["README.txt"]), "secrets were removed") {
@@ -106,9 +106,9 @@ func TestTshootClusterBundle(t *testing.T) {
 	var mine, theirs int
 	for n := range files {
 		switch {
-		case strings.Contains(n, "-this-node/ddgw/config.json"):
+		case strings.Contains(n, "-this-node/dnsdir/config.json"):
 			mine++
-		case strings.HasSuffix(n, "/ddgw/config.json"):
+		case strings.HasSuffix(n, "/dnsdir/config.json"):
 			theirs++
 		}
 	}

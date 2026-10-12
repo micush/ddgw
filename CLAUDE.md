@@ -1,6 +1,6 @@
 # Instructions for Claude working on this project
 
-ddgw (DNS Distributed Gateway) is a Go daemon: the Distributed Gateway Load Balancing Protocol (VIP
+dnsdir (DNS Distributed Gateway) is a Go daemon: the Distributed Gateway Load Balancing Protocol (VIP
 shared by an AGC and AFNs through per-node virtual MACs) plus a DNS proxy that
 serves the VIP and forwards to the fastest healthy upstream. This file is a
 standing instruction from the project owner so it doesn't need repeating each
@@ -11,7 +11,7 @@ process below without being told to.
 
 1. **Do the requested work** (code, docs, config, whatever was asked).
 **Layout.** The tarball has `README.md` and `LICENSE` at the top, `docs/` (CHANGELOG.md), `source/` (the Go
-module: `go.mod`, every `*.go`, `webui/`, `testdata/`, `ddgw.conf.example`, and `VERSION`,
+module: `go.mod`, every `*.go`, `webui/`, `testdata/`, `dnsdir.conf.example`, and `VERSION`,
 which must sit next to the Go files because `version.go` embeds it), `contrib/`, `install.sh`,
 `get.sh` (the `curl | bash` web installer: fetches the latest tag from GitHub and runs its `install.sh`; keep it working with the tag/layout rules here),
 `uninstall.sh`, `QUICKSTART.md` (a GUI-first getting-started guide; keep it true when the GUI changes) and this file. All Go commands below run in `source/`; paths in this
@@ -21,7 +21,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
 
 2. **Build and test before packaging, not after.** From `source/` run
    `gofmt -l .` (must print nothing), `go build -o /dev/null .` (a bare `go build ./...`
-   drops a `ddgw` binary in the repo root — delete it if it appears), `go vet ./...` and
+   drops a `dnsdir` binary in the repo root — delete it if it appears), `go vet ./...` and
    `go test -race -count=1 ./...`. Don't skip straight to packaging on a
    change that could plausibly have broken something. Beyond the unit tests:
    - **Touched the DNS proxy, pool or frontend?** Also do a manual smoke run:
@@ -30,7 +30,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
      `listen_port` above 1024), two or three throwaway UDP DNS responders with
      different delays, then query the VIP, kill the fastest upstream and check
      failover, edit the config (atomic rename) to check hot reload, and check
-     `ddgw --show-dns`. Use a scratch dir; don't `pkill -f` a pattern that also
+     `dnsdir --show-dns`. Use a scratch dir; don't `pkill -f` a pattern that also
      matches your own shell command line.
    - **Touched the wire format (`wire.go`)?** The golden vectors in
      `testdata/*.hex` are the reference encoding and the Go encoder
@@ -44,8 +44,8 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
         expiry, config validation). Never weaken an auth/CSRF/lockout test to
         make it pass.
      2. **Real PAM check** (needs `libpam0g-dev`; `apt-get install` works in
-        the sandbox): `groupadd ddgw`, two users via `useradd` (one in the
-        group, one not), `cp contrib/pam.d/ddgw.debian /etc/pam.d/ddgw`, run
+        the sandbox): `groupadd dnsdir`, two users via `useradd` (one in the
+        group, one not), `cp contrib/pam.d/dnsdir.debian /etc/pam.d/dnsdir`, run
         the daemon with a scratch config, then `curl -sk` the login on
         `https://127.0.0.1:53853`: the member gets in; wrong password, a valid
         user outside the group, and root are all refused with the same
@@ -69,7 +69,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
     `mgmt.go`, `ops.go`, `cli.go`, `web_mgmt.go`)?** The in-process tests are
     necessary but were not enough: a live run found six real bugs they missed.
     So also run **two or three real daemons** from one scratch dir each
-    (`--config ./ddgw.conf --state-dir ./state --status-socket ./s.sock`,
+    (`--config ./dnsdir.conf --state-dir ./state --status-socket ./s.sock`,
     `"groups": []` keeps it idle, give each distinct `web.listen`/`cluster.listen`/
     `cluster.self` on 127.0.0.1 and a different `dns.listen_port`, plus a
     throwaway PAM user as in the web check) and drive them through the CLI and
@@ -81,29 +81,29 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
     build, re-exec and reach `guard.json` state `ok` (about 20 s per node; the
     build needs go, gcc and the PAM headers). Use *relative* paths for
     `--state-dir`/`--config` once: that once broke the build. The daemons share
-    one `ddgw` binary here, so the update rebuilds the file they all run — use
+    one `dnsdir` binary here, so the update rebuilds the file they all run — use
     a copy per node if that matters. Afterwards kill them, `ip link del
-    ddgw1.1` (a config with no `groups` key still creates a default group and a macvlan; `"groups": []` is really empty),
-    remove the PAM user/group/`/etc/pam.d/ddgw`. In the UI, look at the
+    dnsdir1.1` (a config with no `groups` key still creates a default group and a macvlan; `"groups": []` is really empty),
+    remove the PAM user/group/`/etc/pam.d/dnsdir`. In the UI, look at the
     History/Certificate/Cluster/Updates tabs against a live daemon in
     Chromium (light and dark) and click through them: jsdom missed a null list
     and a nested-array render bug that Chromium showed immediately. JSON lists
     the GUI maps over must serialise as `[]`, never `null`.
   - **Touched `install.sh` / `uninstall.sh`?** They run as root on other
      people's machines, so: `bash -n` + `shellcheck -x -S warning` clean; a
-     `--dry-run` per family using `DDGW_OS_RELEASE` with fake os-release files
+     `--dry-run` per family using `DNSDIR_OS_RELEASE` with fake os-release files
      (ubuntu, debian, linuxmint, fedora, rocky, almalinux, centos, arch,
      manjaro, endeavouros; alpine must be refused) plus
-     `DDGW_ASSUME_MISSING=gcc,pam,ip,tar,go,curl DDGW_FORCE_GO_DOWNLOAD=1`
+     `DNSDIR_ASSUME_MISSING=gcc,pam,ip,tar,go,curl DNSDIR_FORCE_GO_DOWNLOAD=1`
      (dnf needs a stub `dnf` in `PATH` on Debian-family sandboxes); then a real
-     run in the sandbox with a shim `systemctl` (`DDGW_SYSTEMCTL`,
-     `DDGW_FORCE_SYSTEMD=1`, `DDGW_SETTLE=0`): fresh install, same-version
+     run in the sandbox with a shim `systemctl` (`DNSDIR_SYSTEMCTL`,
+     `DNSDIR_FORCE_SYSTEMD=1`, `DNSDIR_SETTLE=0`): fresh install, same-version
      no-op, upgrade (copy the tree, bump its VERSION), forced-failure
      rollback, downgrade refusal, uninstall with and without `--purge`, a
      customised PAM file surviving. Test the Go download against a local
-     `python3 -m http.server` via `DDGW_GO_BASE_URL` (go.dev is unreachable
+     `python3 -m http.server` via `DNSDIR_GO_BASE_URL` (go.dev is unreachable
      from the sandbox), including a wrong-checksum refusal. Undo every sandbox
-     change afterwards (group, `/etc/pam.d/ddgw`, `/var/lib/ddgw`, `/run/ddgw`, units).
+     change afterwards (group, `/etc/pam.d/dnsdir`, `/var/lib/dnsdir`, `/run/dnsdir`, units).
      Never let the uninstaller delete a config/cert without `--purge`, or a
      PAM file/group it didn't create.
    - **Touched the Users page (`users.go`, `users_cli.go`, `/api/users`)?** These run
@@ -119,7 +119,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
    - **Touched engine start-up, `startGroupWhenReadyLocked` or resume?** A gateway
      that serves DNS must not join the election before its pool answers
      (`warmThenStart`); every path that starts engines for a group goes through
-     it. Live-check: pause, stop the stub DNS servers, resume — no `ddgwN.M` link
+     it. Live-check: pause, stop the stub DNS servers, resume — no `dnsdirN.M` link
      and the circle says "starting" until the stubs return.
    - **Touched the node picker (`proxy.go`, `proxyPrefixes`, `LOCAL_API` in
      `app.js`, `/cluster/proxy`)?** A new `/api/` route is relayable only if its
@@ -153,7 +153,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
      independent of the election and must never restart a gateway (`restartDiffers`
      ignores them; `Reload` swaps them in place). Each is on `lo` with a 10 s lifetime
      renewed every 3 s, and is removed when the pool has no healthy server, the group
-     stops/pauses, or ddgw stops. Live-check (the sandbox has no IPv6, so only v4):
+     stops/pauses, or dnsdir stops. Live-check (the sandbox has no IPv6, so only v4):
      `ip -4 addr show dev lo` shows it with `valid_lft 10sec`, a query to it is answered,
      stopping the stub DNS servers withdraws it, `kill -9` removes it within ~10 s,
      SIGTERM at once; two clustered daemons (a gateway on a subnet the host is not
@@ -196,7 +196,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
 3. **Cross-compile every release**, not just once — a later change can
    silently break a platform nothing here runs. For each of `linux/amd64`,
    `linux/arm64`, `linux/arm`, `linux/386`, `linux/riscv64` run
-   `GOOS=<os> GOARCH=<arch> go build -o /dev/null .`. ddgw is Linux-only
+   `GOOS=<os> GOARCH=<arch> go build -o /dev/null .`. dnsdir is Linux-only
    (macvlan, AF_PACKET, inotify); don't add other OSes. `linux/mips*` compiles
    but `SO_REUSEPORT` (hard-coded to 15 in `util.go`) is wrong there — don't
    list it as supported unless that constant is made per-arch first. If a new
@@ -213,7 +213,7 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
    stays healthy.
 4. **Bump `VERSION`.** It's a single plain integer (no `v` prefix, no semver)
    at `source/VERSION`, embedded into the binary (`version.go`,
-   `ddgw --version`). Increment it by exactly 1. `TestVersionIsPlainInteger`
+   `dnsdir --version`). Increment it by exactly 1. `TestVersionIsPlainInteger`
    fails if the file is malformed — fix the file, don't weaken the test.
 5. **Append a new entry to the top of `docs/CHANGELOG.md`**, immediately below the
    `# Changelog` header (and any `## [Unreleased]` line), in the style of the
@@ -222,9 +222,9 @@ file such as `webui/` and `testdata/` are under `source/`, and the CHANGELOG is 
    `### Fixed` / `### Changed` sections as appropriate, plus `### Verified`
    and `### Not verified`. Say what changed, why, and exactly what was run.
    Do not rewrite or renumber older entries.
-6. **Repackage the whole project into a `.tgz`** named `ddgw_v<VERSION>.tgz`
-   with the project directory itself (`ddgw/`) at the top of the archive, so it
-   re-extracts to `ddgw/`. Source only: no built binaries, no scratch files,
+6. **Repackage the whole project into a `.tgz`** named `dnsdir_v<VERSION>.tgz`
+   with the project directory itself (`dnsdir/`) at the top of the archive, so it
+   re-extracts to `dnsdir/`. Source only: no built binaries, no scratch files,
    no `.tmp` leftovers (check `tar tzf` before handing it back).
 7. **Hand the `.tgz` back** as the deliverable. Don't just describe the
    changes — the person expects a fresh archive every time, without having to
@@ -265,10 +265,16 @@ README), so the version and changelog describe the final tree.
 - Dependencies: the project is stdlib-only on purpose (inotify, AF_PACKET and
   multicast use `syscall` directly). Don't add a module for something small;
   if one is truly warranted, say so in the changelog.
-- Name: the project is `ddgw`. The wire protocol, packet magic and the default
-  HMAC key (`"dgw"`) are protocol identity, not branding — they stay as they
-  are so existing nodes keep interoperating. Don't rename them as part of a
-  branding cleanup.
+- Name: the project is `dnsdir` (called `ddgw` before v367; the GitHub repo is `micush/dnsdir`).
+  The wire protocol, packet magic, the default HMAC key (`"dgw"`), the `00:1a:7c` virtual-MAC
+  prefix, the `ddgw-join-v1` join-code prefix, the `ddgw-cluster-v1` signature label and the
+  `X-Ddgw-*` cluster headers are protocol identity, not branding — they stay as they are so
+  existing nodes keep interoperating. Don't rename them as part of a branding cleanup.
+  Old-name compatibility that must stay while ddgw nodes can still exist: `migrateOldInstall`
+  (`renamemigrate.go`, also run by `install.sh` through the hidden `--migrate-old-install`),
+  `canonicalConf` mapping the old config paths, the `module ddgw` words in a `go.mod` comment
+  and `--version` printing `ddgw vN` when the binary is named `ddgw-v…` (both are checked by
+  an updater from before the rename), and the old-name `ddgw` skip in `finishSource`.
 - Web GUI invariants (don't regress without saying so in the changelog):
   login = PAM success **and** membership of the configured group; one generic
   error for every login failure; sessions are random tokens in HttpOnly,
@@ -284,7 +290,7 @@ README), so the version and changelog describe the final tree.
   expire after an hour; promotion is always an explicit admin action (never
   automatic); only the primary applies shared-config changes; a GUI
   certificate change must not restart the listener or drop sessions; an update
-  never replaces the running binary without keeping `ddgw.prev` and the boot
+  never replaces the running binary without keeping `dnsdir.prev` and the boot
   guard (auto rollback after repeated failed starts). The management layer
   stays independent of the AGC/AFN election.
 - Election ties compare IPs as text; this is part of the protocol. Don't "fix" that

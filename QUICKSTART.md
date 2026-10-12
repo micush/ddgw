@@ -13,27 +13,27 @@ AnyName gives a group of machines one shared DNS address (a **gateway**). Client
 From GitHub, the latest tagged release:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/micush/dnsdir/HEAD/get.sh | sudo bash
 ```
 
 Or from a tarball:
 
 ```
-tar xzf ddgw_v*.tgz
-cd ddgw
+tar xzf dnsdir_v*.tgz
+cd dnsdir
 sudo ./install.sh
 ```
 
-The user running the installer (you, behind `sudo`) can log in to the GUI; add others with `--add-user NAME` or later on the Users page. The installer installs what is missing, builds AnyName, creates the `ddgw` group and the PAM login file, and starts the `ddgw` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
+The user running the installer (you, behind `sudo`) can log in to the GUI; add others with `--add-user NAME` or later on the Users page. The installer installs what is missing, builds AnyName, creates the `dnsdir` group and the PAM login file, and starts the `dnsdir` service. Add `--dry-run` first if you want to see what it will do. Re-running it on a newer tarball upgrades in place and keeps your settings.
 
-Who can log in: a user whose Linux password PAM accepts **and** who is in the `ddgw` group. `root` is not special; add it to the group only if you want it to log in (Configure ▸ Users ▸ **Add existing user** adds an existing account to the group later).
+Who can log in: a user whose Linux password PAM accepts **and** who is in the `dnsdir` group. `root` is not special; add it to the group only if you want it to log in (Configure ▸ Users ▸ **Add existing user** adds an existing account to the group later).
 
 ## 2. Open the GUI
 
 Browse to **https://&lt;this machine's address&gt;:53853** and sign in with that Linux user and password.
 
 - Your browser will warn about the certificate: AnyName made a self-signed one. Continue for now; you will replace it in step 6.
-- No sign-in possible? Check `groups alice` lists `ddgw`, and that `/etc/pam.d/ddgw` exists. A failed login shows one generic message on purpose.
+- No sign-in possible? Check `groups alice` lists `dnsdir`, and that `/etc/pam.d/dnsdir` exists. A failed login shows one generic message on purpose.
 - The page follows your light/dark setting. The **?** at the top right of every page opens help for that page.
 
 ## 3. Draw your first gateway (Topology)
@@ -90,8 +90,8 @@ Both nodes now answer on the shared address and one of them is the controller (s
 - **Operate ▸ Anycast**: switch BGP, or a single neighbor, off and on without losing the settings (set them under **Configure ▸ Anycast**).
 - **Operate ▸ Node**: make this node the gateway controller, put it in maintenance (pause), or restart or shut down the host, now or later.
 - Bind the GUI to a management address or firewall port 53853: it can reconfigure a daemon that runs as root.
-- To start over on a node: stop the service, `sudo rm -rf /var/lib/ddgw/*`, start it again.
-- To remove ddgw: `sudo ddgw-uninstall` (add `--purge` to delete its settings too).
+- To start over on a node: stop the service, `sudo rm -rf /var/lib/dnsdir/*`, start it again.
+- To remove dnsdir: `sudo dnsdir-uninstall` (add `--purge` to delete its settings too).
 
 ## If something looks wrong
 

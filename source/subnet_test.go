@@ -86,7 +86,7 @@ func TestGatewayHeldBackOffSubnet(t *testing.T) {
 	defer func() { ifaceAddrsFn, offnetEvery = oldF, oldE }()
 
 	g := defaultGroup()
-	g.Interface = "ddgwnone0"
+	g.Interface = "dnsdirnone0"
 	g.VIP4 = "192.168.122.111/24"
 	dc := newDaemonConfig()
 	dc.Groups = []GroupConfig{g}
@@ -134,7 +134,7 @@ func TestOffSubnetWaitCancelled(t *testing.T) {
 	ifaceAddrsFn = fakeAddrs("10.5.5.9/24")
 	defer func() { ifaceAddrsFn, offnetEvery = oldF, oldE }()
 	g := defaultGroup()
-	g.Interface = "ddgwnone0"
+	g.Interface = "dnsdirnone0"
 	g.VIP4 = "192.168.122.111/24"
 	dc := newDaemonConfig()
 	dc.Groups = []GroupConfig{g}

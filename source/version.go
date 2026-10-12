@@ -6,7 +6,7 @@ import (
 )
 
 // source/VERSION (next to the Go files) is the single source of truth; go:embed
-// compiles it into the binary so `ddgw --version` reports the build's release.
+// compiles it into the binary so `dnsdir --version` reports the build's release.
 //
 //go:embed VERSION
 var embeddedVersion string

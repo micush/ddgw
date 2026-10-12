@@ -22,8 +22,8 @@ func TestValidHostPort(t *testing.T) {
 }
 
 func TestVersionPathStaysInside(t *testing.T) {
-	s := &VersionStore{dir: "/var/lib/ddgw/versions"}
-	if got := s.path("1790827200558"); got != "/var/lib/ddgw/versions/1790827200558.json" {
+	s := &VersionStore{dir: "/var/lib/dnsdir/versions"}
+	if got := s.path("1790827200558"); got != "/var/lib/dnsdir/versions/1790827200558.json" {
 		t.Fatalf("path: %s", got)
 	}
 	// Whatever text comes in, the file is inside the directory.

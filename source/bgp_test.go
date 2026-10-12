@@ -55,20 +55,20 @@ func TestRenderFRR(t *testing.T) {
 	conf := renderFRR(b, []string{"203.0.113.53"}, []string{"2001:db8:53::1"}, "dns1")
 	for _, want := range []string{
 		"hostname dns1\n",
-		"ip prefix-list DDGW-ANYCAST-V4 seq 10 permit 203.0.113.53/32\n",
-		"ip prefix-list DDGW-ANYCAST-V4 seq 1000 deny any\n",
-		"ipv6 prefix-list DDGW-ANYCAST-V6 seq 10 permit 2001:db8:53::1/128\n",
-		"route-map DDGW-IN deny 10\n",
+		"ip prefix-list DNSDIR-ANYCAST-V4 seq 10 permit 203.0.113.53/32\n",
+		"ip prefix-list DNSDIR-ANYCAST-V4 seq 1000 deny any\n",
+		"ipv6 prefix-list DNSDIR-ANYCAST-V6 seq 10 permit 2001:db8:53::1/128\n",
+		"route-map DNSDIR-IN deny 10\n",
 		"router bgp 64512\n no bgp default ipv4-unicast\n bgp router-id 192.0.2.10\n",
 		" neighbor 192.0.2.1 remote-as 64500\n neighbor 192.0.2.1 description core\n neighbor 192.0.2.1 password pw\n neighbor 192.0.2.1 bfd\n",
-		" address-family ipv4 unicast\n  network 203.0.113.53/32\n  neighbor 192.0.2.1 activate\n  neighbor 192.0.2.1 route-map DDGW-IN in\n  neighbor 192.0.2.1 route-map DDGW-OUT-V4 out\n",
-		" address-family ipv6 unicast\n  network 2001:db8:53::1/128\n  neighbor 2001:db8::1 activate\n  neighbor 2001:db8::1 route-map DDGW-IN in\n  neighbor 2001:db8::1 route-map DDGW-OUT-V6 out\n",
+		" address-family ipv4 unicast\n  network 203.0.113.53/32\n  neighbor 192.0.2.1 activate\n  neighbor 192.0.2.1 route-map DNSDIR-IN in\n  neighbor 192.0.2.1 route-map DNSDIR-OUT-V4 out\n",
+		" address-family ipv6 unicast\n  network 2001:db8:53::1/128\n  neighbor 2001:db8::1 activate\n  neighbor 2001:db8::1 route-map DNSDIR-IN in\n  neighbor 2001:db8::1 route-map DNSDIR-OUT-V6 out\n",
 	} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("missing %q in:\n%s", want, conf)
 		}
 	}
-	if strings.Contains(conf, "neighbor 192.0.2.1 route-map DDGW-OUT-V6") || strings.Contains(conf, "ipv4 unicast\n  network 2001") {
+	if strings.Contains(conf, "neighbor 192.0.2.1 route-map DNSDIR-OUT-V6") || strings.Contains(conf, "ipv4 unicast\n  network 2001") {
 		t.Errorf("families mixed up:\n%s", conf)
 	}
 	// BFD is on for every neighbor
@@ -329,8 +329,8 @@ func TestBGPApplyWithoutReloadScript(t *testing.T) {
 	if r := m.applyNow(bgpDC(true)); !r.OK {
 		t.Fatal(r)
 	}
-	// the host's own config was kept before ddgw replaced it
-	if b, _ := os.ReadFile(filepath.Join(dir, "frr.conf.pre-ddgw")); string(b) != "! old\n" {
+	// the host's own config was kept before dnsdir replaced it
+	if b, _ := os.ReadFile(filepath.Join(dir, "frr.conf.pre-dnsdir")); string(b) != "! old\n" {
 		t.Fatalf("no backup of the foreign frr.conf: %q", b)
 	}
 	// no frr-reload.py: a changed config restarts once, no reload attempt,
@@ -347,8 +347,8 @@ func TestBGPApplyWithoutReloadScript(t *testing.T) {
 			t.Fatalf("tried a reload that cannot work: %v", *calls)
 		}
 	}
-	// a second apply must not overwrite the backup with ddgw's own file
-	if b, _ := os.ReadFile(filepath.Join(dir, "frr.conf.pre-ddgw")); string(b) != "! old\n" {
+	// a second apply must not overwrite the backup with dnsdir's own file
+	if b, _ := os.ReadFile(filepath.Join(dir, "frr.conf.pre-dnsdir")); string(b) != "! old\n" {
 		t.Fatalf("backup replaced: %q", b)
 	}
 }
@@ -421,10 +421,10 @@ func TestRenderFRRASPrepend(t *testing.T) {
 	b.ASPrepend = true
 	conf := renderFRR(b, []string{"203.0.113.53"}, []string{"2001:db8:53::1"}, "h")
 	want := " set as-path prepend 4215123199 4215123199 4215123199\n"
-	if strings.Count(conf, want) != 2 || !strings.Contains(conf, "match ip address prefix-list DDGW-ANYCAST-V4\n"+want) || !strings.Contains(conf, "match ipv6 address prefix-list DDGW-ANYCAST-V6\n"+want) {
+	if strings.Count(conf, want) != 2 || !strings.Contains(conf, "match ip address prefix-list DNSDIR-ANYCAST-V4\n"+want) || !strings.Contains(conf, "match ipv6 address prefix-list DNSDIR-ANYCAST-V6\n"+want) {
 		t.Fatalf("both outbound route-maps must prepend three times:\n%s", conf)
 	}
-	if strings.Contains(strings.SplitN(conf, "route-map DDGW-IN", 2)[1], "prepend") {
+	if strings.Contains(strings.SplitN(conf, "route-map DNSDIR-IN", 2)[1], "prepend") {
 		t.Fatal("the inbound route-map must not change")
 	}
 }

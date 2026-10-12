@@ -233,22 +233,22 @@ func TestIsEthernetIfaceKinds(t *testing.T) {
 	mk("br9", "1", true, "", "bridge")    // a bridge seen only by its directory
 	mk("bondx", "1", true, "", "bonding") // a bond seen only by its directory
 	mk("mv0", "1", true, "macvlan")       // someone's macvlan
-	mk("ddgw1.1", "1", true, "macvlan")   // ddgw's own
-	mk("ddgwlike", "1", false, "")        // anything named ddgw* is ddgw's
+	mk("dnsdir1.1", "1", true, "macvlan") // dnsdir's own
+	mk("dnsdirlike", "1", false, "")      // anything named dnsdir* is dnsdir's
 	mk("vxlan0", "1", true, "vxlan")      // an overlay
 	mk("tap0", "1", true, "")             // a tap
 	mk("dummy0", "1", true, "")           // a dummy
 	mk("tun0", "65534", true, "")         // not Ethernet at all
 	mk("lo", "772", true, "")             // loopback
 	want := map[string]bool{"ens18": true, "eth0": true, "vmbr0": true, "bond0": true, "eth0.5": true, "br9": true, "bondx": true}
-	for _, n := range []string{"ens18", "eth0", "vmbr0", "bond0", "eth0.5", "br9", "bondx", "mv0", "ddgw1.1", "ddgwlike", "vxlan0", "tap0", "dummy0", "tun0", "lo", "missing"} {
+	for _, n := range []string{"ens18", "eth0", "vmbr0", "bond0", "eth0.5", "br9", "bondx", "mv0", "dnsdir1.1", "dnsdirlike", "vxlan0", "tap0", "dummy0", "tun0", "lo", "missing"} {
 		if got := isEthernetIface(n); got != want[n] {
 			t.Errorf("%s: Ethernet = %v, want %v", n, got, want[n])
 		}
 	}
 }
 
-// When no interface of a kind that counts as Ethernet has an address, the others (not loopback, not ddgw's) are listed.
+// When no interface of a kind that counts as Ethernet has an address, the others (not loopback, not dnsdir's) are listed.
 func TestEthernetAddrsFallsBackToOtherInterfaces(t *testing.T) {
 	ipn := func(s string) net.Addr {
 		ip, n, _ := net.ParseCIDR(s)
@@ -260,13 +260,13 @@ func TestEthernetAddrsFallsBackToOtherInterfaces(t *testing.T) {
 	nodeIfacesFn = func() []nodeIfaceRaw {
 		return []nodeIfaceRaw{
 			{Name: "lo", Loopback: true, Addrs: []net.Addr{ipn("127.0.0.1/8")}},
-			{Name: "ddgw1.1", Addrs: []net.Addr{ipn("10.0.0.56/24")}},
+			{Name: "dnsdir1.1", Addrs: []net.Addr{ipn("10.0.0.56/24")}},
 			{Name: "eth0", Ethernet: true, Addrs: []net.Addr{ipn("fe80::1/64")}}, // Ethernet, but nothing usable
 			{Name: "odd0", Addrs: []net.Addr{ipn("10.5.5.5/24"), ipn("2001:db8::5/64")}},
 		}
 	}
 	got := ethernetAddrs()
 	if len(got) != 1 || got[0].Name != "odd0" || strings.Join(got[0].V4, ",") != "10.5.5.5/24" || strings.Join(got[0].V6, ",") != "2001:db8::5/64" {
-		t.Fatalf("fallback: %+v (ddgw's own interface and the loopback must stay out)", got)
+		t.Fatalf("fallback: %+v (dnsdir's own interface and the loopback must stay out)", got)
 	}
 }

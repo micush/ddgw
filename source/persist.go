@@ -12,12 +12,12 @@ import (
 )
 
 // Persistent statistics.  The query statistics (Monitor ▸ Statistics), the host statistics (Monitor ▸
-// Host) and the list of recent dynamic updates live in memory while ddgw runs, and are saved to
+// Host) and the list of recent dynamic updates live in memory while dnsdir runs, and are saved to
 // <state-dir>/stats.json.gz every persistEvery and when the daemon stops, then read back at start-up, so
 // a restart or an update no longer empties the 30 days.  The file is a gzip stream of JSON values (a header,
 // then records: the minute counters, one record per upstream server's per-minute history, one record per top-list slot, the host minutes, the recent updates) and is
 // written to a temporary file and renamed, so a crash leaves the old one.  It is private to root (0600): it
-// holds client addresses and the names they asked for.  Delete the file (with ddgw stopped) to forget it all.
+// holds client addresses and the names they asked for.  Delete the file (with dnsdir stopped) to forget it all.
 // Time the daemon was down shows as a gap.  Each node has its own file; nothing is shared in a cluster.
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 type pHeader struct {
-	Format    int   `json:"ddgw_stats"`
+	Format    int   `json:"dnsdir_stats"`
 	Saved     int64 `json:"saved"`
 	QSStart   int64 `json:"qs_start"`
 	HostStart int64 `json:"host_start"`

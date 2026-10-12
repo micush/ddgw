@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// NodePauseState is what the Node page and `ddgw --node-status` show.
+// NodePauseState is what the Node page and `dnsdir --node-status` show.
 type NodePauseState struct {
 	Paused bool `json:"paused"`
 }

@@ -20,7 +20,7 @@ func TestCacheSurvivesAPoolRebuild(t *testing.T) {
 	a, b := newFakeDNS(t), newFakeDNS(t)
 	d := testDNSCfg(a.addr)
 	g := defaultGroup()
-	g.Interface, g.DNSProxy = "ddgwnone0", true
+	g.Interface, g.DNSProxy = "dnsdirnone0", true
 	dc := newDaemonConfig()
 	dc.DNS = d
 	dc.Groups = []GroupConfig{g}

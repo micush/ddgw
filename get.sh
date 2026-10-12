@@ -2,9 +2,9 @@
 # AnyName DNS Director web installer: downloads the latest tagged release from GitHub and runs
 # its install.sh (install or in-place upgrade).
 #
-#   curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash
-#   curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --add-user alice
-#   curl -fsSL https://raw.githubusercontent.com/micush/ddgw/HEAD/get.sh | sudo bash -s -- --version v215
+#   curl -fsSL https://raw.githubusercontent.com/micush/dnsdir/HEAD/get.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/micush/dnsdir/HEAD/get.sh | sudo bash -s -- --add-user alice
+#   curl -fsSL https://raw.githubusercontent.com/micush/dnsdir/HEAD/get.sh | sudo bash -s -- --version v215
 #
 # Everything after `--` goes to install.sh (see its --help), except:
 #   --version TAG   install this tag instead of the latest one
@@ -13,14 +13,14 @@
 # highest tag that looks like v<number>. Needs curl or wget, tar and the
 # network; install.sh installs the rest.
 #
-# Test hooks (not for normal use): DDGW_GET_REPO, DDGW_GET_API, DDGW_GET_HOST.
+# Test hooks (not for normal use): DNSDIR_GET_REPO, DNSDIR_GET_API, DNSDIR_GET_HOST.
 
 set -euo pipefail
 
 main() {
-  local repo=${DDGW_GET_REPO:-micush/ddgw}
-  local api=${DDGW_GET_API:-https://api.github.com}
-  local host=${DDGW_GET_HOST:-https://github.com}
+  local repo=${DNSDIR_GET_REPO:-micush/dnsdir}
+  local api=${DNSDIR_GET_API:-https://api.github.com}
+  local host=${DNSDIR_GET_HOST:-https://github.com}
   local want="" args=() tag tmp rc
 
   if [ -t 2 ]; then B=$'\033[1m'; R=$'\033[31m'; G=$'\033[32m'; N=$'\033[0m'; else B=; R=; G=; N=; fi
@@ -69,7 +69,7 @@ main() {
   fi
   valid_tag "$tag" || die "bad tag name: $tag"
 
-  tmp=$(mktemp -d "${TMPDIR:-/tmp}/ddgw-get.XXXXXX") || die "cannot create a temporary directory"
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/dnsdir-get.XXXXXX") || die "cannot create a temporary directory"
   trap 'rm -rf "$tmp"' EXIT
 
   step "Downloading AnyName $tag"

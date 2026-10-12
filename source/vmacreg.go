@@ -9,7 +9,7 @@ import (
 // MAC depend only on the group and the slot.  Two things follow, and both bit in the field:
 //
 //   - A macvlan may be deleted only when no engine on the node is still using it.  A v4 engine that gave up the
-//     controller role used to delete "ddgwN.1" under the v6 engine that was still the controller there, taking the
+//     controller role used to delete "dnsdirN.1" under the v6 engine that was still the controller there, taking the
 //     v6 VIP with it.
 //   - A slot is one MAC on the wire whatever the family, so two nodes must not use the same slot in different
 //     families either (v4 slot 3 on one node, v6 slot 3 on another is one MAC on two switch ports).  The engines of

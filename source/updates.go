@@ -14,14 +14,14 @@ import (
 )
 
 // Dynamic DNS updates (RFC 2136).  A client that sends an UPDATE message to the VIP wants a zone
-// changed.  The upstream servers of the pool are resolvers and cannot take it, so ddgw does what
+// changed.  The upstream servers of the pool are resolvers and cannot take it, so dnsdir does what
 // RFC 2136 section 6 describes for a server that is not the primary: it asks for the zone's SOA
 // record, takes the primary server named in it (MNAME; the zone's NS records when that name does
 // not resolve) and forwards the message there, unchanged, on port 53.  Unchanged matters: the
 // message keeps its ID and any TSIG or SIG(0) signature, so the primary can check it as if the
 // client had sent it directly.  The primary's answer goes back to the client as it came.
 //
-// A primary that filters by source address sees the ddgw node's address, not the client's;
+// A primary that filters by source address sees the dnsdir node's address, not the client's;
 // signed updates (TSIG) do not depend on that.
 
 const (
@@ -354,7 +354,7 @@ func (f *DNSFrontend) handleUpdate(msg []byte, tcp bool, client netip.Addr) []by
 			debugf("dns: duplicate dynamic update for zone %s from %s ignored", zone, client)
 			return nil
 		}
-		warnf("dns: dynamic update for zone %s from %s has the ID of one already being forwarded for %s (it came back to this node: does the primary resolve to a ddgw address?); refused", zone, client, from)
+		warnf("dns: dynamic update for zone %s from %s has the ID of one already being forwarded for %s (it came back to this node: does the primary resolve to a dnsdir address?); refused", zone, client, from)
 		return updateReply(msg, rcodeRefused)
 	}
 	f.upd.inflight[key] = client

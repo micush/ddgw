@@ -32,7 +32,7 @@ var webFS embed.FS
 var failDelay = 400 * time.Millisecond
 
 const (
-	sessionCookie  = "__Host-ddgw_session" // the prefix makes a browser take it only if Secure, Path=/ and without Domain
+	sessionCookie  = "__Host-dnsdir_session" // the prefix makes a browser take it only if Secure, Path=/ and without Domain
 	sessionMaxAge  = 12 * time.Hour
 	groupRecheck   = time.Minute
 	failWindow     = 10 * time.Minute // join-token failures (cluster)

@@ -58,7 +58,7 @@ func TestPersistKeepsCacheCountsAndReadsOlderFile(t *testing.T) {
 	f, _ := os.Create(filepath.Join(old, persistFile))
 	zw := gzip.NewWriter(f)
 	m := t0.Unix() / 60
-	zw.Write([]byte(`{"k":"hdr","hdr":{"ddgw_stats":1}}` + "\n"))
+	zw.Write([]byte(`{"k":"hdr","hdr":{"dnsdir_stats":1}}` + "\n"))
 	zw.Write([]byte(`{"k":"mins","mins":[[` + strconv.FormatInt(m, 10) + `,5,5,0,0,0,0,0,0]]}` + "\n"))
 	zw.Close()
 	f.Close()

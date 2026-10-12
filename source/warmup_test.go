@@ -17,7 +17,7 @@ func TestGatewayWaitsForDNSBeforeServing(t *testing.T) {
 	up := newFakeDNS(t)
 	up.mode.Store(3) // SERVFAIL: not answering yet
 	g := defaultGroup()
-	g.Interface = "ddgwnone0" // no such interface: the engine starts and idles, nothing on the host changes
+	g.Interface = "dnsdirnone0" // no such interface: the engine starts and idles, nothing on the host changes
 	d := testDNSCfg(up.addr)
 	g.DNSProxy, g.DNS = true, &d
 	dc := newDaemonConfig()
@@ -67,7 +67,7 @@ func TestWarmupCancelAndFloor(t *testing.T) {
 	good, bad := newFakeDNS(t), newFakeDNS(t)
 	bad.mode.Store(2)
 	g := defaultGroup()
-	g.Interface = "ddgwnone0"
+	g.Interface = "dnsdirnone0"
 	d := testDNSCfg(good.addr, bad.addr)
 	g.DNSProxy, g.DNS = true, &d
 	dc := newDaemonConfig()
@@ -117,7 +117,7 @@ func TestWarmupCancelAndFloor(t *testing.T) {
 
 	// nothing to wait for (no DNS servers configured yet): starts at once
 	g2 := defaultGroup()
-	g2.Interface = "ddgwnone0"
+	g2.Interface = "dnsdirnone0"
 	d2 := testDNSCfg()
 	g2.DNS = &d2
 	dc2 := newDaemonConfig()

@@ -26,7 +26,7 @@ import (
 )
 
 // Software updates, after umiss's managerupdate: a release archive (the
-// ddgw_vN.tgz this project ships) is uploaded to any node or pulled from a
+// dnsdir_vN.tgz this project ships) is uploaded to any node or pulled from a
 // peer, built natively on each node (the PAM binding is cgo, so a binary is
 // only portable to a host with the same libpam), and swapped in with a re-exec.
 // A boot guard restores the previous binary if the new one keeps failing to
@@ -510,7 +510,7 @@ func collectZip(body []byte, c *srcCollector) error {
 }
 
 // finishSource strips a single common top directory, drops VCS/binary
-// leftovers and checks the tree really is a ddgw source tree.
+// leftovers and checks the tree really is a dnsdir source tree.
 func finishSource(files []srcFile) ([]srcFile, error) {
 	if len(files) == 0 {
 		return nil, errors.New("archive is empty")
@@ -537,7 +537,7 @@ func finishSource(files []srcFile) ([]srcFile, error) {
 		if same {
 			name = strings.TrimPrefix(name, top+"/")
 		}
-		if name == ".git" || strings.HasPrefix(name, ".git/") || name == "ddgw" || strings.HasSuffix(name, ".tmp") {
+		if name == ".git" || strings.HasPrefix(name, ".git/") || name == "dnsdir" || name == "ddgw" || strings.HasSuffix(name, ".tmp") {
 			continue
 		}
 		if seen[name] {
@@ -555,11 +555,13 @@ func finishSource(files []srcFile) ([]srcFile, error) {
 		return nil
 	}
 	gm := get("source/go.mod")
-	if gm == nil || !bytes.Contains(gm, []byte("module ddgw")) {
-		return nil, errors.New("not a ddgw source tree (source/go.mod with \"module ddgw\" not found in the archive; trees before v44 had the Go files at the top and cannot be used by this version)")
+	// trees built before v367 say "module ddgw"; renamed ones say "module dnsdir" and keep the
+	// old words in a comment, because an updater from before the rename looks for them
+	if gm == nil || !(bytes.Contains(gm, []byte("module dnsdir")) || bytes.Contains(gm, []byte("module ddgw"))) {
+		return nil, errors.New("not a dnsdir source tree (source/go.mod with \"module dnsdir\" not found in the archive; trees before v44 had the Go files at the top and cannot be used by this version)")
 	}
 	if get("source/main.go") == nil {
-		return nil, errors.New("not a ddgw source tree (source/main.go missing)")
+		return nil, errors.New("not a dnsdir source tree (source/main.go missing)")
 	}
 	v := get("source/VERSION")
 	if v == nil || !versionFileRe.Match(v) {
@@ -609,7 +611,7 @@ func (u *Updater) ExtractSource(body []byte) (string, error) {
 	return u.SourceVersion(), nil
 }
 
-// SourceTarball packs the staged source tree (top-level "ddgw/") for a peer.
+// SourceTarball packs the staged source tree (top-level "dnsdir/") for a peer.
 func (u *Updater) SourceTarball() ([]byte, string, error) {
 	ver := u.SourceVersion()
 	if ver == "" {
@@ -628,7 +630,7 @@ func (u *Updater) SourceTarball() ([]byte, string, error) {
 		if err != nil {
 			return err
 		}
-		if err := tw.WriteHeader(&tar.Header{Name: "ddgw/" + filepath.ToSlash(rel), Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Unix(0, 0)}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Name: "dnsdir/" + filepath.ToSlash(rel), Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Unix(0, 0)}); err != nil {
 			return err
 		}
 		_, err = tw.Write(data)
@@ -696,13 +698,13 @@ func (u *Updater) findGo() (string, error) {
 		sort.Sort(sort.Reverse(sort.StringSlice(m)))
 		cands = append(cands, m...)
 	}
-	cands = append(cands, "/usr/local/share/ddgw/go/bin/go")
+	cands = append(cands, "/usr/local/share/dnsdir/go/bin/go")
 	for _, c := range cands {
 		if goUsable(c) {
 			return c, nil
 		}
 	}
-	return "", errors.New("no Go toolchain >= 1.24 found on this node (install Go, or re-run install.sh which keeps one under /usr/local/share/ddgw/go)")
+	return "", errors.New("no Go toolchain >= 1.24 found on this node (install Go, or re-run install.sh which keeps one under /usr/local/share/dnsdir/go)")
 }
 
 // Build compiles the staged source natively and returns the binary path.
@@ -719,7 +721,7 @@ func (u *Updater) Build(ctx context.Context) (bin, version string, err error) {
 	if err := os.MkdirAll(cache, 0o700); err != nil {
 		return "", "", err
 	}
-	out := filepath.Join(cache, fmt.Sprintf("ddgw-v%s-%s", version, fp[:12]))
+	out := filepath.Join(cache, fmt.Sprintf("dnsdir-v%s-%s", version, fp[:12]))
 	if checkBuilt(out, version) == nil {
 		return out, version, nil
 	}
@@ -779,8 +781,8 @@ func checkBuilt(bin, version string) error {
 	if err != nil {
 		return fmt.Errorf("built binary does not run: %w", err)
 	}
-	if got := strings.TrimSpace(string(b)); got != "ddgw v"+version {
-		return fmt.Errorf("built binary reports %q, expected %q", got, "ddgw v"+version)
+	if got := strings.TrimSpace(string(b)); got != "dnsdir v"+version {
+		return fmt.Errorf("built binary reports %q, expected %q", got, "dnsdir v"+version)
 	}
 	if pamAvailable {
 		data, err := os.ReadFile(bin)
@@ -870,7 +872,7 @@ func (u *Updater) Apply(ctx context.Context, self, by string) (string, error) {
 		u.noteFailure(self, from, target, err.Error())
 		return "", err
 	}
-	prev := filepath.Join(u.dir, "ddgw.prev")
+	prev := filepath.Join(u.dir, "dnsdir.prev")
 	if err := copyFile(exe, prev, 0o755); err != nil {
 		u.noteFailure(self, from, target, "cannot save the current binary: "+err.Error())
 		return "", fmt.Errorf("cannot save the current binary for rollback: %w", err)

@@ -9,7 +9,7 @@ import (
 // Uptime for the topology: how long each gateway, anycast address, DNS server and domain test
 // has been online since it last failed.  The picture is rebuilt for every request, so the
 // times live here, in memory: a sampler looks at the picture every few seconds (even with no
-// browser open) and notes when an item flips between working and failing.  A restart of ddgw
+// browser open) and notes when an item flips between working and failing.  A restart of dnsdir
 // starts the counting again.
 
 const upSampleEvery = 2 * time.Second
@@ -18,7 +18,7 @@ const upSampleEvery = 2 * time.Second
 type UpInfo struct {
 	Up    bool  `json:"up"`    // working now (green or yellow); false = failing (red)
 	Since int64 `json:"since"` // unix seconds the current state began
-	// Failures is how many times it has failed since ddgw began counting (it starts at 1 when first seen failing).
+	// Failures is how many times it has failed since dnsdir began counting (it starts at 1 when first seen failing).
 	Failures int `json:"failures"`
 }
 

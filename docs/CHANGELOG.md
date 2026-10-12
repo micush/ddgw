@@ -1,5 +1,27 @@
 # Changelog
 
+## [v367] - 2026-10-12 — Renamed from ddgw to dnsdir
+
+### Changed
+- Everything is named `dnsdir` instead of `ddgw`: the binary and `dnsdir --…` commands, the service (`dnsdir.service`), `/var/lib/dnsdir/dnsdir.conf`, the GUI certificate (`dnsdir-web.crt/.key`), `/run/dnsdir/dnsdir.sock`, `/usr/local/share/dnsdir`, `/etc/pam.d/dnsdir`, the default `dnsdir` group and PAM service, the `dnsdir<group>.<slot>` interfaces, the FRR names (`DNSDIR-…`), the `DNSDIR_*` test variables, the session cookie, the troubleshooting file names, the Go module, `contrib/pam.d/dnsdir.*`, `dnsdir.conf.example`, and the archive (`dnsdir_vN.tgz`, top directory `dnsdir/`). The default update repository and `get.sh` use `micush/dnsdir`. Older changelog entries keep the old name.
+- Kept as they were, so nodes of both names work together in one cluster during a rolling update: the packet magic, the default HMAC key `dgw`, the `00:1a:7c` virtual-MAC prefix, the `ddgw-join-v1` join-code prefix, the `ddgw-cluster-v1` signature label and the `X-Ddgw-*` cluster headers.
+
+### Added
+- First-start migration of an install called ddgw (`renamemigrate.go`): `/var/lib/ddgw` moves to `/var/lib/dnsdir` with `ddgw*` files renamed, the config and the update guard are rewritten to the new paths, group and PAM service, `/etc/pam.d/ddgw` becomes `/etc/pam.d/dnsdir`, the `ddgw` group is renamed (members stay), the NetworkManager and FRR-backup files are renamed and leftover `ddgw<group>.<slot>` interfaces are removed. Nothing is overwritten; a second start does nothing. An old `--config /var/lib/ddgw/ddgw.conf` in a service unit now means the new config.
+- `install.sh` upgrades a ddgw install: it stops and removes `ddgw.service`, the old binary and `ddgw-uninstall`, moves `/usr/local/share/ddgw`, and runs the new binary's hidden `--migrate-old-install` before it creates the group and PAM file. `uninstall.sh` still cleans the pre-v15 `/etc/liras` names.
+- A node that still runs a ddgw updater can update to this version in place: `go.mod` keeps the words `module ddgw` in a comment, and `--version` prints `ddgw vN` when the binary is named `ddgw-v…` (the cache name that updater builds under). A node updated this way keeps running as `ddgw.service` until `install.sh` is run once; its state is already under the new names.
+- `FRR`: an `frr.conf` written by ddgw counts as written by this daemon (no backup copy is made of it).
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestMigrateOldInstall`, `TestMigrateOldInstallNeverOverwrites`; `migrate_test.go` updated for the pre-v15 names), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js, `bash -n` and `shellcheck -x -S warning` on install.sh, uninstall.sh and get.sh.
+- A real `install.sh` run in the sandbox (shim systemctl) over a simulated v366 install (old binary, unit, share directory, `/var/lib/ddgw` with config and certificate, `/etc/pam.d/ddgw`, group `ddgw` with a member): state, config values, PAM file and group (member kept) moved, old unit, binary and directories gone, new unit and binary installed; then `dnsdir-uninstall --purge --remove-group` left nothing behind. A `--dry-run` with and without an old install.
+- `--version` prints `ddgw v367` for a binary named `ddgw-v367-…` and `dnsdir v367` otherwise.
+
+### Not verified
+- A live cluster with ddgw and dnsdir nodes together, and an actual in-place update of a running ddgw node from the GUI or CLI (only the checks the old updater makes were reproduced).
+- The service-name change on a node updated in place (it stays `ddgw.service` until `install.sh` is run), the dry-run families and the Go-download tests of install.sh (not touched), and the GUI in a browser.
+- Renaming the GitHub repository: `get.sh` and the default update repository point at `micush/dnsdir`, which must exist.
+
 ## [v366] - 2026-10-12 — The name is written AnyName
 
 ### Changed

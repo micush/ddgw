@@ -20,8 +20,8 @@ import (
 // An address is held only while this node can really answer on it: the gateway
 // is running, its DNS listener is up and its pool has at least one healthy
 // upstream.  Otherwise it is removed from lo and the routing daemon withdraws
-// the route.  The address is added with a short lifetime that ddgw keeps
-// renewing, so if ddgw crashes or hangs the kernel removes it by itself within
+// the route.  The address is added with a short lifetime that dnsdir keeps
+// renewing, so if dnsdir crashes or hangs the kernel removes it by itself within
 // anycastLife seconds and the route is withdrawn rather than black-holing
 // queries.
 

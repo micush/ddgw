@@ -25,7 +25,7 @@ func testIdentity(t *testing.T, names ...string) (tls.Certificate, string) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(time.Now().UnixNano()),
-		Subject:      pkix.Name{CommonName: "ddgw-node-test"},
+		Subject:      pkix.Name{CommonName: "dnsdir-node-test"},
 		NotBefore:    time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},

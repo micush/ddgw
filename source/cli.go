@@ -271,7 +271,7 @@ func (f *cliFlags) run(sock string) bool {
 		}
 		decode(op(sock, "tls.csr", map[string]any{"cn": *f.cn, "dns": names, "ips": ips}), &r)
 		fmt.Print(r.CSR)
-		fmt.Fprintln(os.Stderr, "\nThe matching private key stays on this node. When your CA returns the certificate:\n  ddgw --tls-install --cert-file CERT.pem")
+		fmt.Fprintln(os.Stderr, "\nThe matching private key stays on this node. When your CA returns the certificate:\n  dnsdir --tls-install --cert-file CERT.pem")
 	case *f.tlsRevert:
 		askYes("Remove the installed certificate and go back to the self-signed one?", *f.yes)
 		var i CertInfo
@@ -295,7 +295,7 @@ func (f *cliFlags) run(sock string) bool {
 			Expires time.Time `json:"expires"`
 		}
 		decode(op(sock, "cluster.token", nil), &r)
-		fmt.Printf("Join code (single use, valid until %s):\n\n%s\n\nOn the new node:  ddgw --cluster-join '%s'\n", lt(r.Expires), r.Code, r.Code)
+		fmt.Printf("Join code (single use, valid until %s):\n\n%s\n\nOn the new node:  dnsdir --cluster-join '%s'\n", lt(r.Expires), r.Code, r.Code)
 		fmt.Println("\nThe new node's shared settings (DNS, VIPs, keys) will be replaced by this cluster's; its interface, priority and weight stay its own.")
 	case *f.clusterJoin != "":
 		askYes("Join this node to the cluster? Its shared settings (DNS block, VIPs, keys, timers) will be replaced by the cluster's; a snapshot of the current config is saved first.", *f.yes)
@@ -665,14 +665,14 @@ func waitForUpdate(sock, target string) {
 					var v UpdateView
 					b, _ := json.Marshal(r2["data"])
 					json.Unmarshal(b, &v)
-					fmt.Printf("ddgw is back, running v%s.\n", v.Running)
+					fmt.Printf("dnsdir is back, running v%s.\n", v.Running)
 					if v.Running != target {
 						fmt.Println("(not the expected version — see --update-history)")
 					}
 					return
 				}
 			}
-			fmt.Println("ddgw did not come back within 30s; check: systemctl status ddgw, journalctl -u ddgw")
+			fmt.Println("dnsdir did not come back within 30s; check: systemctl status dnsdir, journalctl -u dnsdir")
 			return
 		}
 		var v UpdateView
@@ -707,7 +707,7 @@ func showCanvas(sock string) {
 	decodeData(res, &gws)
 	if len(gws) == 0 {
 		fmt.Println("The canvas is empty: no gateways. Draw one with:")
-		fmt.Println("  ddgw --canvas-add gateway --vip 10.0.0.1/24 --interface eth0")
+		fmt.Println("  dnsdir --canvas-add gateway --vip 10.0.0.1/24 --interface eth0")
 		return
 	}
 	now := time.Now()
@@ -1069,7 +1069,7 @@ func runDNSUpdates(sock string) {
 	}
 	decode(op(sock, "dnsupdates.get", nil), &r)
 	if len(r.Updates) == 0 {
-		fmt.Println("No dynamic DNS updates since ddgw started counting.")
+		fmt.Println("No dynamic DNS updates since dnsdir started counting.")
 		return
 	}
 	fmt.Printf("Recent dynamic DNS updates (the last %d are kept), newest first\n", updLogMax)
@@ -1300,7 +1300,7 @@ func showVmacTest(sock string, group int) {
 			fmt.Printf("    %s: %s\n", f.AF, f.Detail)
 		}
 		if r.Verdict == vmacNotDelivered {
-			fmt.Printf("    To run without virtual MACs on every node: ddgw --canvas-set gateway --group %d --real-macs on\n", r.GroupID)
+			fmt.Printf("    To run without virtual MACs on every node: dnsdir --canvas-set gateway --group %d --real-macs on\n", r.GroupID)
 		}
 	}
 }
@@ -1312,7 +1312,7 @@ func runTshoot(sock string, all, capture bool, file string) {
 		cmd = "tshoot.cluster"
 	}
 	if file == "" {
-		file = "ddgw-tshoot-" + selfHost() + "-" + time.Now().Format("20060102-150405") + ".tgz"
+		file = "dnsdir-tshoot-" + selfHost() + "-" + time.Now().Format("20060102-150405") + ".tgz"
 	}
 	fmt.Fprintln(os.Stderr, "collecting (up to a minute)…")
 	var b struct {

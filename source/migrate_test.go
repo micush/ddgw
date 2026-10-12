@@ -9,7 +9,7 @@ import (
 func TestMigrateLegacyConfig(t *testing.T) {
 	root := t.TempDir()
 	legacy := filepath.Join(root, "etc-liras", "ddgw.conf")
-	dst := filepath.Join(root, "var-lib-ddgw", "ddgw.conf")
+	dst := filepath.Join(root, "var-lib-dnsdir", "dnsdir.conf")
 	must := func(err error) {
 		t.Helper()
 		if err != nil {
@@ -35,7 +35,7 @@ func TestMigrateLegacyConfig(t *testing.T) {
 	if st, _ := os.Stat(filepath.Dir(dst)); st.Mode().Perm() != 0o700 {
 		t.Fatalf("the new directory is private, got %v", st.Mode().Perm())
 	}
-	for _, f := range []string{"ddgw-web.crt", "ddgw-web.key"} {
+	for _, f := range []string{"dnsdir-web.crt", "dnsdir-web.key"} {
 		if b, err := os.ReadFile(filepath.Join(filepath.Dir(dst), f)); err != nil || len(b) == 0 {
 			t.Fatalf("%s must come along: %v", f, err)
 		}
@@ -65,13 +65,13 @@ func TestMigrateLegacyConfig(t *testing.T) {
 		t.Fatal("existing config was overwritten")
 	}
 	// nothing to migrate is not an error
-	if moved, err := migrateLegacyConfig(filepath.Join(root, "other", "ddgw.conf"), filepath.Join(root, "missing.conf")); err != nil || moved {
+	if moved, err := migrateLegacyConfig(filepath.Join(root, "other", "dnsdir.conf"), filepath.Join(root, "missing.conf")); err != nil || moved {
 		t.Fatalf("no legacy file: moved=%v err=%v", moved, err)
 	}
 }
 
 func TestSaveCreatesPrivateDirectory(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "new", "ddgw.conf")
+	p := filepath.Join(t.TempDir(), "new", "dnsdir.conf")
 	if err := newDaemonConfig().save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -81,16 +81,16 @@ func TestSaveCreatesPrivateDirectory(t *testing.T) {
 }
 
 func TestDefaultLocations(t *testing.T) {
-	if confPath != "/var/lib/ddgw/ddgw.conf" || filepath.Dir(confPath) != defaultStateDir {
+	if confPath != "/var/lib/dnsdir/dnsdir.conf" || filepath.Dir(confPath) != defaultStateDir {
 		t.Fatalf("the config lives in the state directory: %s vs %s", confPath, defaultStateDir)
 	}
-	if statusSocket != "/run/ddgw/ddgw.sock" {
+	if statusSocket != "/run/dnsdir/dnsdir.sock" {
 		t.Fatalf("socket: %s", statusSocket)
 	}
 }
 
 func TestMissingConfigMeansNoGateways(t *testing.T) {
-	dc, err := loadConfig(filepath.Join(t.TempDir(), "nope", "ddgw.conf"))
+	dc, err := loadConfig(filepath.Join(t.TempDir(), "nope", "dnsdir.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,12 +103,12 @@ func TestMissingConfigMeansNoGateways(t *testing.T) {
 }
 
 func TestLegacyConfigPathIsRedirected(t *testing.T) {
-	for _, in := range []string{"/etc/liras/ddgw.conf", "/etc/liras//ddgw.conf", "/etc/liras/../liras/ddgw.conf"} {
+	for _, in := range []string{"/etc/liras/ddgw.conf", "/etc/liras//ddgw.conf", "/etc/liras/../liras/ddgw.conf", "/var/lib/ddgw/ddgw.conf"} {
 		if got := canonicalConf(in); got != confPath {
 			t.Errorf("%q -> %q, want %q", in, got, confPath)
 		}
 	}
-	for _, in := range []string{confPath, "./ddgw.conf", "/tmp/x/ddgw.conf"} {
+	for _, in := range []string{confPath, "./dnsdir.conf", "/tmp/x/dnsdir.conf"} {
 		if got := canonicalConf(in); got != in {
 			t.Errorf("%q must be left alone, got %q", in, got)
 		}

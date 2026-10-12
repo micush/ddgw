@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Lookup of a client address or a name, from Statistics ▸ right-click ▸ Lookup (and `ddgw --lookup`): what this node's
+// Lookup of a client address or a name, from Statistics ▸ right-click ▸ Lookup (and `dnsdir --lookup`): what this node's
 // resolver says about it, asked once when requested.  An address gets its reverse (PTR) names; a name gets its
 // addresses, canonical name, mail servers, name servers and text records.  Nothing is stored.
 const lookupFullTimeout = 5 * time.Second
