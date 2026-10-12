@@ -4304,7 +4304,7 @@
         clock = h("input", { type: "time", "aria-label": "Time of day", onfocus: () => { document.querySelector('input[name="power-when"][value="at"]').checked = true; } });
         takeBtn = h("button", { class: "btn warn", type: "button", onclick: takeOver }, "Make this node the gateway controller");
         npBtn = h("button", { class: "btn", type: "button", onclick: toggleNodePause }, "…");
-        main.append(status, pending,
+        main.append(status,
           section("Gateway controller", h("div", { class: "toolbar" }, takeBtn)),
           section("Maintenance", h("div", { class: "toolbar" }, npBtn)),
           section("Host",
@@ -4313,7 +4313,8 @@
             h("fieldset", { class: "radios" }, h("legend", {}, "When"),
               radio("power-when", "now", "Now", true),
               radio("power-when", "in", "In ", false, mins, " minutes"),
-              radio("power-when", "at", "At ", false, clock, " (24-hour)")),
+              radio("power-when", "at", "At ", false, clock, " (24-hour)"),
+              pending),   // the scheduled-action line and Cancel it sit in this box
             h("div", { class: "toolbar" },
               h("button", { class: "btn danger", type: "button", onclick: execute }, "Execute"))));
       },
@@ -4324,7 +4325,7 @@
         if (p.scheduled) {
           pending.append(h("div", { class: "muted" },
             "A " + p.action + " is scheduled for " + when(p.at) + ". ",
-            h("button", { class: "btn", type: "button", onclick: async () => {
+            h("button", { class: "linkbtn", type: "button", onclick: async () => {
               try { await api("POST", "/api/power", { action: "cancel" }); say(status, "info", "The scheduled " + p.action + " is cancelled."); await VIEWS.node.poll(); } catch (e) { fail(status)(e); }
             } }, "Cancel it")));
         }

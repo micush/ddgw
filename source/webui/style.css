@@ -568,3 +568,6 @@ dialog.nt-dialog { width: min(48rem, calc(100vw - 2rem)); }
 .nt-out { margin: 0; padding: .6rem .75rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; max-height: 60vh; overflow: auto; white-space: pre; }
 
 .soak { cursor: help; }
+/* a button that reads as plain clickable text */
+button.linkbtn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--accent); cursor: pointer; }
+button.linkbtn:hover { text-decoration: underline; }

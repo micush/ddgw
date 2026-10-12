@@ -1,5 +1,27 @@
 # Changelog
 
+## [v365] - 2026-10-11 — The scheduled power action line sits in the When box
+
+### Changed
+- Operate ▸ Node ▸ Host: "A restart is scheduled for …  Cancel it" is inside the When box (under At) instead of above the page's cards.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser.
+
+## [v364] - 2026-10-11 — "Cancel it" is plain clickable text
+
+### Changed
+- Operate ▸ Node: the scheduled restart / shut down line ends in **Cancel it** as clickable text (accent colour, underlined on hover) instead of a button.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser, light and dark.
+
 ## [v363] - 2026-10-11 — Scheduled restarts and shut downs hand the primary role over too
 
 ### Added
