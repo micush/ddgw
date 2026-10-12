@@ -1396,14 +1396,16 @@
       }
       return "";
     };
-    // Make controller is greyed on the node that already holds the role for every gateway that has serving nodes.  A member is
+    // Make controller is greyed on the node that already holds the role for every gateway it is a member of.  A member is
     // matched to a node by its address on the gateway's subnet (this node's own member is marked local).
     const isController = (n, all) => {  // all: holds the role for every gateway (else: for at least one)
       const ips = new Set((n.addrs || []).flatMap((i) => [...(i.v4 || []), ...(i.v6 || [])].map((x) => String(x).split("/")[0])));
       const withMembers = groups().map((g) => statusOf(g).members || []).filter((ms) => ms.length);
       const isIt = (m) => (m.local ? n.self : ips.has(m.ip));
       const has = (ms) => ms.some((m) => m.agc && isIt(m));
-      return withMembers.length > 0 && (all ? withMembers.every(has) : withMembers.some(has));
+      // all: for every gateway this node is a member of (one it is not on, another subnet, never gives it the role)
+      const mine = withMembers.filter((ms) => ms.some(isIt));
+      return all ? mine.length > 0 && mine.every(has) : withMembers.some(has);
     };
     const controllerWhy = (n) => (isController(n, true) ? "Already the controller" : "");
     // Make a node the cluster's primary (the Cluster page's Promote button, aimed at the node whose shape was clicked): no gateway is
@@ -2865,7 +2867,7 @@
           ev.target.disabled = true;
           try {
             if (online.checked) {
-              note.textContent = "Downloading from GitHub…";
+              note.textContent = "Downloading…";
               const r = await api("POST", "/api/update/fetch");
               note.textContent = "Staged v" + r.data.version + ".";
             } else {

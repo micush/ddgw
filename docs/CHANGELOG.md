@@ -1,5 +1,19 @@
 # Changelog
 
+## [v379] - 2026-10-12 — Updates: "Downloading…"; Controller greyed with several gateways
+
+### Changed
+- Fetching an update from online says "Downloading…" while it works, not "Downloading from GitHub…".
+
+### Fixed
+- With more than one gateway, a node that was already the controller (and primary) still offered **Controller** in its menu. The item is greyed when the node holds the role in every gateway, and the check counted gateways the node is not a member of (another subnet, removed from it), where it can never hold the role. It now counts only the gateways the node is a member of.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser; the multi-gateway case was found from a screenshot and reasoned from the code, not reproduced.
+
 ## [v378] - 2026-10-12 — A DNS server's name can be as long as a host name
 
 ### Changed
