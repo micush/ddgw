@@ -340,7 +340,7 @@ func (c *Cluster) selfGw(gid int, selfStatus string, selfPaused bool) string {
 }
 
 // clusterGateway is the gateway's state for the cluster as a whole, from its nodes' own states and no node's point of view:
-// green while any node serves it (amber when only one of three or more does), amber while it is only served degraded, grey dashed when every node has it paused, grey
+// green while any node serves it (amber when only one of two or more that could serve it does), amber while it is only served degraded, grey dashed when every node has it paused, grey
 // while the nodes are still starting, red when no node is serving it.  Nodes removed from the gateway do not count.
 func clusterGateway(nodes []CanvasNode) (status, detail string) {
 	cnt := map[string]int{}
@@ -362,7 +362,7 @@ func clusterGateway(nodes []CanvasNode) (status, detail string) {
 	switch {
 	case total == 0:
 		return "idle", "No node is set to serve this gateway"
-	case cnt["ok"] == 1 && total >= 3:
+	case cnt["ok"] == 1 && cnt["degraded"] == 0 && total-cnt["notserving"]-cnt["updating"] >= 2: // a node on another subnet could never serve it and one restarting into an update is not lost
 		return "warn", "Served by only " + of(1) + " — the others are paused, not serving or not answering"
 	case cnt["ok"] > 0:
 		detail = "Served by " + of(cnt["ok"])

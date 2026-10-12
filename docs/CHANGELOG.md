@@ -1,5 +1,40 @@
 # Changelog
 
+## [v354] - 2026-10-11 — Pause node without a popup; amber when one node is left
+
+### Changed
+- Topology ▸ **Pause node…** pauses at once; the confirmation popup is gone (the last-node refusal from v353 still applies). The menu item reads "Pause node".
+- A gateway is amber when only one node is left serving it, whether the others are paused, down or a mix of both (it was amber only from three nodes up). Nodes on another subnet that could never serve it, and a node restarting into an update, do not count as lost, so a rolling update does not turn it amber.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`. Tests: `TestClusterGatewayStatus` has new cases (one of two, the other down / paused / on another subnet).
+
+### Not verified
+- In a real cluster or a browser.
+
+## [v353] - 2026-10-11 — The last node serving a gateway cannot be paused
+
+### Fixed
+- Pausing a node (Topology ▸ Pause node…, Operate ▸ Node, `--node-pause`) was only refused when it was the last node in service. With other nodes up that served other gateways (another subnet, or removed from this gateway), the node could still be paused although it was the only one serving a gateway, which stopped that gateway. It is now refused for every gateway the node serves that no other reachable, unpaused member serves, naming the gateway; the Pause node… menu item is greyed with the same reason. A member that is down, on another subnet or removed from the gateway is no cover. Pausing the gateway itself (this node or all nodes) is unchanged.
+- This was never a revert: the v322 rule counted nodes, not gateways, so this case was never covered.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js. Tests: `TestLastServing` (covered, last for one gateway, down member, gateway not served) and the Mgmt refusal.
+
+### Not verified
+- A real cluster with a gateway on one node only; the menu in a browser.
+
+## [v352] - 2026-10-11 — Upgrade card alignment
+
+### Fixed
+- Configure ▸ General ▸ Upgrade: the auto-update checkbox no longer sits indented from the Online repository label; both are left-aligned. The same left margin is gone from every other checkbox row that uses the field style.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check` on app.js and help.js.
+
+### Not verified
+- Not looked at in a browser, including the other pages with checkbox rows.
+
 ## [v351] - 2026-10-11 — No status text between cards; repository box layout
 
 ### Removed

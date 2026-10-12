@@ -181,7 +181,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 label.f { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
-label.f.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); }
+label.f.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); margin-left: 0; }
 label.f.repo { margin-top: 1.25rem; }
 label.f.repo input { width: 50%; min-width: 16rem; }
 input[type=text], input[type=password], input[type=number], input[type=time], input[type=date], select, textarea {

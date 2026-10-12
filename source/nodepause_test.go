@@ -92,6 +92,16 @@ func TestNodePauseThroughMgmt(t *testing.T) {
 	if st, _ := mg.NodePauseStatus(); st.Paused {
 		t.Fatal("the refused pause was saved")
 	}
+	// other nodes exist, but this one is the last to serve a gateway: refused, and not saved
+	mg.othersFn = func() int { return 2 }
+	mg.lastFn = func() string { return "this is the only node serving gateway 1" }
+	if _, err := mg.NodePause(true, "test"); err == nil || !strings.Contains(err.Error(), "only node serving gateway 1") {
+		t.Fatalf("pausing the last node of a gateway: %v", err)
+	}
+	if st, _ := mg.NodePauseStatus(); st.Paused {
+		t.Fatal("the refused pause was saved")
+	}
+	mg.lastFn = nil
 	mg.othersFn = func() int { return 1 } // another node carries on
 	if msg, err := mg.NodePause(true, "test"); err != nil || !strings.Contains(msg, "paused") {
 		t.Fatalf("pause: %q %v", msg, err)
@@ -121,5 +131,31 @@ func TestNodePauseHistoryReadsInWords(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("history diff: %+v", configSections(a, b))
+	}
+}
+
+func TestLastServing(t *testing.T) {
+	mine := []GwState{{GroupID: 1, Serving: true}, {GroupID: 2, Serving: true}}
+	peer := func(down bool, serving ...int) peerGateways {
+		p := peerGateways{Addr: "10.0.0.2", Down: down, Known: true, Serving: map[int]bool{}}
+		for _, g := range serving {
+			p.Serving[g] = true
+		}
+		return p
+	}
+	if why := lastServing(mine, []peerGateways{peer(false, 1, 2)}); why != "" {
+		t.Fatalf("both covered: %q", why)
+	}
+	// another member exists but serves only gateway 1: this node is the last for gateway 2
+	if why := lastServing(mine, []peerGateways{peer(false, 1)}); !strings.Contains(why, "gateway 2") {
+		t.Fatalf("last for gateway 2: %q", why)
+	}
+	// an unreachable member is no cover
+	if why := lastServing(mine, []peerGateways{peer(true)}); why == "" {
+		t.Fatal("a down member covered a gateway")
+	}
+	// a gateway this node is not serving is nothing to lose
+	if why := lastServing([]GwState{{GroupID: 3}}, []peerGateways{peer(false)}); why != "" {
+		t.Fatalf("not serving: %q", why)
 	}
 }

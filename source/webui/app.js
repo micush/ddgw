@@ -1288,8 +1288,7 @@
         cv.nodeWait[n.addr] = { want, until: Date.now() + 15000 };
         draw(); refresh();
       };
-      if (!want) { go(); return; }
-      confirmDialog("Pause " + (n.self ? "this node" : n.name) + "?", "All of its gateways stop serving and the other nodes take over. Clients are not interrupted as long as another node is serving. Resume it when you are done.", "Pause node", go, "btn primary");
+      go();
     }
     // Make a node the gateway controller for all groups (the Node page's button, aimed at the node whose shape was clicked): it takes
     // the role first, then the node that held it is asked to step down, so clients lose nothing.
@@ -1354,11 +1353,18 @@
     // is paused is out of service.
     const lastNodeWhy = (n) => {
       const gs = groups(), all = gs.length ? statusOf(gs[0]).nodes || [] : [];
-      return all.some((x) => x.addr !== n.addr && x.reachable && !x.node_paused) ? "" : "The only node in service (the others are paused or not answering): pausing it would stop every gateway";
+      if (!all.some((x) => x.addr !== n.addr && x.reachable && !x.node_paused)) return "The only node in service (the others are paused or not answering): pausing it would stop every gateway";
+      // the last node serving a gateway: every other node is paused, not answering or not serving it
+      const serving = (x) => x.reachable && !x.node_paused && (x.status === "ok" || x.status === "warn");
+      for (const g of gs) {
+        const ns = statusOf(g).nodes || [];
+        if (ns.some((x) => x.addr === n.addr && serving(x)) && !ns.some((x) => x.addr !== n.addr && serving(x))) return "The only node serving gateway " + gwLabel(g) + ": pausing it would stop that gateway";
+      }
+      return "";
     };
     const nodeMenu = (n) => (e) => openMenu(e, n.self
-      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
-      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node…", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
+      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
+      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
       : [["Cluster page…", () => selectTab("cluster")], ...memberItem(n)]);
     // right-click on a shape: select it, then show what can be done with it
     const rightClick = (kind, addr, di) => (e) => {

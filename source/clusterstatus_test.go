@@ -19,7 +19,9 @@ func TestClusterGatewayStatus(t *testing.T) {
 	}{
 		{"two serve, two are on another subnet", gws("ok", "ok", "notserving", "notserving"), "ok"},
 		{"one serves of three, the rest down", gws("ok", "down", "paused"), "warn"},
-		{"one serves of two", gws("ok", "notserving"), "ok"},
+		{"one serves of two, the other is on another subnet", gws("ok", "notserving"), "ok"},
+		{"one serves of two, the other is down", gws("ok", "down"), "warn"},
+		{"one serves of two, the other is paused", gws("ok", "paused"), "warn"},
 		{"two serve of four", gws("ok", "ok", "paused", "paused"), "ok"},
 		{"served only degraded", gws("degraded", "notserving"), "warn"},
 		{"a degraded one does not hide a good one", gws("degraded", "ok"), "ok"},
