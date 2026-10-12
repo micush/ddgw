@@ -839,7 +839,7 @@ func (d *DNSConfig) Validate() error {
 			return fmt.Errorf("dns: server_names entry %q is not one of the servers", k)
 		}
 		name = strings.TrimSpace(name)
-		if err := validGatewayName(name); err != nil {
+		if err := validServerName(name); err != nil {
 			return fmt.Errorf("dns: name of server %s: %w", k, err)
 		}
 		if name != "" {
@@ -1500,6 +1500,23 @@ func (d DNSConfig) live() DNSConfig {
 
 // maxGatewayName is the longest label a gateway may carry.
 const maxGatewayName = 40
+
+// maxServerName is the longest name a DNS server can be given: as long as a host name, because a full host name is also
+// registered in DNS.
+const maxServerName = 253
+
+// validServerName accepts an empty name or up to 253 characters with no control characters.
+func validServerName(n string) error {
+	if utf8.RuneCountInString(n) > maxServerName {
+		return fmt.Errorf("name is longer than %d characters", maxServerName)
+	}
+	for _, r := range n {
+		if unicode.IsControl(r) {
+			return errors.New("name must not contain control characters")
+		}
+	}
+	return nil
+}
 
 // validGatewayName accepts an empty name or up to 40 characters with no control characters.
 func validGatewayName(n string) error {

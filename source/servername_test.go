@@ -81,3 +81,27 @@ func TestRegisterServerName(t *testing.T) {
 		t.Fatalf("%q %q", msg, bad)
 	}
 }
+
+func TestServerNameLength(t *testing.T) {
+	long := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61) // 253
+	for n, ok := range map[string]bool{"": true, "dns-a": true, strings.Repeat("x", 100): true, long: true, long + "e": false, "bad\nname": false} {
+		if err := validServerName(n); (err == nil) != ok {
+			t.Errorf("%d chars %q: %v", len(n), n[:min(len(n), 12)], err)
+		}
+	}
+	// a gateway's name stays at 40
+	if err := validGatewayName(strings.Repeat("x", 41)); err == nil {
+		t.Error("a gateway name is still limited to 40 characters")
+	}
+	dc := newDaemonConfig()
+	dc.DNS.Servers = []string{"8.8.8.8"}
+	dc.DNS.ServerQueries = map[string][]DNSQuery{"8.8.8.8": {{Name: "google.com", Type: "A"}}}
+	dc.DNS.ServerNames = map[string]string{"8.8.8.8": long}
+	if err := dc.DNS.Validate(); err != nil {
+		t.Fatalf("a 253-character server name validates: %v", err)
+	}
+	dc.DNS.ServerNames = map[string]string{"8.8.8.8": long + "e"}
+	if err := dc.DNS.Validate(); err == nil {
+		t.Fatal("254 characters must not validate")
+	}
+}

@@ -1543,6 +1543,7 @@
       const ask = async (q) => (await api("GET", "/api/dnslookup?lookup=" + encodeURIComponent(q))).data;
       const canFill = (el, k) => !el.value.trim() || el.value.trim() === auto[k];
       return {
+        auto,
         addr: async (els, note) => {
           const q = els.addr.value.trim();
           if (!q || !IPISH.test(q) || !canFill(els.label, "label")) { note("label", ""); return; }
@@ -1586,7 +1587,7 @@
         const nm = (v.label || "").trim();
         const full = nm.toLowerCase();
         const ip = (/^\[([0-9a-f:.]+)\](:\d+)?$/i.exec(v.addr) || /^(\d+\.\d+\.\d+\.\d+)(:\d+)?$/.exec(v.addr) || /^([0-9a-f:]*:[0-9a-f:]*)$/i.exec(v.addr) || [])[1] || "";
-        if ([...nm].length > 40) return "The name can be at most 40 characters.";
+        if ([...nm].length > 253) return "The name can be at most 253 characters.";
         if (/[\u0000-\u001f\u007f]/.test(nm)) return "The name must not contain control characters.";
         ensureDNS(g);
         const a = normAddr(v.addr);
@@ -1609,7 +1610,7 @@
         if (nm) { g.dns.server_names = g.dns.server_names || {}; g.dns.server_names[a] = nm; }
         else if (g.dns.server_names) { delete g.dns.server_names[a]; if (!Object.keys(g.dns.server_names).length) delete g.dns.server_names; }
         const isFull = (s) => s.includes(".") && s.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)) && s.length <= 253;
-        if (!ip || !isFull(full)) return null;   // a short name is only a label
+        if (!ip || !isFull(full) || full === oldNm.toLowerCase() || nm === lk.auto.label) return null;   // a short name is only a label; a name already there, or one the reverse lookup filled in, is not registered again
         const old = isFull(oldNm.toLowerCase()) && oldNm.toLowerCase() !== full ? oldNm.toLowerCase() : "";
         return (async () => {
           try {

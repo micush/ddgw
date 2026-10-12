@@ -68,7 +68,7 @@ func hostLookup(q string) (LookupResult, error) {
 		}
 		sort.Strings(names)
 		n := strings.TrimSuffix(names[0], ".")
-		if len([]rune(n)) > 40 { // the diagram label is at most 40 characters: fall back to the first label
+		if len([]rune(n)) > maxServerName { // longer than a name can be: fall back to the first label
 			n = strings.SplitN(n, ".", 2)[0]
 		}
 		r.Name, r.Found = n, true

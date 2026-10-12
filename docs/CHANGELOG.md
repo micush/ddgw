@@ -1,5 +1,17 @@
 # Changelog
 
+## [v378] - 2026-10-12 — A DNS server's name can be as long as a host name
+
+### Changed
+- A DNS server's name (Name on the server form, `--label`, `dns.server_names`) is now limited to 253 characters, like a host name, instead of 40, so a full host name that is registered in DNS fits. A gateway's name stays at 40. The reverse-lookup fill-in only falls back to the first label above 253 characters.
+- The server form registers a full name in DNS only when it is new: saving a server whose name did not change, or whose name was filled in by the reverse lookup (it is already in DNS), does not send an update. Without this an address such as 8.8.8.8 filled in as `dns.google` would have tried to register `dns.google` on every save. The CLI (`--label`) still registers every time it is given a full name.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestServerNameLength`: 253 accepted, 254 and control characters refused, a gateway name still 40), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- The form in a browser. A registration that failed once is not retried by saving the same name again (change the name, or use `--label`).
+
 ## [v377] - 2026-10-12 — A full name registers itself in DNS; no separate Domain box
 
 ### Changed
