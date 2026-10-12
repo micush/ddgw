@@ -267,7 +267,7 @@ README), so the version and changelog describe the final tree.
   if one is truly warranted, say so in the changelog.
 - Name: the project is `dnsdir` (called `ddgw` before v367; the GitHub repo is `micush/dnsdir`).
   The wire protocol, packet magic, the default HMAC key (`"dgw"`), the `00:1a:7c` virtual-MAC
-  prefix, the `ddgw-join-v1` join-code prefix, the `ddgw-cluster-v1` signature label and the
+  prefix, the `ddgw-join-v1` join-code prefix, the `ddgw-cluster-v1` signature label, the `ddgw-node` certificate name (`peerServerName`) and the
   `X-Ddgw-*` cluster headers are protocol identity, not branding — they stay as they are so
   existing nodes keep interoperating. Don't rename them as part of a branding cleanup.
   Old-name compatibility that must stay while ddgw nodes can still exist: `migrateOldInstall`

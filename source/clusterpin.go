@@ -24,7 +24,11 @@ import (
 
 // peerServerName is the one name every node identity certificate carries
 // (cluster.go); the URL host is never used, the dial goes to the peer's address.
-const peerServerName = "dnsdir-node"
+//
+// It is protocol identity and stays "ddgw-node": every identity certificate already issued carries
+// exactly this name, and a node verifies its peer against it, so renaming it would make nodes
+// of the new name and the old one (and every existing cluster) refuse each other.
+const peerServerName = "ddgw-node"
 
 var errPeerIdentity = errors.New("peer identity does not match the pinned fingerprint")
 
@@ -164,7 +168,7 @@ func dialPinnedAs(ctx context.Context, addr, fp string, me *tls.Certificate) (ne
 }
 
 // pinnedClient is an HTTP client for the peer at addr with fingerprint fp.
-// Requests are made to https://dnsdir-node/...; the connection goes to addr.
+// Requests are made to https://ddgw-node/...; the connection goes to addr.
 func pinnedClient(addr, fp string, timeout time.Duration) *http.Client {
 	return pinnedClientAs(addr, fp, timeout, nil)
 }

@@ -698,7 +698,8 @@ func (u *Updater) findGo() (string, error) {
 		sort.Sort(sort.Reverse(sort.StringSlice(m)))
 		cands = append(cands, m...)
 	}
-	cands = append(cands, "/usr/local/share/dnsdir/go/bin/go")
+	// the toolchain install.sh kept: under the old name until install.sh has moved it
+	cands = append(cands, "/usr/local/share/dnsdir/go/bin/go", "/usr/local/share/ddgw/go/bin/go")
 	for _, c := range cands {
 		if goUsable(c) {
 			return c, nil

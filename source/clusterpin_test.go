@@ -87,3 +87,11 @@ func TestPinnedClientChecksFingerprint(t *testing.T) {
 		t.Fatal("invalid address dialled")
 	}
 }
+
+// The name nodes verify each other under is carried by every identity certificate already issued
+// (and by nodes still called ddgw), so it must not follow the project's name.
+func TestPeerServerNameIsProtocolIdentity(t *testing.T) {
+	if peerServerName != "ddgw-node" {
+		t.Fatalf("peerServerName = %q: renaming it breaks every existing cluster", peerServerName)
+	}
+}

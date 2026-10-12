@@ -1,5 +1,17 @@
 # Changelog
 
+## [v368] - 2026-10-12 — Fix: nodes refused each other after the rename
+
+### Fixed
+- The v367 rename also changed the name cluster nodes verify each other's identity certificate under (`ddgw-node` → `dnsdir-node`). Every certificate already issued carries `ddgw-node`, so a renamed node could not talk to any peer (they showed as "not answering"), old or new. The name is back to `ddgw-node` and is now documented as protocol identity (`CLAUDE.md`), with a test (`TestPeerServerNameIsProtocolIdentity`). New certificates carry the same name.
+- A node updated in place but not yet re-installed finds the Go toolchain `install.sh` kept under `/usr/local/share/ddgw/go` as well as the new path, so it can still build its next update.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- A live cluster with the fixed build (the unit tests dial peers with their own certificates; the failure itself was seen only in a screenshot). Nodes already on v367 must be updated or re-installed with v368 before they can reach the cluster again.
+
 ## [v367] - 2026-10-12 — Renamed from ddgw to dnsdir
 
 ### Changed
