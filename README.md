@@ -1,6 +1,6 @@
-# Anyname DNS Director
+# AnyName DNS Director
 
-Anyname gives a group of machines one shared DNS address. Clients point at that address, called a **gateway**, and every node answers it. The nodes agree among themselves, over a small multicast or unicast protocol, who owns which share of the traffic, so a node can fail or restart without clients noticing.
+AnyName gives a group of machines one shared DNS address. Clients point at that address, called a **gateway**, and every node answers it. The nodes agree among themselves, over a small multicast or unicast protocol, who owns which share of the traffic, so a node can fail or restart without clients noticing.
 
 What you get:
 
@@ -70,23 +70,23 @@ Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjar
 
 ### What the installer does
 
-The installer builds Anyname from the source tree, installing only the prerequisites that are missing:
+The installer builds AnyName from the source tree, installing only the prerequisites that are missing:
 
 - **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) **nmap**, **ping** and **mtr** (for Scan, Ping and Traceroute on the Statistics page).
 - **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/ddgw/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
-- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and Anyname leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap, ping or mtr install is a warning too; only Scan, Ping and Traceroute need them.
+- FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and AnyName leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap, ping or mtr install is a warning too; only Scan, Ping and Traceroute need them.
 
 It then installs `/usr/local/sbin/ddgw`, the state directory `/var/lib/ddgw` (mode 0700), the `ddgw` group, `/etc/pam.d/ddgw`, a NetworkManager drop-in that leaves the `ddgw*` macvlan interfaces alone, and the `ddgw` systemd unit.
 
 ### Upgrading and uninstalling
 
-If Anyname is already installed, the script upgrades it. The config, certificate, group members and an existing PAM file are kept, and the old binary is saved as `/usr/local/share/ddgw/ddgw.prev`. If the new version does not start, the old one is restored. Installing the same version is a no-op, `--force` reinstalls, and a downgrade needs `--force`.
+If AnyName is already installed, the script upgrades it. The config, certificate, group members and an existing PAM file are kept, and the old binary is saved as `/usr/local/share/ddgw/ddgw.prev`. If the new version does not start, the old one is restored. Installing the same version is a no-op, `--force` reinstalls, and a downgrade needs `--force`.
 
 The user who ran the installer (the one behind `sudo`) is added to the `ddgw` group so they can log in to the GUI; `--add-user NAME` adds others. Uninstalling keeps `/var/lib/ddgw` (the config, the certificate, config history and the cluster identity) unless you give `--purge`.
 
 ### Where things live
 
-Everything Anyname keeps is in `/var/lib/ddgw` (mode 0700): `ddgw.conf`, the GUI certificate, `versions/`, the cluster identity and the update data. The control socket is `/run/ddgw/ddgw.sock`.
+Everything AnyName keeps is in `/var/lib/ddgw` (mode 0700): `ddgw.conf`, the GUI certificate, `versions/`, the cluster identity and the update data. The control socket is `/run/ddgw/ddgw.sock`.
 
 ### Fresh start or cloned VM
 
@@ -125,14 +125,14 @@ The DNS page marks the fallbacks and says when they are in use, the canvas shows
 
 ### How clients and servers talk
 
-**Clients to Anyname.** Plain DNS is answered over UDP and TCP on `listen_port` (default 53). Two more listeners are off by default:
+**Clients to AnyName.** Plain DNS is answered over UDP and TCP on `listen_port` (default 53). Two more listeners are off by default:
 
 - **DNS over TLS.** Set `dot_port` (usually 853) in the `dns` block (shared, or a gateway's own) or under Configure ▸ DNS proxy ▸ Listeners. The VIP, and any anycast address, then also answers DoT (RFC 7858) on that TCP port through the same pool, cache and statistics as plain DNS. The certificate is the web GUI's, whatever Configure ▸ Web GUI shows (the self-signed one until you install a real one), so clients that check certificates need one that is valid for the name or address they connect to. `dot_port` must differ from `listen_port`. If it cannot be opened, the error is logged and plain DNS keeps running. DoT queries count as TCP in the statistics.
 - **DNS over HTTPS.** Set `doh_port` (usually 443) and the gateway address, and any anycast address of the gateway, also answers DoH (RFC 8484) at `https://<address>:<port>/dns-query`. Use a POST with an `application/dns-message` body, or a GET with the message as the base64url `dns` parameter. HTTP/2 and HTTP/1.1 work, with TLS 1.2 or later and the GUI's certificate, through the same pool, cache and statistics as plain DNS (counted as TCP). Only that path is served: other paths get 404, a wrong method 405, a wrong content type 415 and a bad message 400. `doh_port` must differ from `listen_port` and `dot_port`. If it cannot be opened, the error is logged and the other listeners keep running. Answers carry `Cache-Control: no-store`, and there is no client-certificate or token check, so it is as open as plain DNS on the same address.
 
-**Anyname to upstream servers.** Whatever the client used to ask, a server can be reached over plain DNS, DoT or DoH:
+**AnyName to upstream servers.** Whatever the client used to ask, a server can be reached over plain DNS, DoT or DoH:
 
-- **DNS over TLS to a server.** List it as `tls://host` or `tls://host:port` (port 853 by default; the host is an IP address or a name), and Anyname probes it and forwards to it over TLS (RFC 7858). The server's certificate must be valid for that host name or IP address and signed by an authority this machine trusts. A certificate that is not is refused, and the server shows as down with the reason.
+- **DNS over TLS to a server.** List it as `tls://host` or `tls://host:port` (port 853 by default; the host is an IP address or a name), and AnyName probes it and forwards to it over TLS (RFC 7858). The server's certificate must be valid for that host name or IP address and signed by an authority this machine trusts. A certificate that is not is refused, and the server shows as down with the reason.
 - **DNS over HTTPS to a server.** List it as `https://host`, `https://host:port` or `https://host/path` (port 443 and path `/dns-query` unless given), and each query is sent to it as an HTTPS POST of the DNS message (`application/dns-message`, RFC 8484). HTTP/2 is used when the server offers it; redirects are not followed, and no proxy is ever used. The certificate rules are the same as for `tls://`.
 - **`tls_insecure`** (Configure ▸ DNS proxy ▸ Servers, in the shared block or a gateway's own `dns` block; off by default) accepts any certificate from a `tls://` or `https://` server: self-signed, expired, the wrong name. Use it only when you cannot fix the server. The traffic is still encrypted, but the server is not authenticated, so anyone on the path could answer as it. While it is on, the DNS page shows "tls:// certificates not checked", `--show-dns` says so, and the log warns when the pool starts. A DoT listener has no client certificate to skip, so this setting is only about the servers you forward to.
 - As with DoT, every probe and query to a DoH or DoT server opens a new connection, so its measured latency includes the TLS handshake (and, for DoH, the HTTP request). A plain and a TLS entry for the same host are two servers.
@@ -141,7 +141,7 @@ The DNS page marks the fallbacks and says when they are in use, the canvas shows
 
 ECS is on by default (`"ecs": true`). Turn it off in Configure ▸ DNS proxy ▸ Cache & ECS ▸ Client network, or per gateway on the Topology page (edit the gateway, then "Tell the DNS servers which network the client is on").
 
-With ECS off, every upstream server sees all queries coming from the Anyname node. With it on, the proxy attaches the client's *network* as an EDNS Client Subnet option (RFC 7871): the first `ecs_prefix4` bits (default 24) of an IPv4 client, or `ecs_prefix6` (default 56) of an IPv6 client, and never the full address. Servers that understand it (Google 8.8.8.8, BIND, Unbound, PowerDNS and others) can then log or answer per client network; the rest ignore it.
+With ECS off, every upstream server sees all queries coming from the AnyName node. With it on, the proxy attaches the client's *network* as an EDNS Client Subnet option (RFC 7871): the first `ecs_prefix4` bits (default 24) of an IPv4 client, or `ecs_prefix6` (default 56) of an IPv6 client, and never the full address. Servers that understand it (Google 8.8.8.8, BIND, Unbound, PowerDNS and others) can then log or answer per client network; the rest ignore it.
 
 The details:
 
@@ -179,7 +179,7 @@ The A and AAAA records of a plain answer are put in this order: addresses inside
 
 ### Policy-Based Resolution
 
-Policy-Based Resolution decides, per query, who answers it: which servers are asked, whether a different name is asked for, or whether Anyname answers by itself. It looks at **who is asking** and **what is asked**.
+Policy-Based Resolution decides, per query, who answers it: which servers are asked, whether a different name is asked for, or whether AnyName answers by itself. It looks at **who is asking** and **what is asked**.
 
 It lives in the top-level `dns` block (Configure ▸ DNS proxy ▸ Resolution ▸ Policy-Based Resolution), is shared by the cluster, and applies to every gateway. `policy_on` (default true; the **Policy-Based Resolution enabled** tick box) switches it off without deleting the rows. It works for queries that arrive over UDP, TCP, DoT and DoH, and with DoT and DoH servers.
 
@@ -230,7 +230,7 @@ To answer with an address of your own, leave the servers blank and write the ans
 | `A 10.5.5.5, 10.5.5.6` | The name has these IPv4 addresses |
 | `AAAA 2001:db8::5` | The name has this IPv6 address |
 | `TXT "some text"` | The name has a TXT record |
-| `CNAME host.example.com` | The name is another name. Anyname looks the target up for the client and answers with the CNAME and what it found. A CNAME cannot be combined with other records |
+| `CNAME host.example.com` | The name is another name. AnyName looks the target up for the client and answers with the CNAME and what it found. A CNAME cannot be combined with other records |
 | `TTL 300` | Seconds the client may keep the answer (default 60); can appear anywhere in the cell |
 
 Several kinds are separated by `;` (`A 10.5.5.5; AAAA 2001:db8::5; TTL 300`). A query for a type the row has no records of gets "no data", and ANY gets everything. The answer is marked authoritative. A row has either servers or records, not both; the same text in the servers cell also works.
@@ -282,7 +282,7 @@ An UPDATE message sent to the VIP (from `nsupdate`, a DHCP server, or Windows an
 - The primary is cached for the SOA TTL (30 seconds to 5 minutes) and looked up again once if the cached one fails.
 - No SOA for the zone gives NOTAUTH, an unreachable primary gives SERVFAIL, a malformed message gives FORMERR, and a zone class other than IN gives NOTIMP.
 - An update is never forwarded to the VIP itself.
-- A primary that filters by source address sees the Anyname node, not the client. Use TSIG keys, which travel with the message.
+- A primary that filters by source address sees the AnyName node, not the client. Use TSIG keys, which travel with the message.
 
 Every update is logged (INFO when the primary accepted it, WARN otherwise) and counted in Statistics as the type **UPDATE** under the zone name, with its own **Updates** tile (the count and how many failed) and a chart line. Updates are counted in the total but not again under No Error or Refused. Click the **Updates** tile to see only updates (chart, who sent them, which zones), and the last 200 under **Recent dynamic updates** (also `ddgw --dns-updates`): time, client, zone, what it changed (`add host1.example.com A 192.0.2.7`, `delete old.example.com A`), the primary and its answer.
 
@@ -320,7 +320,7 @@ A gateway's dot in the sidebar is the state of the gateway for the **cluster as 
 
 The circle shows just the address (no prefix length) and sizes itself to fit even a full IPv6 address. A dual-stack gateway shows both, with a small green, yellow or red chip for each family, and the gateway's own colour is the worst of the two (an IPv6 engine that is not serving is yellow even if IPv4 is fine). Hover the circle to see which cluster nodes are serving the gateway right now: which is this node, which is the controller, and each node's slot.
 
-A **domain** is a health test, not a route. Anyname sends every client query to the fastest healthy server; a server counts as healthy while fewer than `down_percent` (100%, every one) of *its* domains fail.
+A **domain** is a health test, not a route. AnyName sends every client query to the fastest healthy server; a server counts as healthy while fewer than `down_percent` (100%, every one) of *its* domains fail.
 
 Every tooltip ends with the item's **uptime**: how long the gateway, anycast address, server or domain has been online since it last came back, or how long it has been down, and how many failures it has had ("Online for 1m 1s - 0 failures"). Green and yellow count as online; paused and grey items show nothing. A sampler in the daemon notes the changes every 2 seconds (no browser needed), in memory only, so the counting, failures included, restarts with ddgw. `ddgw --canvas` prints the same in brackets.
 
@@ -393,7 +393,7 @@ Right-click a square, a trapezoid or the circle ▸ *Statistics* for graphs over
 - A **domain** (trapezoid) shows the latency and the failed share of the health probes of that domain on that server. These are probes only, about 12 a minute, so the failure curve is coarser.
 - The **gateway** (circle) shows what clients get: **answer time** (one answer in eight is timed, cache hits included), **errors** (SERVFAIL and REFUSED answers, not clients turned away by the client list or rate limit), **availability** (the share of the 2-second checks, the same ones that drive the circle's uptime, that found the gateway working; paused or not-yet-started time is not counted) and **queries per second**, with the part answered from the cache.
 
-A server's and a domain's graphs are the picked node's own view. A gateway's graphs add up every reachable node of the cluster, since which node answers a client is up to the clients; the dialog says "All 3 nodes counted together", or how many were counted and how many did not answer (a single node shows just this node). A gap means nothing happened in that time: paused, the node was down, or, for a server or domain, nothing was asked of it. The history is kept per node for 7 days, one slot per minute, and saved with the other statistics (`stats.json.gz`, every 5 minutes and when Anyname stops), so a restart keeps it; the time Anyname was down is a gap. A server address listed by two gateways is one series, and a gateway's series covers all its addresses (IPv4, IPv6, anycast) on this node.
+A server's and a domain's graphs are the picked node's own view. A gateway's graphs add up every reachable node of the cluster, since which node answers a client is up to the clients; the dialog says "All 3 nodes counted together", or how many were counted and how many did not answer (a single node shows just this node). A gap means nothing happened in that time: paused, the node was down, or, for a server or domain, nothing was asked of it. The history is kept per node for 7 days, one slot per minute, and saved with the other statistics (`stats.json.gz`, every 5 minutes and when AnyName stops), so a restart keeps it; the time AnyName was down is a gap. A server address listed by two gateways is one series, and a gateway's series covers all its addresses (IPv4, IPv6, anycast) on this node.
 
 ### Pools, families and the cluster
 
@@ -445,17 +445,17 @@ A gateway can carry extra addresses of **any subnet** next to its shared address
 
 Anycast addresses are not checked against the interface and do not take part in the election. **Every** node running the gateway puts them on `lo` and answers DNS on them, with the same servers, domains and failover as the shared address, on `listen_port`. They are shared across the cluster and need DNS servers on the gateway.
 
-An address is held only while this node can answer on it: the gateway is running and not paused, the listener is up, and at least one DNS server is healthy. Otherwise it is taken off `lo`, so the route disappears from your routing daemon. It is added with a 10-second lifetime that Anyname renews every 3 seconds, so if Anyname crashes or hangs, the kernel removes the address by itself within about 10 seconds instead of leaving a route that nothing answers.
+An address is held only while this node can answer on it: the gateway is running and not paused, the listener is up, and at least one DNS server is healthy. Otherwise it is taken off `lo`, so the route disappears from your routing daemon. It is added with a 10-second lifetime that AnyName renews every 3 seconds, so if AnyName crashes or hangs, the kernel removes the address by itself within about 10 seconds instead of leaving a route that nothing answers.
 
 The drawing and `--canvas` show whether each address is announced from the node you are looking at. When the node manages BGP, the pill is **green** when every neighbor of its family has an established session (IPv4 address → IPv4 neighbors, IPv6 → IPv6), **amber** when some do and some do not, and **red** when none does, when it has no neighbor of that family, or when BGP is disabled on the node (Operate ▸ Anycast). A neighbor that is disabled or still connecting counts as not established.
 
 ### BGP through FRR
 
-Anyname can drive FRR on a node so the anycast addresses are announced without any hand-written routing config. In the GUI that is **Configure ▸ Anycast**; the command line is below. It is **per node**: the AS, router ID and neighbors are never replicated, because a node usually peers with its own upstream router. Only the anycast addresses are shared.
+AnyName can drive FRR on a node so the anycast addresses are announced without any hand-written routing config. In the GUI that is **Configure ▸ Anycast**; the command line is below. It is **per node**: the AS, router ID and neighbors are never replicated, because a node usually peers with its own upstream router. Only the anycast addresses are shared.
 
 ![Configure ▸ Anycast: the local AS, router ID, timers and the neighbor table](snaps/anycast.png)
 
-**Turning BGP on.** BGP runs on a node while a local AS number is set. That makes Anyname the owner of the node's `/etc/frr/frr.conf`: it renders the whole file (BGP only), sets `bgpd=yes` and `bfdd=yes` in `/etc/frr/daemons`, and reloads FRR (`systemctl reload frr`; a restart when a daemon is switched on or off). FRR must be installed with its `frr-pythontools` package (the installer adds both). Without it a reload cannot work, so Anyname restarts FRR for every change and the sessions drop briefly. An `frr.conf` that Anyname did not write is saved once as `frr.conf.pre-ddgw` before it is replaced. Do not run this on a host whose FRR is managed by something else; they would overwrite each other.
+**Turning BGP on.** BGP runs on a node while a local AS number is set. That makes AnyName the owner of the node's `/etc/frr/frr.conf`: it renders the whole file (BGP only), sets `bgpd=yes` and `bfdd=yes` in `/etc/frr/daemons`, and reloads FRR (`systemctl reload frr`; a restart when a daemon is switched on or off). FRR must be installed with its `frr-pythontools` package (the installer adds both). Without it a reload cannot work, so AnyName restarts FRR for every change and the sessions drop briefly. An `frr.conf` that AnyName did not write is saved once as `frr.conf.pre-ddgw` before it is replaced. Do not run this on a host whose FRR is managed by something else; they would overwrite each other.
 
 **Turning it off.** Clearing the AS number removes the BGP section and leaves FRR running (the router ID can only be set while an AS is set, and clearing the AS clears it). **Operate ▸ Anycast** does the same without forgetting any setting (*Disable BGP*), and can shut down a single neighbor (`neighbor … shutdown`; the neighbor stays configured). A node that never set an AS never has its FRR files touched.
 
@@ -485,7 +485,7 @@ ddgw --bgp-neighbor-disable 192.0.2.1          # shut one neighbor down, kept (-
 - **It announces only its anycast addresses.** Each is a `network` statement, and an outbound route-map permits only those prefixes (`/32` and `/128`).
 - **It accepts nothing.** An inbound route-map denies every route, so a peer cannot change the host's routing table.
 - **An IPv4 address goes to the IPv4 neighbors, and an IPv6 address to the IPv6 ones.** Add a neighbor of each family to announce both.
-- **A prefix is in FRR's table only while Anyname holds the address on `lo`**, so it is withdrawn when no DNS server answers, the gateway is paused or Anyname stops, and within about 10 seconds if Anyname is killed (the address lifetime, above). Lower the router's timers to shorten the time your peers need to notice.
+- **A prefix is in FRR's table only while AnyName holds the address on `lo`**, so it is withdrawn when no DNS server answers, the gateway is paused or AnyName stops, and within about 10 seconds if AnyName is killed (the address lifetime, above). Lower the router's timers to shorten the time your peers need to notice.
 - **The neighbor password** is an MD5 TCP session password. It is stored in the config file and its history (root-only), and `--password` on the command line is visible to other users of the host, so the Anycast page is the safer place to set it.
 
 **Where to look.** **Monitor ▸ Anycast** shows each neighbor's session and BFD state, read from FRR every few seconds (`vtysh -c "show bgp summary json"`, `show bfd peers json`), and which anycast addresses are announced. **Configure ▸ Anycast** (card *BGP*) has the AS, router ID and the neighbor table (**+** adds a row, **−** removes the highlighted one).
@@ -691,7 +691,7 @@ An installed certificate is checked (chain order, key match, validity, server au
 
 ## Clustering
 
-Clustering is for **management only**. It keeps the settings of several Anyname nodes in step and lets you update them together, and it is independent of the AGC/AFN election. It is always on: every node is the primary of a cluster of one until it joins another. The only settings are:
+Clustering is for **management only**. It keeps the settings of several AnyName nodes in step and lets you update them together, and it is independent of the AGC/AFN election. It is always on: every node is the primary of a cluster of one until it joins another. The only settings are:
 
 ```
 "cluster": {"listen": ":53854", "self": "10.0.0.5:53854"}
@@ -786,11 +786,11 @@ The range is Last Hour, Last Day, Last Week, Last Month, or a custom start and e
 
 **Clearing the statistics.** **Clear** (next to the range buttons) forgets the counts and top lists of the node, or of every node when the Node menu says Cluster, and rewrites `stats.json.gz` at once.
 
-**Names and whois.** Client names come from a PTR lookup that asks the DNS servers Anyname forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file. A client with no name is asked again after 2 minutes, and a name is kept for 10.
+**Names and whois.** Client names come from a PTR lookup that asks the DNS servers AnyName forwards to first (through the pools, so it works even when this machine's own `/etc/resolv.conf` points at nothing useful) and only then this machine's resolver and hosts file. A client with no name is asked again after 2 minutes, and a name is kept for 10.
 
 Hovering a client shows its reverse-DNS names. Right-click a client or a domain ▸ **Whois** opens a popup: for a client, from its regional registry (found through whois.iana.org), the address block, name, organization, country and origin AS (none for private addresses); for a domain, its **whois** data (registrar, registrant when not redacted, dates, name servers), preceded by the first IPv4 and IPv6 address of the name. Whois is fetched only when asked for, by the daemon on the picked node (TCP port 43, through whois.iana.org to the registry), and cached for a day. That sends the domain name or address, and nothing else, to the registry; a node without outbound port 43 shows "not reachable". The registered name is the last two labels (three under common second-level suffixes such as co.uk), a heuristic rather than the public suffix list. `--whois NAME|ADDRESS` prints the same.
 
-**How long it is kept.** The counters are kept for **30 days**. They live in memory (about 30 MB for a small network, 65 MB at most) and are saved to `stats.json.gz` in the state directory every 5 minutes and when Anyname stops, and read back at start-up, so a restart or an update does not empty them. The time Anyname was not running is a gap, and "counting since" is the very first start. The file is gzip-compressed JSON, mode 0600, and holds client addresses and the names they asked for; delete it, with Anyname stopped, to forget them.
+**How long it is kept.** The counters are kept for **30 days**. They live in memory (about 30 MB for a small network, 65 MB at most) and are saved to `stats.json.gz` in the state directory every 5 minutes and when AnyName stops, and read back at start-up, so a restart or an update does not empty them. The time AnyName was not running is a gap, and "counting since" is the very first start. The file is gzip-compressed JSON, mode 0600, and holds client addresses and the names they asked for; delete it, with AnyName stopped, to forget them.
 
 Top lists are collected in 10-minute steps for the last day and in hourly steps beyond that, keeping the busiest 300 clients and 600 domains per step (the rest count as "(others)"), so a flood of random names cannot use up memory.
 
@@ -809,7 +809,7 @@ ddgw --stats --all-nodes                     (every cluster node's numbers added
 
 ### The memory guard
 
-The statistics, the host history and the answer cache all live in memory. Every 30 seconds Anyname looks at how much memory the machine is using. That is the figure the Host page shows: what programs hold, caches excluded; in a container with a memory limit, the container's use against its limit, whichever is higher.
+The statistics, the host history and the answer cache all live in memory. Every 30 seconds AnyName looks at how much memory the machine is using. That is the figure the Host page shows: what programs hold, caches excluded; in a container with a memory limit, the container's use against its limit, whichever is higher.
 
 At **85%** or more it drops the **oldest data**. Each round removes the oldest tenth of the time span the statistics and the host history cover (top lists, per-minute counters and host minutes alike, so they stay consistent) and a tenth of the answer cache (the least recently used answers). It then hands the memory back to the system and measures again, up to 5 rounds per check, until use is below the limit. If it is still above, the next check carries on.
 
@@ -817,7 +817,7 @@ Newer data always outlives older data, and the newest hour of statistics and hos
 
 Each time it drops something, the log says so (WARN), and the Statistics and Host pages (and `ddgw --stats`, `ddgw --host`) show a line with the count, the time and what was dropped. What is dropped is gone from the saved file too after the next save.
 
-The limit is the environment variable `DDGW_MEMORY_LIMIT_PERCENT` of the daemon (1–99, default 85); there is no other switch. It can only drop what Anyname itself holds (at most about 100 MB), so if something else fills the machine, it will keep trimming and cannot fix that.
+The limit is the environment variable `DDGW_MEMORY_LIMIT_PERCENT` of the daemon (1–99, default 85); there is no other switch. It can only drop what AnyName itself holds (at most about 100 MB), so if something else fills the machine, it will keep trimming and cannot fix that.
 
 ### Host
 
@@ -870,7 +870,7 @@ Monitor ▸ Log (or `ddgw --log`) shows the daemon's log and filters it by words
 
 ![Monitor ▸ Log: filtered by level and words, with the matches marked](snaps/log.png)
 
-The text is the same that goes to stderr (the system journal under systemd). Anyname also keeps it in `ddgw.log` in the state directory (`/var/lib/ddgw`, root-only), rotated at 2 MB with the two previous files kept, so it survives restarts and needs no journal access. Besides the usual events, it logs server up and down changes and each domain that starts or stops answering on a server, so one failing domain shows even while the server stays up.
+The text is the same that goes to stderr (the system journal under systemd). AnyName also keeps it in `ddgw.log` in the state directory (`/var/lib/ddgw`, root-only), rotated at 2 MB with the two previous files kept, so it survives restarts and needs no journal access. Besides the usual events, it logs server up and down changes and each domain that starts or stops answering on a server, so one failing domain shows even while the server stays up.
 
 **tshoot** (Monitor ▸ Log ▸ tshoot, or `ddgw --tshoot [--all-nodes]`) downloads one `.tgz` with what is needed to find out why something does not work, from every node:
 
@@ -906,7 +906,7 @@ When a controller stops (a restart, an update, **Pause this node**), it tells th
 
 Operate ▸ Node ▸ *Maintenance* (or `ddgw --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
 
-The flag (`node_paused` in the config file) is local to the node, never replicated, and survives restarts of Anyname and of the host. Resuming brings the gateways back once their DNS servers answer. A gateway you paused on its own stays paused after the node resumes. With the Node menu, the page pauses any member, so to send all traffic to one node (to benchmark it, say), pause the others instead of shutting them down.
+The flag (`node_paused` in the config file) is local to the node, never replicated, and survives restarts of AnyName and of the host. Resuming brings the gateways back once their DNS servers answer. A gateway you paused on its own stays paused after the node resumes. With the Node menu, the page pauses any member, so to send all traffic to one node (to benchmark it, say), pause the others instead of shutting them down.
 
 ```
 ddgw --node-pause
@@ -916,7 +916,7 @@ ddgw --node-status
 
 ### Restart or shut down the host
 
-Operate ▸ Node ▸ *Host* (or `ddgw --power`) restarts or shuts down the whole host: now, in 1–10080 minutes, or at a time of day. A scheduled action is kept by the operating system (`shutdown(8)`, so it survives a restart of Anyname), shows on the page, and can be cancelled. It needs `shutdown` (systemd or sysvinit-compatible) on the host.
+Operate ▸ Node ▸ *Host* (or `ddgw --power`) restarts or shuts down the whole host: now, in 1–10080 minutes, or at a time of day. A scheduled action is kept by the operating system (`shutdown(8)`, so it survives a restart of AnyName), shows on the page, and can be cancelled. It needs `shutdown` (systemd or sysvinit-compatible) on the host.
 
 An action started *now* is refused when this node is the only member serving one of its gateways (the same check updates use). The GUI asks whether to go ahead anyway, and the CLI needs `--yes`. The check is made when you ask, not at a scheduled time. A stopping controller announces that it is leaving, so another member takes over at once.
 
@@ -977,4 +977,4 @@ go test -race ./...
 
 ## License
 
-Anyname is free software under the GNU General Public License, version 3 (see `LICENSE` next to this file).
+AnyName is free software under the GNU General Public License, version 3 (see `LICENSE` next to this file).

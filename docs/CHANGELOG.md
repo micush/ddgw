@@ -1,5 +1,16 @@
 # Changelog
 
+## [v366] - 2026-10-12 — The name is written AnyName
+
+### Changed
+- "Anyname" is now "AnyName" everywhere it is written (the GUI title and text, the help, README, QUICKSTART, the install scripts' messages and the changelog's older entries). Program, file, service and command names (`ddgw`) are unchanged.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`, `bash -n` on get.sh, install.sh and uninstall.sh.
+
+### Not verified
+- shellcheck and the installers' dry runs were not repeated (message text only).
+
 ## [v365] - 2026-10-11 — The scheduled power action line sits in the When box
 
 ### Changed
@@ -1413,7 +1424,7 @@ The GUI behaviour above, in any real browser.
 ## [v234] - 2026-10-07 — Troubleshooting bundle
 
 ### Added
-- **Monitor ▸ Log ▸ Troubleshooting bundle** (and `ddgw --tshoot [--all-nodes] [--tshoot-capture] [--tshoot-file F]`): one .tgz with a folder per node holding what is needed to find out why something does not work: the log (newest 20000 lines), the configuration and its saved versions, cluster, gateway, DNS-pool, BGP, anycast, virtual-MAC-test and update state, host numbers for the last hour, `ip addr/link/route (all tables)/rule/neigh`, `/proc/net` ARP and routes, sockets, the ARP/routing sysctl settings, nftables and iptables, FRR's BGP and BFD output and configuration, service status, the Anyname journal, the kernel log tail and system information. `with capture` adds 8 s of ARP and neighbor-discovery capture per gateway interface.
+- **Monitor ▸ Log ▸ Troubleshooting bundle** (and `ddgw --tshoot [--all-nodes] [--tshoot-capture] [--tshoot-file F]`): one .tgz with a folder per node holding what is needed to find out why something does not work: the log (newest 20000 lines), the configuration and its saved versions, cluster, gateway, DNS-pool, BGP, anycast, virtual-MAC-test and update state, host numbers for the last hour, `ip addr/link/route (all tables)/rule/neigh`, `/proc/net` ARP and routes, sockets, the ARP/routing sysctl settings, nftables and iptables, FRR's BGP and BFD output and configuration, service status, the AnyName journal, the kernel log tail and system information. `with capture` adds 8 s of ARP and neighbor-discovery capture per gateway interface.
 - The node you are signed in to asks every other node itself (the node picker does not matter), all at once; a node that cannot be reached, or that is on a version without the bundle, has a `NOT-COLLECTED.txt` and a line in the top `README.txt`. One node's part is kept under 3 MB (the cluster channel's limit) by cutting the oldest log lines. Read-only; each use is logged with the user's name.
 - **Secrets are removed before anything is written**: every JSON value whose key is a password, the gateway key, a token, a join code, a private key, a cookie or similar, and the same words in free text (FRR's `password …`, `secret`, `md5`, `community`). Each node's `README.txt` says how many were removed. Other programs' command lines are not collected (the process list has names only). Packet captures and query statistics are not included unless asked for / at all.
 - Tests: redaction of JSON and text, tar round trip (including a path that tries to leave the node's folder), one node's bundle, and a two-node cluster bundle including an unreachable node.
@@ -1526,14 +1537,14 @@ The GUI behaviour above, in any real browser.
 ### Not verified
 - Light theme; a lone node that is off the gateway's subnet (the "not serving" shape), which is covered by the existing node-label test but was not looked at in the browser. `TestClusterLegacyRequestsAreLimitedBeforeTheSignature` is flaky (also on the unmodified v215 tree).
 
-## [v226] - 2026-10-07 — The product is now called Anyname DNS Director
+## [v226] - 2026-10-07 — The product is now called AnyName DNS Director
 
 ### Changed
-- **New product name, "Anyname DNS Director"** (short form "Anyname"), replacing "ddgw" and the tagline "DNS Distributed Gateway" wherever the name is prose a person reads: the browser tab title, the sign-in page, the sidebar header, the no-JavaScript notice, text on the pages and in the help ("?") panels, `README.md`, `QUICKSTART.md` and the messages and comments of `install.sh`, `uninstall.sh` and `get.sh`.
+- **New product name, "AnyName DNS Director"** (short form "AnyName"), replacing "ddgw" and the tagline "DNS Distributed Gateway" wherever the name is prose a person reads: the browser tab title, the sign-in page, the sidebar header, the no-JavaScript notice, text on the pages and in the help ("?") panels, `README.md`, `QUICKSTART.md` and the messages and comments of `install.sh`, `uninstall.sh` and `get.sh`.
 - **Not renamed**: the command-line program and every flag (`ddgw --cluster-status`; each "Command line" block in the help), the binary, the `ddgw.service` unit, `ddgw-uninstall`, the `ddgw` group and PAM file, `/var/lib/ddgw` and the other paths, release and download file names (`ddgw_vN.tgz`, `ddgw-capture.tgz`), the repository and `get.sh` URL (`micush/ddgw`), the join-code prefix, the wire protocol, the self-signed certificate's subject, the command-line usage banner and `CLAUDE.md`. Older changelog entries keep the name they were written under.
 
 ### Verified
-- Chromium, dark and light: the tab title, sign-in page and sidebar header read "Anyname DNS Director" (one line in the sidebar). `bash -n` on the three scripts; `install.sh --dry-run` and `--help` print the new name; `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `app.js` and `help.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
+- Chromium, dark and light: the tab title, sign-in page and sidebar header read "AnyName DNS Director" (one line in the sidebar). `bash -n` on the three scripts; `install.sh --dry-run` and `--help` print the new name; `gofmt -l .` clean; `go build`; `go vet ./...`; `node --check` on `app.js` and `help.js`; `go test -race -count=1 ./...`; `CGO_ENABLED=0 go vet ./...` and `go test ./...`; cross-compiles for linux/amd64, arm64, arm, 386 and riscv64.
 - Every changed line of the README, QUICKSTART, help and page text was read in the diff: only prose changed, no command, flag, path, file or service name.
 
 ### Not verified
