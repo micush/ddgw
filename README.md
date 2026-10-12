@@ -113,11 +113,11 @@ In the GUI, the DNS proxy settings are under Configure ▸ DNS proxy, on six tab
 - **Truncated answers.** A truncated (TC) UDP answer is relayed so the client retries over TCP, which the proxy forwards over TCP.
 - **Loops.** A query is never sent back to the server it came from. Without that, a server of the gateway whose own forwarder points at the gateway (or at an anycast address) would make every such query go round until it timed out, and the server would show as down. The log names such a server once a minute.
 
-**Where the load-balancing settings live.** Spread, spread band, down at, failures before down, max servers tried and latency smoothing are the Settings values for every gateway, including one drawn on the Topology page with its own servers. A gateway can have its own instead: Topology ▸ right-click the gateway ▸ *Edit gateway* ▸ **Load balancing** ▸ *own values* (`"lb": {…}` in the gateway's `dns` block, or `--canvas-set gateway --group N --spread-band 200`; `--lb settings` goes back).
+**Where the load-balancing settings live.** Spread, spread band, down at, failures before down, max servers tried and latency smoothing are the Settings values for every gateway, including one drawn on the Topology page with its own servers. A gateway can have its own instead: Topology ▸ right-click the gateway ▸ *Edit* ▸ **Load balancing** ▸ *own values* (`"lb": {…}` in the gateway's `dns` block, or `--canvas-set gateway --group N --spread-band 200`; `--lb settings` goes back).
 
 ### Fallback servers
 
-`fallback_servers` in the `dns` block lists upstreams that are used **only while no normal server is in service**: every one down or paused, or none listed. Only a paused or stopped gateway serves nothing at all. Set them in the shared block or in a gateway's own (Configure ▸ DNS proxy ▸ Servers ▸ Fallback servers, *Edit gateway* on the Topology page, or `--canvas-add fallback --group N --server ADDR` and `--canvas-del fallback …`).
+`fallback_servers` in the `dns` block lists upstreams that are used **only while no normal server is in service**: every one down or paused, or none listed. Only a paused or stopped gateway serves nothing at all. Set them in the shared block or in a gateway's own (Configure ▸ DNS proxy ▸ Servers ▸ Fallback servers, *Edit* on the gateway's right-click menu, or `--canvas-add fallback --group N --server ADDR` and `--canvas-del fallback …`).
 
 Fallbacks are **never probed** and always count as up, because the domains the normal servers are tested with may be internal names that a public resolver knows nothing about, so probing a fallback with them would only mislead. While no normal server is in service, only the fallbacks take queries. As soon as a normal server passes a probe again, the pool goes back to the normal servers and the fallbacks get nothing.
 
@@ -346,7 +346,7 @@ For an unreachable node the menu offers *Cluster page*. Nodes are read-only here
 
 ### Which nodes serve a gateway
 
-Every node that is in the cluster serves every gateway unless it is removed from it. To change that, right-click a node ▸ *Remove from this gateway*, or right-click the gateway ▸ *Add node* ▸ the node. On the command line, use `--canvas-del node --group N --node NODE` and `--canvas-add node --group N --node NODE`, where NODE is the node's address or host name.
+Every node that is in the cluster serves every gateway unless it is removed from it. To change that, right-click a node ▸ *Remove*, or right-click the gateway ▸ *Add node* ▸ the node. On the command line, use `--canvas-del node --group N --node NODE` and `--canvas-add node --group N --node NODE`, where NODE is the node's address or host name.
 
 The removal is **shared** (`excluded_nodes` in the gateway's block, a list of node IDs, absent while empty so older versions still read the file). Any node can change it, every node follows, and it survives restarts. A removed node behaves as if the gateway were paused on it: it resigns, gives up the address, and stops answering and probing for that gateway only. Its shape is no longer drawn on that gateway on any node (`ddgw --canvas` still lists it, as *removed*), and the gateway's circle on that node says it was removed. *Add node* on the gateway lists the removed nodes by name.
 
@@ -360,7 +360,7 @@ The anycast addresses (right of the circle) and the cluster nodes (left) stand f
 
 ### Editing the drawing
 
-**Right-click** anything. The circle offers *Edit gateway*, *Add DNS server*, *Add anycast address*, *Add node*, *Pause*, *Statistics* and *Delete gateway*. A square offers *Statistics*, *Edit server*, *Add domain*, *Pause* and *Delete server*. A trapezoid offers *Edit domain*, *Add domain*, *Pause* and *Delete domain*. The empty drawing offers *New gateway* and *Add DNS server*. Add and Edit open a popup form; deleting something with things under it asks first and says how many. Left-click selects a shape, and the Delete key deletes it. There is no button row; the right-click menu is the one place for these actions.
+**Right-click** anything. The circle offers *Statistics*, *Edit*, *Add DNS server*, *Add anycast address*, *Add node*, *Pause* and *Delete*. A square offers *Statistics*, *Edit*, *Add domain*, *Pause* and *Delete*. A trapezoid offers *Statistics*, *Edit*, *Pause* and *Delete*. The empty drawing offers *New gateway* and *Add DNS server*. Add and Edit open a popup form; deleting something with things under it asks first and says how many. Left-click selects a shape, and the Delete key deletes it. There is no button row; the right-click menu is the one place for these actions.
 
 **Add DNS server** looks things up for you. Fill in the IP address and the **Name** is filled in from its reverse (PTR) record; fill in a host name as the Name and the address is looked up (IPv4 preferred). The lookup is made once by the node being configured, when you leave the field, and only fills a field that is empty or still holds an earlier lookup. A name or address you typed yourself is never overwritten, and you can change a looked-up name to anything (it is saved as typed). CLI: `ddgw --dns-lookup IP|NAME`. A domain name too long for its trapezoid is cut with "…" so it stays well inside the shape, and so is a long server address or name inside its box (hover for the full text).
 

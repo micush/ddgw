@@ -1,5 +1,19 @@
 # Changelog
 
+## [v356] - 2026-10-11 — Topology right-click menus reordered
+
+### Changed
+- Node menu: **Statistics**, then **Controller**, **Open** (not on this node), **Pause / Resume**, **Restart**, then **Shut down**, **Remove** (from the gateway). A node that does not answer offers Cluster page and Remove.
+- Gateway menu: **Statistics**, then **Edit**, **Add DNS server**, **Add anycast address**, **Pause / Resume**, then **Delete**. **Test virtual MACs** (when the gateway has virtual MACs) and **Add node** (while a node is removed from the gateway) stay, between Add anycast address and Pause, because they have no other place in the GUI.
+- DNS server menu: **Statistics**, then **Edit**, **Add domain**, **Pause / Resume**, then **Delete**. Domain menu: **Statistics**, then **Edit**, **Pause / Resume**, then **Delete** (Add domain is on the server's menu only). The anycast menu: Edit, Pause / Resume, then Delete.
+- Menus draw a separator line between groups. Labels are the plain words, without "…" or the noun.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`; help and README updated to the new labels.
+
+### Not verified
+- The menus in a browser.
+
 ## [v355] - 2026-10-11 — No message above the Topology when a node pause is refused
 
 ### Changed

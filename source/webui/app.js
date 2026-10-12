@@ -1077,7 +1077,9 @@
         subEl.style.left = left + "px";
         subEl.style.top = Math.max(4, Math.min(br.top - 4, window.innerHeight - sr.height - 4)) + "px";
       };
-      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map(([label0, fn, cls, subs, off]) => {
+      menuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => {
+        if (it === "-") return h("div", { class: "sep", role: "separator" });
+        const [label0, fn, cls, subs, off] = it;
         const label = plain(label0);
         if (!subs) {
           if (off) return h("button", { type: "button", role: "menuitem", class: cls || "", disabled: true, title: off, onmouseenter: closeSub }, label);
@@ -1231,14 +1233,15 @@
       const subs = (pause) => [["node", "This node"], ["all", "All nodes"]].filter(([sc]) => scopeOn(sc) !== pause).map(([sc, t]) => [t, () => act(sc, pause)]);
       const items = [];
       // never both: a paused item offers only Resume (for the scopes it is paused in), otherwise only Pause
-      if (scopeOn("node") || scopeOn("all")) items.push(["Resume " + noun, null, "", subs(false)]);
-      else items.push(["Pause " + noun, null, "", subs(true), whyNot || ""]);
+      if (scopeOn("node") || scopeOn("all")) items.push(["Resume" + (noun ? " " + noun : ""), null, "", subs(false)]);
+      else items.push(["Pause" + (noun ? " " + noun : ""), null, "", subs(true), whyNot || ""]);
       return items;
     };
-    const gwItems = (g) => [["Statistics…", () => gatewayStats(g)], ["Edit gateway…", () => gatewayForm(g)], ...(g.real_macs ? [] : [["Test virtual MACs…", () => vmacTest(g)]]), ["Add DNS server…", () => serverForm(g)], ["Add anycast address…", () => anycastForm(g)], ...addNodeItems(g),
-      ...pauseItems("gateway", (sc) => !!g[sc === "all" ? "paused_all" : "paused"], (sc, p) => pauseGateway(g, sc, p)), ["Delete gateway", delSel, "danger"]];
-    const srvItems = (g, addr) => [["Statistics…", () => serverStats(g, addr)], ["Edit server…", () => serverForm(g, addr)], ["Add domain…", () => domainForm(g, addr, null)],
-      ...pauseItems("server", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p), lastServerWhy(g, addr)), ["Delete server", delSel, "danger"]];
+    const gwItems = (g) => [["Statistics", () => gatewayStats(g)], "-", ["Edit", () => gatewayForm(g)], ["Add DNS server", () => serverForm(g)], ["Add anycast address", () => anycastForm(g)],
+      ...(g.real_macs ? [] : [["Test virtual MACs", () => vmacTest(g)]]), ...addNodeItems(g),
+      ...pauseItems("", (sc) => !!g[sc === "all" ? "paused_all" : "paused"], (sc, p) => pauseGateway(g, sc, p)), "-", ["Delete", delSel, "danger"]];
+    const srvItems = (g, addr) => [["Statistics", () => serverStats(g, addr)], "-", ["Edit", () => serverForm(g, addr)], ["Add domain", () => domainForm(g, addr, null)],
+      ...pauseItems("", (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_servers : cv.cfg.paused_servers_here) || []).includes(addr), (sc, p) => pauseServer(g, addr, sc, p), lastServerWhy(g, addr)), "-", ["Delete", delSel, "danger"]];
     // Pause / resume announcing one anycast address: on this node only (kept in this node's own settings) or on every node (shared)
     const anyPauseList = (g, scope) => (scope === "all" ? "paused_vips" : "paused_vips_here");
     const anyPaused = (g, addr, scope) => (g[anyPauseList(g, scope)] || []).includes(addr);
@@ -1249,13 +1252,13 @@
         if (!g[k].length) delete g[k];
       });
     }
-    const anyItems = (g, addr) => [["Edit address…", () => anycastForm(g, addr)],
-      ...pauseItems("anycast", (sc) => anyPaused(g, addr, sc), (sc, p) => pauseAnycast(g, addr, sc, p)), ["Delete address", delSel, "danger"]];
+    const anyItems = (g, addr) => [["Edit", () => anycastForm(g, addr)],
+      ...pauseItems("", (sc) => anyPaused(g, addr, sc), (sc, p) => pauseAnycast(g, addr, sc, p)), "-", ["Delete", delSel, "danger"]];
     const domItems = (g, addr, di) => {
       const q = effQueries(g, addr)[di];
       const on = (sc) => ((sc === "all" ? (g.dns || cv.cfg.dns || {}).paused_queries : cv.cfg.paused_queries_here) || []).includes(qKey(addr, q));
-      return [["Statistics…", () => domainStats(g, addr, di)], ["Edit domain…", () => domainForm(g, addr, di)], ["Add domain…", () => domainForm(g, addr, null)],
-        ...(q ? pauseItems("domain", on, (sc, p) => pauseDomain(g, addr, q, sc, p)) : []), ["Delete domain", delSel, "danger"]];
+      return [["Statistics", () => domainStats(g, addr, di)], "-", ["Edit", () => domainForm(g, addr, di)],
+        ...(q ? pauseItems("", on, (sc, p) => pauseDomain(g, addr, q, sc, p)) : []), "-", ["Delete", delSel, "danger"]];
     };
     // the cluster's nodes (the parallelograms left of the circle)
     const nodeTip = (n) => [
@@ -1362,10 +1365,13 @@
       }
       return "";
     };
-    const nodeMenu = (n) => (e) => openMenu(e, n.self
-      ? [["Host statistics…", () => selectTab("host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
-      : n.reachable ? [["Open this node", () => openNode(n)], ["Host statistics…", () => openNode(n, "host")], ["Make controller…", () => makeController(n)], [n.node_paused ? "Resume node" : "Pause node", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)], ["Restart…", () => powerNode(n, "restart")], ["Shut down…", () => powerNode(n, "shutdown")], ...memberItem(n)]
-      : [["Cluster page…", () => selectTab("cluster")], ...memberItem(n)]);
+    const nodeMenu = (n) => (e) => {
+      const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
+      const rm = memberItem(n).map(([, f]) => ["Remove", f]);
+      openMenu(e, n.self || n.reachable
+        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n)], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
+        : [["Cluster page", () => selectTab("cluster")], ...rm]);
+    };
     // right-click on a shape: select it, then show what can be done with it
     const rightClick = (kind, addr, di) => (e) => {
       cv.sel = { kind, addr, di }; refresh();
@@ -1874,7 +1880,7 @@
     { shared: true, k: "fallback_servers", l: "Fallback servers", t: "list", wide: true, hint: "Same forms. Used only while no server above is in service (all down or paused), and dropped as soon as one answers again. They are never probed and always count as up, so a public resolver that knows nothing of your internal names is fine." },
     { shared: true, k: "queries", l: "Probe queries", t: "queries", wide: true, hint: "Every server is asked each of these to check it works. One per line: \"example.com\" or \"example.com AAAA\"" },
     { shared: true, k: "tls_insecure", l: "Accept any certificate from tls:// and https:// servers (insecure)", t: "bool" },
-    { section: "Load Balancing", cols: 3, note: "Applies to every gateway unless that gateway has its own load balancing (Topology ▸ right-click the gateway ▸ Edit gateway)." },
+    { section: "Load Balancing", cols: 3, note: "Applies to every gateway unless that gateway has its own load balancing (Topology ▸ right-click the gateway ▸ Edit)." },
     { shared: true, k: "spread", l: "Spread queries over servers of similar speed (round-robin)", t: "bool" },
     { shared: true, k: "spread_band", l: "Spread band (% of fastest)", t: "int", min: 1, max: 1000 },
     { shared: true, k: "down_percent", l: "Down at (% of tests failing)", t: "int", min: 1, max: 100 },
