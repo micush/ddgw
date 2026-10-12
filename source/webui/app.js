@@ -496,7 +496,7 @@
     const CV_ZOOM_MIN = 0.2, CV_ZOOM_MAX = 3;   // what the mouse wheel can zoom the drawing to
     const CV_MIN_SCALE = 0.65;   // the drawing shrinks to fit the window down to this, then scrolls
     const cv = { cfg: null, orig: null, gid: null, sel: null, view: [], loaded: false, drawn: null, ro: null };
-    let svgHost, noteEl, msgEl, legendEl, pending = 0;
+    let svgHost, legendEl, pending = 0;
 
     const normAddr = (a) => {
       a = a.trim().toLowerCase();
@@ -638,7 +638,7 @@
     function pauseServer(g, addr, scope, pause) {
       if (pause) {
         const why = lastServerWhy(g, addr);
-        if (why) { errorBox(msgEl, why + " Add a fallback server first (Configure ▸ DNS proxy ▸ Servers, or the gateway's own servers)."); return; }
+        if (why) return;   // the menu item is greyed with the reason; nothing is written above the drawing
       }
       quick(() => {
         if (scope === "all") { ensureDNS(g); toggleIn(g.dns, "paused_servers", addr, pause); }
@@ -659,7 +659,7 @@
       const oldWrap = svgHost.querySelector(".cv-wrap");
       const keep = oldWrap && cv.drawn === cv.gid ? { x: oldWrap.scrollLeft, y: oldWrap.scrollTop } : { x: 0, y: 0 };
       const g = curGroup();
-      if (!g) { clear(svgHost); clear(noteEl); svgHost.append(h("div", { class: "empty" }, "No gateway yet. Click “＋ New gateway…” under Topology in the sidebar (or right-click here) to draw one.")); return; }
+      if (!g) { clear(svgHost); svgHost.append(h("div", { class: "empty" }, "No gateway yet. Click “＋ New gateway…” under Topology in the sidebar (or right-click here) to draw one.")); return; }
       const st = statusOf(g);
       const servers = (g.dns && g.dns.servers) || [];
       const COLW = 190, SW = 156, DW = 156, DH = 34, DG = 46;
@@ -974,7 +974,6 @@
       cv.unzoom = () => { cv.zoom = null; fit(); wrap.scrollLeft = 0; wrap.scrollTop = 0; };
       wrap.scrollLeft = keep.x; wrap.scrollTop = keep.y;
       cv.drawn = cv.gid;
-      clear(noteEl); noteEl.className = "cv-status";   // no status line above the drawing: the colours and tooltips say it (a message from an action can still appear here)
     }
 
     // ── popup dialogs and the right-click menu ───────────────────────────
@@ -1297,15 +1296,10 @@
     // the role first, then the node that held it is asked to step down, so clients lose nothing.
     function makeController(n) {
       const go = async () => {
-        let said;
-        try {
-          const r = await nodeCall(n, "POST", "/api/assert-agc", {});
-          said = r.ok ? "Asked " + (n.self ? "this node" : n.name) + " to take over: " + (r.messages || []).join(" · ") : (r.error || "Could not make " + n.name + " the gateway controller");
-        } catch (e) { said = "Could not make " + n.name + " the gateway controller: " + (e.message || e); }
+        try { await nodeCall(n, "POST", "/api/assert-agc", {}); } catch (e) { /* the drawing shows who the controller is */ }
         draw(); refresh();
-        clear(noteEl).append(said);   // after the redraw, which clears the line
       };
-      confirmDialog("Make " + (n.self ? "this node" : n.name) + " the gateway controller?", "It takes over the controller role for all groups, and the node that answers for the shared address now is asked to step down once it has. Clients should lose nothing.", "Make controller", go, "btn primary");
+      go();
     }
     // Restart or shut down the host of a node, now (the Node page's Host section, aimed at the node whose shape was clicked).  When a
     // gateway would lose its last serving member the daemon says so, and the admin can go ahead anyway.
@@ -1313,16 +1307,15 @@
       const verb = action === "restart" ? "Restart" : "Shut down", who = n.self ? "this node" : n.name;
       const run = async (force) => {
         try {
-          const r = (await nodeCall(n, "POST", "/api/power", force ? { action, when: "now", force: true } : { action, when: "now" })).data;
-          clear(noteEl).append(verb + " of " + who + " " + (r && r.when ? r.when : "requested") + ".");
+          await nodeCall(n, "POST", "/api/power", force ? { action, when: "now", force: true } : { action, when: "now" });
         } catch (e) {
           if (!force && /^not safe to /.test(e.message || "")) {
             confirmDialog("Go ahead anyway?", String(e.message).replace(/ \(to go ahead anyway.*$/, "") + " Clients of that gateway will be interrupted.", verb + " anyway", () => run(true));
             return;
           }
-          clear(noteEl).append("Could not " + verb.toLowerCase() + " " + who + ": " + (e.message || e));
         }
       };
+      if (action === "restart") { run(false); return; }   // no popup: the daemon itself refuses (and asks) when a gateway would lose its last serving member
       confirmDialog(verb + " the host of " + who + "?", (action === "restart" ? "The host reboots" : "The host powers off and stays off until it is powered on again") +
         (n.self ? (action === "restart" ? ", and you lose access to this page until it is back. " : ". You lose access to this page. ") : ". ") +
         "Its gateways stop serving and the other nodes take over.", verb + " host", () => run(false));
@@ -1334,7 +1327,7 @@
       const g = curGroup();
       if (!g) return;
       const left = (statusOf(g).nodes || []).filter((x) => x.node_id && x.node_id !== n.node_id && !(g.excluded_nodes || []).includes(x.node_id)).length;
-      if (!left) { errorBox(msgEl, "That would leave no node serving gateway " + gwLabel(g) + ". Pause it on all nodes instead."); return; }
+      if (!left) return;
       confirmDialog("Remove " + (n.self ? "this node" : n.name) + " from gateway " + gwLabel(g) + "?",
         "It stops serving the gateway — it gives up the address and stops answering DNS — and the other nodes carry on. Other gateways are not affected. Add it back from the same menu.",
         "Remove node", () => quick(() => toggleIn(g, "excluded_nodes", n.node_id, true)), "btn primary");
@@ -1365,11 +1358,19 @@
       }
       return "";
     };
+    // Make controller is greyed on the node that already holds the role for every gateway that has serving nodes.  A member is
+    // matched to a node by its address on the gateway's subnet (this node's own member is marked local).
+    const controllerWhy = (n) => {
+      const ips = new Set((n.addrs || []).flatMap((i) => [...(i.v4 || []), ...(i.v6 || [])].map((x) => String(x).split("/")[0])));
+      const withMembers = groups().map((g) => statusOf(g).members || []).filter((ms) => ms.length);
+      const isIt = (m) => (m.local ? n.self : ips.has(m.ip));
+      return withMembers.length && withMembers.every((ms) => ms.some((m) => m.agc && isIt(m))) ? "Already the controller" : "";
+    };
     const nodeMenu = (n) => (e) => {
       const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
       const rm = memberItem(n).map(([, f]) => ["Remove", f]);
       openMenu(e, n.self || n.reachable
-        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n)], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
+        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
         : [["Cluster page", () => selectTab("cluster")], ...rm]);
     };
     // right-click on a shape: select it, then show what can be done with it
@@ -1650,21 +1651,19 @@
       const sent = JSON.stringify(groups().map((g) => g.group_id));
       try {
         const r = await api("PUT", "/api/config", { config: cv.cfg, note: "Topology" });
-        pending--; fresh(r.config); clear(msgEl);
+        pending--; fresh(r.config);
       } catch (ex) {
         pending--;
         if (ex.message === "unauthenticated") return;
         if (ex.status) { // refused: show what is really saved
           if (pending === 0) { cv.cfg = JSON.parse(JSON.stringify(cv.orig)); cv.sel = null; if (!curGroup()) setGid(groups().length ? groups()[0].group_id : null); }
-          errorBox(msgEl, ex.message);
         } else {
           // The connection dropped (a gateway change can briefly reset the network).
           // Look at what the node actually has before reporting a failure.
           try {
             const r = await api("GET", "/api/config");
-            if (JSON.stringify(r.config.groups.map((g) => g.group_id)) === sent) { fresh(r.config); clear(msgEl); }
-            else errorBox(msgEl, "The connection was interrupted and the change may not have been saved. Reload the page to check.");
-          } catch (_) { errorBox(msgEl, "The connection was interrupted and the change may not have been saved. Reload the page to check."); }
+            if (JSON.stringify(r.config.groups.map((g) => g.group_id)) === sent) { fresh(r.config); }
+          } catch (_) { /* the next refresh shows what is saved */ }
         }
       }
       refresh();
@@ -1705,16 +1704,14 @@
 
     return {
       mount(main) {
-        noteEl = h("div", { class: "cv-status" });
         svgHost = h("div", { class: "cv-card",
           onmouseout: (e) => { if (cv.stale && !cv.drag && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".shape"))) draw(); },
           // right-click on empty canvas (shapes and tabs handle their own menus)
           oncontextmenu: (e) => { cv.sel = null; refresh(); const g = curGroup();
             openMenu(e, [["New gateway…", () => gatewayForm(null)]].concat(g ? [["Add DNS server…", () => serverForm(g)]] : [])); } });
-        msgEl = h("div", { "aria-live": "polite" });
         const legend = legendEl = h("div", { class: "cv-legend muted small" },
           h("span", { class: "dot st-ok" }), "working ", h("span", { class: "dot st-warn" }), "degraded ", h("span", { class: "dot st-bad" }), "down ", h("span", { class: "dot st-idle" }), "not yet known ", h("span", { class: "dot st-paused" }), "paused ", h("span", { class: "dot line-spread" }), "active");
-        main.append(msgEl, noteEl, svgHost, legend);
+        main.append(svgHost, legend);
         cv.loaded = false;
         load().then(() => {
           cv.loaded = true; refresh(); poll().catch(() => {});
@@ -1722,7 +1719,7 @@
           else if (state.topo.action === "rename") { state.topo.action = null; const g = curGroup(); if (g) renameGateway(g); }
           else if (state.topo.action === "delete") { state.topo.action = null; if (curGroup()) { cv.sel = { kind: "gw" }; delSel(); } }
         })
-          .catch((ex) => { if (ex.message !== "unauthenticated") errorBox(msgEl, ex.message); });
+          .catch((ex) => { });
       },
       poll,
     };

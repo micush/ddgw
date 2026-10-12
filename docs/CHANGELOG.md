@@ -1,5 +1,32 @@
 # Changelog
 
+## [v357] - 2026-10-11 — Nothing is written above the Topology drawing
+
+### Removed
+- Every message line above the Topology drawing, red ones included, is gone: the status line and the error line no longer exist. Make controller, Restart and Shut down print nothing on success or failure; a refused or interrupted save re-reads what is saved and redraws it; a refused pause is prevented by the greyed menu item. Failures of the host actions are no longer reported on the page (the drawing and the Cluster page show the result).
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser.
+
+## [v357] - 2026-10-11 — Nothing is written above the Topology drawing
+
+### Removed
+- The plain status line above the drawing is never used now. Make controller ("Asked … to take over: …") and Restart / Shut down ("Restart of … requested.") no longer print a success line; a failure of either is shown as red error text instead of a white line.
+
+### Changed
+- **Controller** on a node's menu acts at once; the confirmation popup is gone (the hand-over loses no traffic).
+- **Restart** on a node's menu acts at once too. When a gateway would lose its last serving member the daemon still refuses and the "Go ahead anyway?" question is asked; **Shut down** keeps its confirmation.
+- **Controller** is greyed (tooltip "Already the controller") on the node that holds the role for every gateway that has serving nodes.
+
+### Verified
+- gofmt, build, vet, `go test -race`, CGO-off vet and test, cross-compiles, `node --check`.
+
+### Not verified
+- In a browser.
+
 ## [v356] - 2026-10-11 — Topology right-click menus reordered
 
 ### Changed
