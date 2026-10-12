@@ -1,5 +1,17 @@
 # Changelog
 
+## [v373] - 2026-10-12 — New gateways start with the HMAC key "dnsdir"
+
+### Changed
+- The key a **new gateway** starts with (first start, **New gateway…**, `--canvas-add gateway`, `--configure`) is `dnsdir` instead of `dgw`. It is written into the config and shared like any key, so every node of that gateway uses it.
+- Nothing that exists changes: a gateway whose config says `"key": "dgw"` keeps it, and one with no key written down still signs with `dgw`, so a running cluster, and nodes of older versions in it, keep hearing each other. Only a gateway created from now on needs `dnsdir` (older nodes accept any key, since it comes from the shared config). `CLAUDE.md` now lists `dgw` as the key of a gateway with no key, and `dnsdir` as the new default.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestDefaultGroupKey`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- Nodes of two versions together on a gateway created after this change (they get the key from the shared config; not run live).
+
 ## [v372] - 2026-10-12 — Policy-Based Resolution: negated source clients
 
 ### Added

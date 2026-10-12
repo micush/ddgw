@@ -114,3 +114,19 @@ func TestLegacyConfigPathIsRedirected(t *testing.T) {
 		}
 	}
 }
+
+// A new gateway starts with the key "dnsdir"; a gateway with no key written down still signs with the old default, so a
+// config from before keeps working with the nodes that use it.
+func TestDefaultGroupKey(t *testing.T) {
+	d := defaultGroup()
+	if d.Key != "dnsdir" || string(d.keyBytes()) != "dnsdir" {
+		t.Fatalf("new gateway key %q", d.Key)
+	}
+	old := GroupConfig{}
+	if string(old.keyBytes()) != "dgw" {
+		t.Fatalf("an empty key must still mean dgw, got %q", old.keyBytes())
+	}
+	if k := (&GroupConfig{Key: "secret"}).keyBytes(); string(k) != "secret" {
+		t.Fatalf("an explicit key is used as written, got %q", k)
+	}
+}

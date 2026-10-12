@@ -171,7 +171,7 @@ func defaultGroup() GroupConfig {
 		HelloMS:   333,
 		HoldMS:    999,
 		MaxAFNs:   defaultMaxAFNs,
-		Key:       "dgw",
+		Key:       defaultGroupKey,
 		DNSProxy:  true, // always (see GroupConfig.DNSProxy)
 		Neighbors: []string{},
 	}
@@ -220,9 +220,16 @@ func (g *GroupConfig) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// defaultGroupKey is the HMAC key a new gateway starts with.  A gateway whose key is empty (a config from before this was
+// written into the file) still signs with legacyGroupKey, so nothing that works today stops working.
+const (
+	defaultGroupKey = "dnsdir"
+	legacyGroupKey  = "dgw"
+)
+
 func (g *GroupConfig) keyBytes() []byte {
 	if g.Key == "" {
-		return []byte("dgw")
+		return []byte(legacyGroupKey)
 	}
 	return []byte(g.Key)
 }
