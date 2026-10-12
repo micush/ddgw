@@ -202,7 +202,7 @@ In the file, a row is `{"client": "10.10.10.0/24", "name": "*.reddit.com", "serv
 
 **The first row that matches wins.** Rows are read from the top, and the first one whose client and name both match decides the query. A query that no row matches goes to the gateway's own servers, as usual.
 
-- **Source client** is `*` (every client), an address (`10.1.1.1`), a network (`10.10.10.0/24`), or several of them separated by commas. A blank client means `*`.
+- **Source client** is `*` (every client), an address (`10.1.1.1`), a network (`10.10.10.0/24`), or several of them separated by commas. A blank client means `*`. A `!` in front of an address or network leaves it out: `!10.129.10.10` is every client except that one, `!10.0.0.0/8` every client outside the network, and `10.0.0.0/8, !10.1.1.0/24` the network without that part (a client in any `!` entry never matches the row; with only `!` entries, every other client does). No space after the `!`; `*` cannot be combined with other entries.
 - **Source name** is `*` (every name), an exact name (`reddit.com`), or `*.name` (`*.reddit.com` means `reddit.com` itself and every name below it, at any depth). It can also be a pattern with `*` or `?` inside its labels. A `*` stands for any characters within one label (never a dot) and `?` for exactly one character, so `*host?.sub*.xyzzy.com` matches `myhost1.sub2.xyzzy.com` and `ad-*.example.com` matches `ad-12.example.com` but not `x.ad-12.example.com`. A `*.` at the very front of a pattern still means any labels in front, or none (`*.sub*.xyzzy.com` matches `sub9.xyzzy.com` and `a.b.sub9.xyzzy.com`). A blank name means `*`. Patterns are only for source names.
 - **Destination servers** are written like the servers of a pool (`10.2.2.2`, `10.2.2.2:5353`, `tls://dns.example.com`, `https://dns.example.com/dns-query`), separated by commas, and tried in the order given. Instead of servers, the cell can hold one keyword (see below).
 - **Destination name** is the name the servers are asked for instead of the one the client asked, or a local answer (see below). Blank, or `*`, asks for the client's own name.
@@ -609,6 +609,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
+| `--hostname NAME` | Topology ▸ right-click a node ▸ **Rename** |
 | `--bgp-disable`, `--bgp-enable`, `--bgp-neighbor-disable ADDR`, `--bgp-neighbor-enable ADDR` | Operate ▸ Anycast (Disable / Enable BGP, and per neighbor) |
 | `--version`, `--help` | version in the header; the **?** at the top right of every page opens a slide-out help panel for that page (including its command-line equivalents and a description of every field on the page) |
 
@@ -905,6 +906,8 @@ Operate ▸ Node (or `dnsdir --assert-agc`) asks the current controller to hand 
 When a controller stops (a restart, an update, **Pause this node**), it tells the group twice, and the node that takes over announces the MAC it inherits again and again for a couple of seconds, so the last word at the switch is the new owner's. A controller that dies is noticed after the hold time, as before. To prefer a node permanently, raise its priority and turn on preemption in Settings.
 
 ### Maintenance: pause this node
+
+Right-click a node in the Topology ▸ **Rename** (or `dnsdir --hostname NAME`) changes the host name of that node: the operating-system name (`hostnamectl set-hostname`) and the name on its line in `/etc/hosts`; if the file cannot be updated the old name is put back, and a host with no line for its name gets none. The drawing shows the new name once the node reports it.
 
 Operate ▸ Node ▸ *Maintenance* (or `dnsdir --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
 

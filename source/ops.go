@@ -398,6 +398,13 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 			return nil, err
 		}
 		return map[string]any{"message": msg, "paused": a.Paused}, nil
+	// rename the host (its operating-system name and its /etc/hosts entry)
+	case "host.rename":
+		msg, err := m.RenameHost(a.Hostname, actor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"message": msg, "hostname": hostnameNow()}, nil
 	// console users
 	case "users.list":
 		return m.UsersList(), nil

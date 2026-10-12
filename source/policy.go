@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
@@ -19,7 +20,8 @@ import (
 //	10.10.10.0/24  *.reddit.com  10.10.10.1, 10.10.10.10    *.hardocp.com
 //	*              *.reddit.com  8.8.8.8, 8.8.4.4           (blank: the name asked)
 //
-// client is "*" (or "any"), an address, a network, or several of them separated by commas.  name is "*", a name
+// client is "*" (or "any"), an address, a network, or several of them separated by commas; "!" in front of one leaves it
+// out ("!10.1.1.1": every client but that one).  name is "*", a name
 // (exactly that name), or "*.name" (that name and every name below it).  servers are written like the pool's
 // destination name, when given, is the name the servers are asked for instead (rename.go): "zdnet.com", or
 // "*.hardocp.com" for a "*.name" source, which keeps the labels in front of it.  The client's answer is turned
@@ -45,6 +47,7 @@ type PolicyRule struct {
 // policyRule is a row ready for matching.
 type policyRule struct {
 	anyClient bool
+	not       []netip.Prefix // "!" entries of the client cell: clients left out
 	nets      []netip.Prefix
 	anyName   bool
 	exact     string    // lower case, no trailing dot; empty when the row is a "*.name" one
@@ -82,19 +85,46 @@ func policyName(s string) (exact, suffix string, all bool, err error) {
 	return s, "", false, nil
 }
 
-func policyClients(s string) (anyClient bool, nets []netip.Prefix, err error) {
-	var parts []string
+// policyClients reads a row's client cell: "*" or "any" (every client), or addresses and networks separated by commas, each
+// of which may start with "!" to leave it out.  A client matches a row when it is in none of the "!" entries and, if there
+// are other entries, in one of them: "!10.1.1.1" is every client but that one, and "10.0.0.0/8, !10.1.1.0/24" is the
+// network without that part.
+func policyClients(s string) (anyClient bool, nets, not []netip.Prefix, err error) {
+	var pos, neg []string
 	for _, f := range strings.FieldsFunc(s, func(c rune) bool { return c == ',' || c == ' ' || c == '\t' }) {
 		if f == "*" || strings.EqualFold(f, "any") {
-			return true, nil, nil
+			if len(pos) > 0 || len(neg) > 0 {
+				return false, nil, nil, errors.New(`"*" cannot be combined with other clients`)
+			}
+			anyClient = true
+			continue
 		}
-		parts = append(parts, f)
+		if strings.HasPrefix(f, "!") {
+			rest := f[1:]
+			if rest == "" {
+				return false, nil, nil, errors.New(`"!" must be followed at once by an address or network, like !10.1.1.1 (no space)`)
+			}
+			if rest == "*" || strings.EqualFold(rest, "any") {
+				return false, nil, nil, errors.New(`"!*" would match no client`)
+			}
+			neg = append(neg, rest)
+			continue
+		}
+		pos = append(pos, f)
 	}
-	if len(parts) == 0 {
-		return true, nil, nil
+	if anyClient && (len(pos) > 0 || len(neg) > 0) {
+		return false, nil, nil, errors.New(`"*" cannot be combined with other clients`)
 	}
-	nets, err = parseClientNets(parts)
-	return false, nets, err
+	if len(pos) == 0 {
+		anyClient = true // nothing but exclusions (or nothing at all): every client the exclusions leave
+	}
+	if nets, err = parseClientNets(pos); err != nil {
+		return false, nil, nil, err
+	}
+	if not, err = parseClientNets(neg); err != nil {
+		return false, nil, nil, err
+	}
+	return anyClient, nets, not, nil
 }
 
 func splitServers(list []string) []string {
@@ -155,7 +185,7 @@ func normalizePolicy(rows []PolicyRule) ([]PolicyRule, error) {
 		if r.Name == "" {
 			r.Name = "*"
 		}
-		if _, _, err := policyClients(r.Client); err != nil {
+		if _, _, _, err := policyClients(r.Client); err != nil {
 			return nil, fmt.Errorf("dns: policy row %d: client: %w", i+1, err)
 		}
 		if _, is, err := parseGlob(r.Name); is {
@@ -223,7 +253,7 @@ func buildPolicy(rows []PolicyRule) []policyRule {
 	for ri, r := range rows {
 		pr := policyRule{idx: ri + 1}
 		var err error
-		if pr.anyClient, pr.nets, err = policyClients(r.Client); err != nil {
+		if pr.anyClient, pr.nets, pr.not, err = policyClients(r.Client); err != nil {
 			continue // validated when the config was loaded
 		}
 		if g, is, _ := parseGlob(r.Name); is {
@@ -293,6 +323,11 @@ func buildPolicy(rows []PolicyRule) []policyRule {
 }
 
 func (r *policyRule) clientMatches(client netip.Addr) bool {
+	for _, n := range r.not {
+		if n.Contains(client) {
+			return false
+		}
+	}
 	if r.anyClient {
 		return true
 	}

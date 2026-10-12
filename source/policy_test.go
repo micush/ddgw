@@ -193,3 +193,56 @@ func TestPolicyKeywordsAnswerLocally(t *testing.T) {
 		t.Fatalf("other clients are still blocked: %+v", h)
 	}
 }
+
+// A "!" in front of a client leaves it out: "!10.129.10.10" is every other client, "!10.0.0.0/8" every client outside the
+// network, and "10.0.0.0/8, !10.1.1.0/24" the network without a part of it.  The first matching row still wins.
+func TestPolicyNegatedClients(t *testing.T) {
+	p := &Pool{policy: buildPolicy([]PolicyRule{
+		{Client: "!10.129.10.10", Name: "a.example", Servers: []string{"10.9.0.1"}},
+		{Client: "!10.0.0.0/8", Name: "b.example", Servers: []string{"10.9.0.2"}},
+		{Client: "10.0.0.0/8, !10.1.1.0/24", Name: "c.example", Servers: []string{"10.9.0.3"}},
+		{Client: "!10.1.1.1, !10.1.1.2", Name: "d.example", Servers: []string{"10.9.0.4"}},
+		{Client: "!2001:db8::/32", Name: "e.example", Servers: []string{"10.9.0.5"}},
+	})}
+	cases := []struct{ client, name, want string }{
+		{"10.129.10.10", "a.example", ""},
+		{"10.129.10.11", "a.example", "10.9.0.1:53"},
+		{"192.0.2.1", "a.example", "10.9.0.1:53"},
+		{"::ffff:10.129.10.10", "a.example", ""},
+		{"10.5.5.5", "b.example", ""},
+		{"192.0.2.1", "b.example", "10.9.0.2:53"},
+		{"2001:db8::1", "b.example", "10.9.0.2:53"}, // outside 10/8 as well
+		{"10.2.2.2", "c.example", "10.9.0.3:53"},
+		{"10.1.1.9", "c.example", ""},
+		{"192.0.2.1", "c.example", ""}, // not in the network at all
+		{"10.1.1.1", "d.example", ""},
+		{"10.1.1.2", "d.example", ""},
+		{"10.1.1.3", "d.example", "10.9.0.4:53"},
+		{"2001:db8::5", "e.example", ""},
+		{"2001:db9::5", "e.example", "10.9.0.5:53"},
+	}
+	for _, c := range cases {
+		var qi qinfo
+		parseQuestion(cacheQuery(c.name, 1, nil), &qi)
+		got := ""
+		if r := p.policyFor(mustAddr(c.client), &qi); r != nil {
+			got = r.tag
+		}
+		if got != c.want {
+			t.Errorf("%s asks %s: got %q want %q", c.client, c.name, got, c.want)
+		}
+	}
+}
+
+func TestPolicyClientCellValidation(t *testing.T) {
+	for _, ok := range []string{"!10.129.10.10", "!10.0.0.0/8", "10.0.0.0/8, !10.1.0.0/16", "!10.0.0.1 !10.0.0.2"} {
+		if _, err := normalizePolicy([]PolicyRule{{Client: ok, Name: "x.example", Servers: []string{"10.9.0.1"}}}); err != nil {
+			t.Errorf("%q refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"!*", "!any", "*, !10.0.0.1", "!10.0.0.1, *", "!", "! 10.0.0.1", "!not-an-address", "!10.0.0.0/33"} {
+		if _, err := normalizePolicy([]PolicyRule{{Client: bad, Name: "x.example", Servers: []string{"10.9.0.1"}}}); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

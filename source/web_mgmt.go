@@ -67,6 +67,7 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/clusterhost", w.authed(w.op("host.cluster", []string{"from", "to"})))
 	mux.HandleFunc("GET /api/nodepause", w.authed(w.op("node.status", nil)))
 	mux.HandleFunc("POST /api/nodepause", w.authed(w.op("node.pause", nil)))
+	mux.HandleFunc("POST /api/host/rename", w.authed(w.op("host.rename", nil)))
 	mux.HandleFunc("GET /api/users", w.authed(w.op("users.list", nil)))
 	mux.HandleFunc("POST /api/users/add", w.authed(w.op("users.add", nil)))
 	mux.HandleFunc("POST /api/users/password", w.authed(w.op("users.password", nil)))
@@ -108,7 +109,7 @@ func (w *WebServer) op(cmd string, query []string) func(http.ResponseWriter, *ht
 			}
 			args = body
 		}
-		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" || cmd == "qstats.clear" || cmd == "qstats.clear.cluster" || strings.HasPrefix(cmd, "users.") && cmd != "users.list" {
+		if cmd == "versions.restore" || cmd == "cluster.promote" || cmd == "cluster.leave" || cmd == "cluster.join" || cmd == "update.apply" || cmd == "power.do" || cmd == "node.pause" || cmd == "host.rename" || cmd == "qstats.clear" || cmd == "qstats.clear.cluster" || strings.HasPrefix(cmd, "users.") && cmd != "users.list" {
 			warnf("web: %q ran %s (from %s)", s.user, cmd, clientIP(r))
 		}
 		data, err := w.mg.Op(cmd, args, s.user)

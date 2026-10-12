@@ -1,5 +1,29 @@
 # Changelog
 
+## [v372] - 2026-10-12 — Policy-Based Resolution: negated source clients
+
+### Added
+- A **Source client** entry can start with `!` to leave it out: `!10.129.10.10` is every client except that one, `!10.0.0.0/8` every client outside that network, and `10.0.0.0/8, !10.1.1.0/24` the network without that part. A client in any `!` entry never matches the row; with only `!` entries every other client does (IPv4-mapped IPv6 addresses count as the IPv4 address). `!*`, `*` mixed with other entries, a bare `!` and `! 10.0.0.1` (a space after the `!`) are refused with a message, so a stray space can never turn an exclusion into a match. Rows are still read from the top and the first match wins. Help and the README describe it.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestPolicyNegatedClients` and `TestPolicyClientCellValidation`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser, or with live clients. A node on an older version refuses a shared config that has a `!` client (it does not know the syntax), so update every node before using it in a cluster.
+
+## [v371] - 2026-10-12 — Rename a node's host from its right-click menu
+
+### Added
+- Topology ▸ right-click a node ▸ **Rename** (between Open and Pause): asks for a host name and changes that node's operating-system name (`hostnamectl set-hostname`, or `hostname` plus `/etc/hostname` where there is no systemd-hostnamed) and the name on its line in `/etc/hosts` (the full name, and the short name when the old one had a domain; comments, spacing and other names stay; a host with no line for its name gets none). If `/etc/hosts` cannot be written the old host name is put back. The name is checked first (letters, digits and `-`, parts of up to 63 characters, dots allowed, 253 in all, lowercased). It works on this node or another one through the relay, and the drawing shows the new name once the node reports it.
+- `dnsdir --hostname NAME` does the same on the node it runs on (`host.rename` op, `POST /api/host/rename`, logged like the other root actions); help and the README table are updated.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `hostrename_test.go`: name checks, `/etc/hosts` rewriting, the hostnamectl and fallback paths, a failed rename, rollback when the file cannot be written, relay allowed), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- On a real host (the sandbox host was not renamed: the tests fake `hostnamectl` and use scratch files), through the relay to a second node, or in a browser.
+- Other software on the host that caches the old name (a DHCP lease, DNS records, logging) is not changed.
+
 ## [v370] - 2026-10-12 — The primary role never goes to a paused node
 
 ### Fixed

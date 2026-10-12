@@ -1324,6 +1324,31 @@
         (n.self ? (action === "restart" ? ", and you lose access to this page until it is back. " : ". You lose access to this page. ") : ". ") +
         "Its gateways stop serving and the other nodes take over.", verb + " host", () => run(false));
     }
+    // Rename the host of a node (the node's operating-system name and its /etc/hosts entry); the drawing shows the new name once the
+    // node reports it.
+    function renameNode(n) {
+      const input = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "253", value: n.name || "", "aria-label": "Host name" });
+      const err = h("div", { "aria-live": "polite" });
+      const d = h("dialog", { class: "cv-dialog", "aria-label": "Rename " + (n.name || "node") });
+      const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => d.remove());
+      d.append(h("h2", {}, "Rename " + (n.name || "node")),
+        h("form", { onsubmit: async (ev) => {
+          ev.preventDefault();
+          const v = input.value.trim().toLowerCase();
+          if (!v || v.length > 253 || !v.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) { errorBox(err, "Use letters, digits and - in parts of up to 63 characters, separated by dots."); return; }
+          if (v === n.name) { close(); return; }
+          try { await nodeCall(n, "POST", "/api/host/rename", { hostname: v }); }
+          catch (e) { errorBox(err, e.message || "Could not rename the host."); return; }
+          close(); draw(); refresh();
+        } },
+        h("label", { class: "f wide" }, "Host name", input),
+        err,
+        h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Rename"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
+      root.append(d);
+      d.showModal();
+      input.focus(); input.select();
+    }
     // Remove a node from the gateway shown (a shared setting, kept in the gateway's own settings): it serves nothing of it, whichever
     // node you look from, and is no longer drawn.  The gateway's right-click ▸ Add node brings it back.  The last node serving it
     // cannot be removed (pause the gateway instead).
@@ -1382,7 +1407,7 @@
       const pause = [n.node_paused ? "Resume" : "Pause", () => pauseNode(n), "", null, n.node_paused ? "" : lastNodeWhy(n)];
       const rm = memberItem(n).map(([, f]) => ["Remove", f]);
       openMenu(e, n.self || n.reachable
-        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ["Primary", () => makePrimary(n), "", null, n.role === "primary" ? "Already the primary" : ""], "-", ...(n.self ? [] : [["Open", () => openNode(n)]]), pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
+        ? [["Statistics", () => (n.self ? selectTab("host") : openNode(n, "host"))], "-", ["Controller", () => makeController(n), "", null, controllerWhy(n)], ["Primary", () => makePrimary(n), "", null, n.role === "primary" ? "Already the primary" : ""], "-", ...(n.self ? [] : [["Open", () => openNode(n)]]), ["Rename", () => renameNode(n)], pause, ["Restart", () => powerNode(n, "restart")], "-", ["Shut down", () => powerNode(n, "shutdown")], ...rm]
         : [["Cluster page", () => selectTab("cluster")], ...rm]);
     };
     // right-click on a shape: select it, then show what can be done with it
