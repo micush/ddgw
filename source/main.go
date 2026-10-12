@@ -82,8 +82,9 @@ the web GUI):
                    --test-vmac [--group N]   (can clients' replies reach this node through virtual MACs? sends an ARP/NS
                                          probe from a throwaway virtual MAC and listens for the answer; changes nothing.
                                          When it says "not delivered": --canvas-set gateway --group N --real-macs on)
-                   --canvas-set server  --group N --server ADDR --label NAME|-   (name shown instead of the
-                                         address on the Topology page; - clears)
+                   --canvas-set server  --group N --server ADDR --label NAME|-   (name shown instead of the address on the
+                                         Topology page; - clears; a full name such as dns-a.example.com is also registered
+                                         in DNS for the server's IP address; also on --canvas-add server)
                    --canvas-pause|--canvas-resume gateway --group N   (this node stops/starts serving it)
                    --canvas-pause|--canvas-resume server --group N --server ADDR  (no queries/probes)
                    --canvas-del node --group N --node NODE   (remove a cluster node from the gateway: it stops serving it, on every
@@ -94,7 +95,7 @@ the web GUI):
                    --server-stats ADDR --name DOMAIN [--type A]   (one monitored domain on that server)
                    --gateway-stats GROUP [--stats-range 1h|1d|7d]  (one gateway: client latency, errors, traffic, cache, availability)
                    --node-pause | --node-resume | --node-status   (this whole node stops/starts serving)
-                   --hostname NAME [--host-domain DOMAIN]   (rename this host: its operating-system name and its /etc/hosts entry; with a domain also register NAME.DOMAIN in DNS and remove the old name)
+                   --hostname NAME   (rename this host: its operating-system name and its /etc/hosts entry; a full name such as ns1.example.com is also registered in DNS and the old name removed)
                    --canvas-move server  --group N --server ADDR --to N   (its place in the row, 1 = leftmost; the drag in the drawing)
                    --canvas-move domain  --group N --server ADDR --name DOMAIN --to N   (its place under the server, 1 = top)
                    --canvas-move anycast --group N --address ADDR --to N   (its place in the list, 1 = top)

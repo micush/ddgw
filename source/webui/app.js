@@ -1009,11 +1009,17 @@
       }));
       for (const f of fields) if (f.on && f.initOn) f.on(els, () => {});
       const err = h("div", { "aria-live": "polite" });
-      const submit = (e) => {
+      const submit = async (e) => {
         e.preventDefault();
         const vals = {};
         for (const f of fields) vals[f.k] = els[f.k].value.trim();
-        const m = onOk(vals);
+        let m = onOk(vals);
+        if (m && typeof m.then === "function") {   // saved at once, then something else is done (a DNS registration): its failure is shown here
+          commit();
+          m = await m;
+          if (m) { errorBox(err, m); return; }
+          closeEditor(); return;
+        }
         if (m) { errorBox(err, m); return; }
         closeEditor(); commit();
       };
@@ -1328,7 +1334,6 @@
     // node reports it.
     function renameNode(n) {
       const input = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "253", value: n.name || "", "aria-label": "Host name" });
-      const domain = h("input", { type: "text", autocomplete: "off", spellcheck: "false", maxlength: "253", placeholder: "example.com", "aria-label": "Register in DNS under this domain" });
       const err = h("div", { "aria-live": "polite" });
       const d = h("dialog", { class: "cv-dialog", "aria-label": "Rename " + (n.name || "node") });
       const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
@@ -1338,18 +1343,15 @@
           ev.preventDefault();
           const v = input.value.trim().toLowerCase();
           if (!v || v.length > 253 || !v.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) { errorBox(err, "Use letters, digits and - in parts of up to 63 characters, separated by dots."); return; }
-          const dom = domain.value.trim().toLowerCase();
-          if (dom && (dom.length > 253 || !dom.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))) { errorBox(err, "Use letters, digits and - in the domain, separated by dots."); return; }
-          if (v === n.name && !dom) { close(); return; }
+          if (v === n.name && !v.includes(".")) { close(); return; }
           let r;
-          try { r = await nodeCall(n, "POST", "/api/host/rename", dom ? { hostname: v, host_domain: dom } : { hostname: v }); }
+          try { r = await nodeCall(n, "POST", "/api/host/rename", { hostname: v }); }
           catch (e) { errorBox(err, e.message || "Could not rename the host."); return; }
           draw(); refresh();
           if (r && r.dns_error) { errorBox(err, "Renamed, but DNS: " + r.dns_error); return; }
           close();
         } },
         h("label", { class: "f wide" }, "Host name", input),
-        h("label", { class: "f wide" }, "Domain (registers the name in DNS)", domain),
         err,
         h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, "Rename"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
       root.append(d);
@@ -1582,6 +1584,8 @@
         if (!edit && !/^[A-Za-z0-9_.\-]+$/.test(v.name)) return "Enter a domain name such as google.com.";
         if (!/^[A-Za-z0-9_.\-:\[\]]+$/.test(v.addr)) return "That doesn't look like an IP address or host name.";
         const nm = (v.label || "").trim();
+        const full = nm.toLowerCase();
+        const ip = (/^\[([0-9a-f:.]+)\](:\d+)?$/i.exec(v.addr) || /^(\d+\.\d+\.\d+\.\d+)(:\d+)?$/.exec(v.addr) || /^([0-9a-f:]*:[0-9a-f:]*)$/i.exec(v.addr) || [])[1] || "";
         if ([...nm].length > 40) return "The name can be at most 40 characters.";
         if (/[\u0000-\u001f\u007f]/.test(nm)) return "The name must not contain control characters.";
         ensureDNS(g);
@@ -1601,9 +1605,18 @@
           g.dns.server_queries[a] = [{ name: v.name, type: v.type }];
           cv.sel = { kind: "srv", addr: a };
         }
+        const oldNm = edit ? srvName(g, edit) : "";
         if (nm) { g.dns.server_names = g.dns.server_names || {}; g.dns.server_names[a] = nm; }
         else if (g.dns.server_names) { delete g.dns.server_names[a]; if (!Object.keys(g.dns.server_names).length) delete g.dns.server_names; }
-        return null;
+        const isFull = (s) => s.includes(".") && s.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)) && s.length <= 253;
+        if (!ip || !isFull(full)) return null;   // a short name is only a label
+        const old = isFull(oldNm.toLowerCase()) && oldNm.toLowerCase() !== full ? oldNm.toLowerCase() : "";
+        return (async () => {
+          try {
+            const r = (await api("POST", "/api/regname", { client: ip, name: full, old })).data || {};
+            return r.ok ? null : "Saved, but DNS: " + ((r.lines || []).join("; ") || r.error || "failed");
+          } catch (e2) { return e2.message === "unauthenticated" ? null : "Saved, but DNS: " + e2.message; }
+        })();
       }, edit ? "Save" : "Add server");
     }
 

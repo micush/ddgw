@@ -17,50 +17,49 @@ import (
 // methods directly, so both front ends behave identically.
 func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	var a struct {
-		ID         string   `json:"id"`
-		A          string   `json:"a"`
-		B          string   `json:"b"`
-		Note       string   `json:"note"`
-		Config     string   `json:"config"`
-		CertPEM    string   `json:"cert_pem"`
-		KeyPEM     string   `json:"key_pem"`
-		CN         string   `json:"cn"`
-		DNS        []string `json:"dns"`
-		IPs        []string `json:"ips"`
-		Code       string   `json:"code"`
-		Addr       string   `json:"addr"`
-		Nodes      []string `json:"nodes"`
-		Force      bool     `json:"force"`
-		Enabled    bool     `json:"enabled"`
-		Repo       string   `json:"repo"`
-		Failover   string   `json:"failover"`
-		DataB64    string   `json:"data"`
-		Limit      int      `json:"limit"`
-		Hostname   string   `json:"hostname"`
-		HostDomain string   `json:"host_domain"`
-		LogLevel   string   `json:"level"`
-		LogText    string   `json:"q"`
-		LogSince   string   `json:"since"`
-		LogN       string   `json:"n"`
-		QFrom      string   `json:"from"`
-		QTo        string   `json:"to"`
-		QRcode     string   `json:"rcode"`
-		QClient    string   `json:"client"`
-		NetKind    string   `json:"kind"`
-		QDomain    string   `json:"domain"`
-		QName      string   `json:"name"`
-		QOld       string   `json:"old"`
-		QCMatch    string   `json:"cmatch"`
-		QDMatch    string   `json:"dmatch"`
-		Lookup     string   `json:"lookup"`
-		Paused     bool     `json:"paused"`
-		User       string   `json:"username"`
-		Password   string   `json:"password"`
-		Expires    int64    `json:"expires"`
-		Iface      string   `json:"iface"`
-		Filter     string   `json:"filter"`
-		Seconds    int      `json:"seconds"`
-		Group      int      `json:"group"`
+		ID       string   `json:"id"`
+		A        string   `json:"a"`
+		B        string   `json:"b"`
+		Note     string   `json:"note"`
+		Config   string   `json:"config"`
+		CertPEM  string   `json:"cert_pem"`
+		KeyPEM   string   `json:"key_pem"`
+		CN       string   `json:"cn"`
+		DNS      []string `json:"dns"`
+		IPs      []string `json:"ips"`
+		Code     string   `json:"code"`
+		Addr     string   `json:"addr"`
+		Nodes    []string `json:"nodes"`
+		Force    bool     `json:"force"`
+		Enabled  bool     `json:"enabled"`
+		Repo     string   `json:"repo"`
+		Failover string   `json:"failover"`
+		DataB64  string   `json:"data"`
+		Limit    int      `json:"limit"`
+		Hostname string   `json:"hostname"`
+		LogLevel string   `json:"level"`
+		LogText  string   `json:"q"`
+		LogSince string   `json:"since"`
+		LogN     string   `json:"n"`
+		QFrom    string   `json:"from"`
+		QTo      string   `json:"to"`
+		QRcode   string   `json:"rcode"`
+		QClient  string   `json:"client"`
+		NetKind  string   `json:"kind"`
+		QDomain  string   `json:"domain"`
+		QName    string   `json:"name"`
+		QOld     string   `json:"old"`
+		QCMatch  string   `json:"cmatch"`
+		QDMatch  string   `json:"dmatch"`
+		Lookup   string   `json:"lookup"`
+		Paused   bool     `json:"paused"`
+		User     string   `json:"username"`
+		Password string   `json:"password"`
+		Expires  int64    `json:"expires"`
+		Iface    string   `json:"iface"`
+		Filter   string   `json:"filter"`
+		Seconds  int      `json:"seconds"`
+		Group    int      `json:"group"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -401,7 +400,7 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		return map[string]any{"message": msg, "paused": a.Paused}, nil
 	// rename the host (its operating-system name and its /etc/hosts entry)
 	case "host.rename":
-		msg, dnsErr, err := m.RenameHost(a.Hostname, a.HostDomain, actor)
+		msg, dnsErr, err := m.RenameHost(a.Hostname, actor)
 		if err != nil {
 			return nil, err
 		}

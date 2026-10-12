@@ -70,7 +70,7 @@ func hostRenameSandbox(t *testing.T, name, hosts string) (ran *[]string, current
 func TestRenameHost(t *testing.T) {
 	ran, cur := hostRenameSandbox(t, "ns1", "127.0.0.1 localhost\n127.0.1.1 ns1\n")
 	m := &Mgmt{}
-	if _, _, err := m.RenameHost("NS7", "", "test"); err != nil {
+	if _, _, err := m.RenameHost("NS7", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if *cur != "ns7" || len(*ran) != 1 || (*ran)[0] != "hostnamectl set-hostname ns7" {
@@ -83,11 +83,11 @@ func TestRenameHost(t *testing.T) {
 	if st, _ := os.Stat(hostsPath); st.Mode().Perm() != 0o640 {
 		t.Fatalf("the file's mode changed: %v", st.Mode().Perm())
 	}
-	if msg, _, err := m.RenameHost("ns7", "", "test"); err != nil || !strings.Contains(msg, "already") || len(*ran) != 1 {
+	if msg, _, err := m.RenameHost("ns7", "test"); err != nil || !strings.Contains(msg, "already") || len(*ran) != 1 {
 		t.Fatalf("same name: %q %v %v", msg, err, *ran)
 	}
 	for _, bad := range []string{"", "a b", "x;y"} {
-		if _, _, err := m.RenameHost(bad, "", "test"); err == nil {
+		if _, _, err := m.RenameHost(bad, "test"); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
@@ -101,7 +101,7 @@ func TestRenameHost(t *testing.T) {
 func TestRenameHostFallbacksAndFailures(t *testing.T) {
 	ran, _ := hostRenameSandbox(t, "ns1", "127.0.0.1 localhost\n")
 	m := &Mgmt{}
-	if _, _, err := m.RenameHost("ns2", "", "test"); err != nil {
+	if _, _, err := m.RenameHost("ns2", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(hostsPath); string(b) != "127.0.0.1 localhost\n" {
@@ -118,7 +118,7 @@ func TestRenameHostFallbacksAndFailures(t *testing.T) {
 		*cur = a[0]
 		return nil
 	}
-	if _, _, err := m.RenameHost("ns3", "", "test"); err != nil {
+	if _, _, err := m.RenameHost("ns3", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(hostnamePath); string(b) != "ns3\n" || *cur != "ns3" {
@@ -127,7 +127,7 @@ func TestRenameHostFallbacksAndFailures(t *testing.T) {
 
 	hostRenameSandbox(t, "ns1", "127.0.1.1 ns1\n")
 	hostRenameRun = func(string, ...string) error { return errors.New("denied") }
-	if _, _, err := m.RenameHost("ns4", "", "test"); err == nil {
+	if _, _, err := m.RenameHost("ns4", "test"); err == nil {
 		t.Fatal("a failed rename was reported as done")
 	}
 	if b, _ := os.ReadFile(hostsPath); string(b) != "127.0.1.1 ns1\n" {
@@ -141,7 +141,7 @@ func TestRenameHostRollsBack(t *testing.T) {
 	old := hostsWrite
 	defer func() { hostsWrite = old }()
 	hostsWrite = func(string, []byte) error { return errors.New("read-only file system") }
-	if _, _, err := (&Mgmt{}).RenameHost("ns5", "", "test"); err == nil {
+	if _, _, err := (&Mgmt{}).RenameHost("ns5", "test"); err == nil {
 		t.Fatal("no error")
 	}
 	if *cur != "ns1" || len(*ran) != 2 {
@@ -177,46 +177,49 @@ func regSandbox(t *testing.T, fail bool) (*Mgmt, *[]regCall) {
 	return m, &calls
 }
 
-func TestRenameHostRegistersInDNS(t *testing.T) {
+func TestRenameHostRegistersAFullNameInDNS(t *testing.T) {
 	hostRenameSandbox(t, "ns1", "127.0.1.1 ns1\n")
 	m, calls := regSandbox(t, false)
-	msg, _, err := m.RenameHost("NS7", "Corp.Example", "test")
+	msg, err := renameOK(t, m, "NS7.Corp.Example")
 	if err != nil || !strings.Contains(msg, "registered ns7.corp.example in DNS") {
 		t.Fatalf("%q %v", msg, err)
 	}
 	want := []regCall{{"ns7.corp.example", "ns1.corp.example", "10.0.0.5"}, {"ns7.corp.example", "ns1.corp.example", "2001:db8::5"}}
 	if len(*calls) != 2 || (*calls)[0] != want[0] || (*calls)[1] != want[1] {
-		t.Fatalf("one update for the first v4 and the first global v6: %+v", *calls)
+		t.Fatalf("one update for the first v4 and the first global v6, the old short name removed in the new domain: %+v", *calls)
 	}
-	// a full name typed as the host name: only its first label goes under the domain
+	// the old name was a full name too: that one is removed
 	*calls = nil
-	hostRenameSandbox(t, "ns7", "")
-	if _, _, err := m.RenameHost("ns8.other.example", "corp.example", "test"); err != nil || (*calls)[0].name != "ns8.corp.example" || (*calls)[0].old != "ns7.corp.example" {
+	hostRenameSandbox(t, "ns7.corp.example", "")
+	if _, err := renameOK(t, m, "ns8.other.example"); err != nil || (*calls)[0].name != "ns8.other.example" || (*calls)[0].old != "ns7.corp.example" {
 		t.Fatalf("%+v %v", *calls, err)
 	}
 }
 
-func TestRenameHostWithoutDomainSendsNothing(t *testing.T) {
+func renameOK(t *testing.T, m *Mgmt, name string) (string, error) {
+	t.Helper()
+	msg, _, err := m.RenameHost(name, "test")
+	return msg, err
+}
+
+func TestRenameHostShortNameSendsNothing(t *testing.T) {
 	hostRenameSandbox(t, "ns1", "")
 	m, calls := regSandbox(t, false)
-	if _, _, err := m.RenameHost("ns2", "", "test"); err != nil || len(*calls) != 0 {
-		t.Fatalf("%+v %v", *calls, err)
-	}
-	if _, _, err := m.RenameHost("ns3", "bad domain", "test"); err == nil || !strings.Contains(err.Error(), "domain") {
-		t.Fatalf("a bad domain is refused before anything changes: %v", err)
+	if msg, err := renameOK(t, m, "ns2"); err != nil || len(*calls) != 0 || strings.Contains(msg, "DNS") {
+		t.Fatalf("%q %+v %v", msg, *calls, err)
 	}
 }
 
 func TestRenameHostDNSFailureKeepsTheRename(t *testing.T) {
 	_, cur := hostRenameSandbox(t, "ns1", "127.0.1.1 ns1\n")
 	m, _ := regSandbox(t, true)
-	msg, _, err := m.RenameHost("ns2", "corp.example", "test")
-	if err != nil || *cur != "ns2" || !strings.Contains(msg, "the host is now called ns2") || !strings.Contains(msg, "DNS was not fully updated") {
-		t.Fatalf("%q %v cur=%s", msg, err, *cur)
+	msg, bad, err := m.RenameHost("ns2.corp.example", "test")
+	if err != nil || *cur != "ns2.corp.example" || bad == "" || !strings.Contains(msg, "DNS was not fully updated") {
+		t.Fatalf("%q %q %v cur=%s", msg, bad, err, *cur)
 	}
-	// the same name again with a domain registers without touching the host
+	// the same full name again only registers, without touching the host
 	m2, calls := regSandbox(t, false)
-	if msg, _, err := m2.RenameHost("ns2", "corp.example", "test"); err != nil || len(*calls) != 2 || !strings.Contains(msg, "already called ns2") {
+	if msg, err := renameOK(t, m2, "ns2.corp.example"); err != nil || len(*calls) != 2 || !strings.Contains(msg, "already called ns2.corp.example") {
 		t.Fatalf("%q %v %+v", msg, err, *calls)
 	}
 }

@@ -424,6 +424,7 @@ dnsdir --canvas-set gateway --group 1 --label "Office DNS"   # a name instead of
 dnsdir --canvas-set gateway --group 1 --spread-band 200      # this gateway's own load balancing (also --spread on|off, --down-percent,
                                                            #   --fail-threshold, --max-attempts, --latency-alpha); --lb settings goes back
 dnsdir --canvas-set server --group 1 --server 10.0.0.53 --label dns-a   # a server's name (also on --canvas-add server; - clears)
+dnsdir --canvas-set server --group 1 --server 10.0.0.53 --label dns-a.example.com   # a full name is also registered in DNS for 10.0.0.53 (RFC 2136); the previous full name's record is removed
 dnsdir --canvas-add anycast --group 1 --address 203.0.113.53   # an anycast address (--canvas-del anycast removes one)
 dnsdir --canvas-set gateway --group 1 --anycast A,B             # or replace the whole list (--anycast - clears)
 dnsdir --canvas-del gateway --group 1 --yes
@@ -609,7 +610,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--log` `[--log-min LEVEL] [--log-grep WORDS] [--log-since 6h] [--log-lines N]` | Log page (Monitor) |
 | `--power restart\|shutdown\|cancel\|status` `[--in MIN \| --at HH:MM]` | Operate ▸ Node ▸ **Host** |
 | `--node-pause`, `--node-resume`, `--node-status` | Operate ▸ Node ▸ **Maintenance** (Pause / Resume this node) |
-| `--hostname NAME [--host-domain DOMAIN]` | Topology ▸ right-click a node ▸ **Rename** (Domain field) |
+| `--hostname NAME` | Topology ▸ right-click a node ▸ **Rename** |
 | `--bgp-disable`, `--bgp-enable`, `--bgp-neighbor-disable ADDR`, `--bgp-neighbor-enable ADDR` | Operate ▸ Anycast (Disable / Enable BGP, and per neighbor) |
 | `--version`, `--help` | version in the header; the **?** at the top right of every page opens a slide-out help panel for that page (including its command-line equivalents and a description of every field on the page) |
 
@@ -907,7 +908,9 @@ When a controller stops (a restart, an update, **Pause this node**), it tells th
 
 ### Maintenance: pause this node
 
-Right-click a node in the Topology ▸ **Rename** (or `dnsdir --hostname NAME`) changes the host name of that node: the operating-system name (`hostnamectl set-hostname`) and the name on its line in `/etc/hosts`; if the file cannot be updated the old name is put back, and a host with no line for its name gets none. The drawing shows the new name once the node reports it. With a **Domain** (`--host-domain`) the node also registers `NAME.DOMAIN` in DNS with the same RFC 2136 update as a client name (A and PTR for its first IPv4 address, and for its first global IPv6 address if it has one) and removes the old name's address record; the zone and its primary are found from the SOA records. Only the first label of the host name goes under the domain. A DNS failure is reported but the rename stays; without a domain nothing is sent to DNS.
+Right-click a node in the Topology ▸ **Rename** (or `dnsdir --hostname NAME`) changes the host name of that node: the operating-system name (`hostnamectl set-hostname`) and the name on its line in `/etc/hosts`; if the file cannot be updated the old name is put back, and a host with no line for its name gets none. The drawing shows the new name once the node reports it. A full name (it has a dot, such as `ns1.example.com`) is also registered in DNS with the same RFC 2136 update as a client name: A and PTR for the node's first IPv4 address, and for its first global IPv6 address if it has one; the old name's address record is removed (the old host name when that was a full name, otherwise its short name in the new name's domain). The zone and its primary are found from the SOA records. A short name only renames the host and sends nothing to DNS. A DNS failure is reported but the rename stays.
+
+A DNS server's name (Topology ▸ Add/Edit DNS server ▸ Name, or `--label`) works the same way: a full name on a server with an IP address is registered for that address, and the previous full name's record is removed; a short name is only a label, and clearing a name leaves DNS alone.
 
 Operate ▸ Node ▸ *Maintenance* (or `dnsdir --node-pause`, `--node-resume`, `--node-status`) pauses every gateway on the node in one step. It resigns, stops answering DNS and stops probing, and the other nodes carry the traffic. Nothing is shut down.
 

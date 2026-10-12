@@ -1231,12 +1231,17 @@ func (m *Mgmt) CanvasEdit(e canvasEdit, actor string) (string, error) {
 			return "", err
 		}
 	}
+	reg := planServerRegistration(dc, e)
 	msg, err := applyCanvasEdit(dc, e)
 	if err != nil {
 		return "", err
 	}
 	if err := m.PutConfig(dc, actor, "canvas: "+e.Action+" "+e.Kind); err != nil {
 		return "", err
+	}
+	if reg != nil {
+		note, _ := m.registerServerName(reg, actor)
+		msg += "; " + note
 	}
 	return msg, nil
 }

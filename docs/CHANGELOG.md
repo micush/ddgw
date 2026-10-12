@@ -1,5 +1,27 @@
 # Changelog
 
+## [v377] - 2026-10-12 — A full name registers itself in DNS; no separate Domain box
+
+### Changed
+- v375 and v376 added a **Domain** box to node Rename and to Add/Edit DNS server (`--host-domain`). It is gone. Now the name itself decides: a full host name (it has a dot, e.g. `ns1.example.com`) is also registered in DNS, a short name only renames locally and sends nothing. For a node the full name is also the host name the OS gets; the old record removed is the old host name when it was a full name, otherwise its short name in the new name's domain. For a DNS server the full name is registered for the server's IP address and the previous full name's record is removed; a server given by host name or `tls://`/`https://`, or a name that is not a valid host name (`Google DNS v2.0`), is just a label. No error is raised for those, nothing is sent.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (the node and server tests were rewritten for the new rule: a full name registers with the old short name moved into the new domain, a full old name is removed, a short name sends nothing, a DNS failure keeps the rename, labels that are not full host names or servers without an address register nothing), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- A real update against a DNS server, and the dialog and form in a browser.
+
+## [v376] - 2026-10-12 — A DNS server's name can also be registered in DNS
+
+### Added
+- Add/Edit DNS server has an optional **Domain**; `--canvas-set|--canvas-add server … --label NAME --host-domain DOMAIN` does the same. With one, `NAME.DOMAIN` gets the server's address (A or AAAA, and the PTR record) through the same RFC 2136 update a client name gets (TSIG key and TTL from Settings), and the record of the server's previous name under the same domain is removed. The server must be an IP address and the name one host name label; both are checked before anything is saved. In the form the server is saved first and a DNS failure is then shown in the form in red; on the CLI the message says it. The domain is not remembered, and clearing a name leaves DNS alone.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `servername_test.go`: server address forms, the checks that refuse a bad label, domain, host-name server or wrong command, the old name taken from the gateway's names, the update and its failure), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- A real update against a DNS server, and the form in a browser (the form's save-then-register path in `form()` was only syntax-checked).
+
 ## [v375] - 2026-10-12 — Node Rename can also register the new name in DNS
 
 ### Added

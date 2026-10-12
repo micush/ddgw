@@ -86,24 +86,20 @@ func rewriteHosts(body, old, name string) (out string, ok bool) {
 
 // RenameHost changes this host's name and its /etc/hosts entry.  If the entry cannot be written the old host name is put
 // back, so the two never disagree.  The old name must be on a line of /etc/hosts for that line to change; a host with no
-// entry gets none added.  With a domain it then registers <new short name>.<domain> in DNS (RFC 2136, like a client name)
-// and removes <old short name>.<domain>; a DNS failure is reported but does not undo the rename.
-func (m *Mgmt) RenameHost(name, domain, actor string) (msg, dnsErr string, err error) {
+// entry gets none added.  A full name (it has a dot) is then also registered in DNS (RFC 2136, like a client name) and the
+// old name's address record is removed; a short name is only a local rename.  A DNS failure is reported but does not undo
+// the rename.
+func (m *Mgmt) RenameHost(name, actor string) (msg, dnsErr string, err error) {
 	name, err = cleanHostname(name)
 	if err != nil {
 		return "", "", err
 	}
-	if strings.TrimSpace(domain) != "" {
-		if domain, err = cleanHostname(domain); err != nil {
-			return "", "", errors.New("the domain: " + err.Error())
-		}
-	}
 	old := hostnameNow()
 	if name == old {
-		if domain == "" {
+		if !strings.Contains(name, ".") {
 			return "the host is already called " + name, "", nil
 		}
-		reg, bad := m.registerHost(name, old, domain, actor)
+		reg, bad := m.registerHost(name, old, actor)
 		return "the host is already called " + name + "; " + reg, bad, nil
 	}
 	hosts, herr := os.ReadFile(hostsPath)
@@ -132,24 +128,28 @@ func (m *Mgmt) RenameHost(name, domain, actor string) (msg, dnsErr string, err e
 	}
 	warnf("host: %q renamed the host from %s to %s", actor, old, name)
 	msg = "the host is now called " + name
-	if domain != "" {
-		reg, bad := m.registerHost(name, old, domain, actor)
+	if strings.Contains(name, ".") {
+		reg, bad := m.registerHost(name, old, actor)
 		msg, dnsErr = msg+"; "+reg, bad
 	}
 	return msg, dnsErr, nil
 }
 
-// registerHost puts this host's name into DNS under domain: the first IPv4 and the first IPv6 address of the node (the
+// registerHost puts this host's full name into DNS: the first IPv4 and the first IPv6 address of the node (the
 // address and PTR records), and removes the old name's records.  It returns one sentence saying how that went and, when something failed, the reason alone.
-func (m *Mgmt) registerHost(name, old, domain, actor string) (msg, failure string) {
+func (m *Mgmt) registerHost(fqdn, old, actor string) (msg, failure string) {
 	if m.regNameFn == nil {
 		f := "registration is not available on this node"
 		return "DNS was not updated: " + f, f
 	}
-	short := func(s string) string { return strings.SplitN(s, ".", 2)[0] }
-	fqdn, oldFqdn := short(name)+"."+domain, ""
-	if old != "" && short(old) != short(name) {
-		oldFqdn = short(old) + "." + domain
+	// the old record: the old host name when it was a full name, else its short name in the new name's domain
+	oldFqdn := ""
+	switch {
+	case old == fqdn:
+	case strings.Contains(old, "."):
+		oldFqdn = old
+	case old != "" && old != strings.SplitN(fqdn, ".", 2)[0]:
+		oldFqdn = old + "." + strings.SplitN(fqdn, ".", 2)[1]
 	}
 	var addrs []netip.Addr
 	var have4, have6 bool
