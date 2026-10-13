@@ -341,7 +341,7 @@ const DNSDIR_HELP = {
       ["h", "Roles and membership"],
       ["ul", [
         "One node is the **primary**; the others are **replicas**. Shared settings are checked on the primary and copied out within the sync interval.",
-        "If the primary is gone for good, choose **Promote** on the replica you want. **Failover** (Auto, On, Off, next to Sync now) promotes a replica by itself when the primary has not answered for 5 minutes and more than half of the members, that replica included, agree; the one with the newest settings promotes and the others follow. Auto is on from three members and off with two. A replica cut off from the others never has a majority, so a network split cannot create two primaries; with two members only you can promote.",
+        "If the primary is gone for good, choose **Promote** on the replica you want. Automatic failover promotes a replica by itself when the primary has not answered for 5 minutes and more than half of the members, that replica included, agree; the one with the newest settings promotes and the others follow. It is on from three members and off with two (`dnsdir --cluster-failover on|off` forces it; the default is `auto`). A replica cut off from the others never has a majority, so a network split cannot create two primaries; with two members only you can promote.",
         "Right-click a member (not this node) and choose **Remove**: it drops the member (it resets itself to a cluster of one when it next hears from the cluster); it can be allowed back with **Unremove**. **Leave cluster** does it from the node itself.",
         "**Sync now** pulls the latest state immediately.",
       ]],

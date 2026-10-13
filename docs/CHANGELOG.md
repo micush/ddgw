@@ -1,5 +1,16 @@
 # Changelog
 
+## [v380] - 2026-10-12 — Cluster page: the Failover dropdown is gone
+
+### Changed
+- The Failover dropdown (Auto, On, Off) beside Sync now on the Cluster page is removed; the GUI always works in Auto (on from three members). `dnsdir --cluster-failover auto|on|off` stays and still forces it on or off for the cluster. This is the one command-line setting with no GUI control, by the owner's choice (README table updated). A cluster already set to on or off keeps that setting; nothing in the GUI shows or changes it.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser.
+
 ## [v379] - 2026-10-12 — Updates: "Downloading…"; Controller greyed with several gateways
 
 ### Changed
