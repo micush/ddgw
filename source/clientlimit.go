@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,6 +148,8 @@ func newClientLimits(c DNSConfig) *clientLimits {
 	l.allow, _ = parseClientNets(c.AllowedClients) // validated when the config was loaded
 	l.exempt, _ = parseClientNets(c.ClientExempt)
 	l.over, _ = parseClientLimits(c.ClientLimits)
+	// the most specific line wins: a line for one address beats the network around it, whatever their order in the list
+	sort.SliceStable(l.over, func(i, j int) bool { return l.over[i].net.Bits() > l.over[j].net.Bits() })
 	for i := range l.shards {
 		l.shards[i].m = map[netip.Addr]*bucket{}
 	}
@@ -196,7 +199,7 @@ func (l *clientLimits) check(client netip.Addr, now time.Time) admitVerdict {
 		return admitDenied
 	}
 	rate, burst, own := l.rate, l.burst, false
-	for i := range l.over { // a client's own limit comes before the exemptions and the pool's rate
+	for i := range l.over { // a client's own limit (the most specific line, see newClientLimits) comes before the exemptions and the pool's rate
 		if l.over[i].net.Contains(client) {
 			rate, burst, own = l.over[i].rate, l.over[i].burst, true
 			break

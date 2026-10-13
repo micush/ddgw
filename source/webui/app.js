@@ -3221,28 +3221,56 @@
     }
 
     // the row Block writes: this client, any name, answered NODATA
-    let blocked = new Set();   // clients with a Block row, for the icon after their name
-    let blockedNames = new Map();   // domains answered by a keyword (any client): lower-case name -> keyword
-    let limited = new Map();   // clients with a rate of their own (client_limits), for the icon after their name: address -> queries per second
+    let blockRules = [];   // the Block rows of the policy table (any client cell but "*"), for the icon after a client's name
+    let nameRules = [];   // the policy rows that apply to every client, in table order, for the icon after a domain
+    let limitRules = [];   // client_limits in order, the first line that matches a client is its own rate
     const KEYWORD_ROWS = ["null", "nxdomain", "nodata", "refused"];
-    let rewrittenNames = new Map();   // domains answered with a Destination name (any client): lower-case name -> destination
     const isRewriteRow = (r, name) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase() && !!String(r.dest || "").trim() && String(r.dest).trim() !== "*" &&
       ((r.servers || []).length === 0 || ((r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "pool"));
-    const rewrittenNamesOf = (cfg) => {
-      const m = new Map();
-      for (const r of ((cfg.dns || {}).policy || [])) {
-        const n = String(r.name || "").toLowerCase();
-        if (n && n !== "*" && !m.has(n) && isRewriteRow(r, n)) m.set(n, String(r.dest).trim());
+    // What the table does with a domain (the icon after it): the first row from the top that applies to every client (client "*") and whose name
+    // covers the domain decides, like the daemon: a keyword row blocks it (🚫), a Destination-name row rewrites it (✏️), any other row (a pool row,
+    // other servers) lets it through and ends the search.  A name can be exact, "*.name" (the name and everything below it), a pattern with "*"
+    // or "?" inside a label, or "*" (every name).
+    const nameMatcher = (cell) => {
+      const t = String(cell || "*").trim().toLowerCase().replace(/\.$/, "");
+      if (t === "" || t === "*") return { all: true, test: () => true };
+      const wild = (p, x) => new RegExp("^" + p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]*").replace(/\?/g, "[^.]") + "$").test(x);
+      if (!/[*?]/.test(t.startsWith("*.") ? t.slice(2) : t)) {
+        if (t.startsWith("*.")) { const base = t.slice(2); return /^[a-z0-9_]([a-z0-9_.-]*[a-z0-9_])?$/.test(base) ? { test: (d) => d === base || d.endsWith("." + base) } : null; }
+        return /^[a-z0-9_]([a-z0-9_.-]*[a-z0-9_])?$/.test(t) ? { exact: true, test: (d) => d === t } : null;
       }
-      return m;
+      let rest = t, any = false;
+      if (rest.startsWith("*.")) { any = true; rest = rest.slice(2); }
+      const labels = rest.split(".");
+      if (labels.some((l) => !/^[a-z0-9_*?-]{1,63}$/.test(l))) return null;
+      return { test: (d) => { let ls = d.split("."); if (any) { if (ls.length < labels.length) return false; ls = ls.slice(ls.length - labels.length); } else if (ls.length !== labels.length) return false; return labels.every((p, i) => wild(p, ls[i])); } };
     };
-    const blockedNamesOf = (cfg) => {
-      const m = new Map();
+    const nameRulesOf = (cfg) => {
+      const out = [];
       for (const r of ((cfg.dns || {}).policy || [])) {
-        const s = r.servers || [], k = s.length === 1 ? String(s[0]).toLowerCase() : "";
-        if ((r.client || "*") === "*" && r.name && r.name !== "*" && KEYWORD_ROWS.includes(k) && !m.has(String(r.name).toLowerCase())) m.set(String(r.name).toLowerCase(), k);
+        const c = String(r.client || "*").trim().toLowerCase();
+        if (c !== "*" && c !== "any") continue;   // a row for particular clients does not decide for every client
+        const m = nameMatcher(r.name);
+        if (!m) continue;
+        const sv = r.servers || [], k = sv.length === 1 ? String(sv[0]).toLowerCase() : "";
+        let kind = "pass", dest = "";
+        if (KEYWORD_ROWS.includes(k)) kind = "block", dest = k;
+        else if (String(r.dest || "").trim() && String(r.dest).trim() !== "*" && (sv.length === 0 || k === "pool")) kind = "rewrite", dest = String(r.dest).trim();
+        out.push({ m, kind, dest, text: String(r.name || "*").trim() });
       }
-      return m;
+      return out;
+    };
+    const nameDecision = (name) => {
+      const d = String(name).toLowerCase().replace(/\.$/, ""), hit = [];
+      for (const r of nameRules) {
+        if (!r.m.test(d)) continue;
+        if (r.kind === "pass") break;                              // lets the domain through: the rows below are not reached
+        if (r.m.all) { if (hit.length) break; return null; }       // every name: not marked one by one (unless a row above names it)
+        hit.push(r);
+      }
+      if (!hit.length) return null;
+      const same = hit.filter((r) => r.kind === hit[0].kind), own = same.find((r) => r.m.exact);
+      return own ? { ...own, exact: true } : { ...same[0], exact: false };
     };
     // the speedometer after a rate-limited client: an outline dome with ticks, a needle and a hub, in blue (an SVG built from nodes, never markup)
     const gaugeIcon = () => sv("svg", { class: "qgauge", viewBox: "0 0 24 22", "aria-hidden": "true", fill: "none", stroke: "#1e88e5", "stroke-width": "2.2", "stroke-linecap": "round", "stroke-linejoin": "round" },
@@ -3250,8 +3278,74 @@
       sv("path", { d: "M12 5.8 V7.6 M7 8.6 L8.2 9.8 M17 8.6 L15.8 9.8" }),
       sv("path", { d: "M12 15 L15.6 9.4" }),
       sv("circle", { cx: "12", cy: "15", r: "1.3", fill: "#1e88e5" }));
-    const limitedOf = (cfg) => new Map(((cfg.dns || {}).client_limits || []).map((x) => x.trim().split(/\s+/)).filter((f) => Number(f[1]) > 0).map((f) => [f[0], Number(f[1])]));
-    const blockedOf = (cfg) => new Set(((cfg.dns || {}).policy || []).filter((r) => isBlockRow(r, r.client || "*") && (r.client || "*") !== "*").map((r) => r.client));
+    // addresses and networks as numbers, to tell which clients a rule covers (the same matching the daemon does)
+    const ipNum = (t) => {
+      let str = String(t).trim().toLowerCase(), v4 = null;
+      const m4 = /^(?:::ffff:)?(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(str);
+      if (m4) { const o = m4.slice(1).map(Number); if (o.some((x) => x > 255)) return null; return { v: 4, n: BigInt(((o[0] * 256 + o[1]) * 256 + o[2]) * 256 + o[3]) }; }
+      if (!/^[0-9a-f:.]+$/.test(str) || !str.includes(":")) return null;
+      const em = /(\d+\.\d+\.\d+\.\d+)$/.exec(str);
+      if (em) { const q = ipNum(em[1]); if (!q) return null; const hx = q.n.toString(16).padStart(8, "0"); str = str.slice(0, -em[1].length) + hx.slice(0, 4) + ":" + hx.slice(4); }
+      const parts = str.split("::");
+      if (parts.length > 2) return null;
+      const side = (x) => (x === "" ? [] : x.split(":"));
+      const a = side(parts[0]), b = parts.length === 2 ? side(parts[1]) : [];
+      const fill = parts.length === 2 ? 8 - a.length - b.length : 0;
+      if ((parts.length === 1 && a.length !== 8) || fill < (parts.length === 2 ? 1 : 0)) return null;
+      const all = [...a, ...Array(fill).fill("0"), ...b];
+      if (all.length !== 8 || all.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+      return { v: 6, n: BigInt("0x" + all.map((g) => g.padStart(4, "0")).join("")) };
+    };
+    const netOf = (t) => {
+      const [a, len] = String(t).split("/");
+      const ip = ipNum(a);
+      if (!ip) return null;
+      const w = ip.v === 4 ? 32 : 128;
+      let bits = len === undefined ? w : Number(len);
+      if (/^::ffff:/i.test(a) && len !== undefined && ip.v === 4) bits -= 96;   // ::ffff:a.b.c.d/N is a.b.c.d/(N-96)
+      if (!Number.isInteger(bits) || bits < 0 || bits > w) return null;
+      return { v: ip.v, n: ip.n, bits, w };
+    };
+    const inNet = (net, ip) => net && ip && net.v === ip.v && (net.bits === 0 || (ip.n >> BigInt(net.w - net.bits)) === (net.n >> BigInt(net.w - net.bits)));
+    const limitedOf = (cfg) => ((cfg.dns || {}).client_limits || []).map((x) => x.trim().split(/\s+/)).filter((f) => f.length === 2 && Number(f[1]) > 0 && netOf(f[0]))
+      .map((f) => ({ net: netOf(f[0]), text: f[0], rate: Number(f[1]) }));
+    // the rule that decides for a client: the most specific limit (a line for one address beats the network around it, as in the daemon),
+    // and a block written for the client's own address before one that covers it through a network, a list or an exclusion
+    const limitedBy = (addr) => {
+      const ip = ipNum(addr);
+      let best = null;
+      for (const r of limitRules) if (inNet(r.net, ip) && (!best || r.net.bits > best.net.bits)) best = r;
+      return best && { ...best, host: best.net.bits === best.net.w };
+    };
+    const blockedBy = (addr) => {
+      const ip = ipNum(addr), hit = [];
+      for (const r of blockRules) {
+        if (r.not.some((n) => inNet(n, ip)) || (r.pos.length && !r.pos.some((n) => inNet(n, ip)))) continue;
+        if (!r.block) break;                       // a row that lets this client through (or sends it elsewhere) ends the search
+        if (r.everyone) { if (hit.length) break; return null; }   // every client is blocked: not marked one by one (unless a row above names it)
+        hit.push(r);
+      }
+      const own = hit.find((r) => r.pos.some((n) => n.bits === n.w && inNet(n, ip)));
+      return own ? { ...own, host: true } : hit[0] ? { ...hit[0], host: false } : null;
+    };
+    // the rows of the policy table that answer for every name (name "*"), in table order, with whether each blocks: the first one that
+    // matches a client decides for it (the daemon reads the table from the top), so a row that lets a client through ends the search
+    const blockedOf = (cfg) => {
+      const out = [];
+      for (const r of ((cfg.dns || {}).policy || [])) {
+        if (String(r.name || "*") !== "*") continue;
+        const pos = [], not = [];
+        let ok = true, any = false;
+        for (const f of String(r.client || "*").trim().split(/[,\s]+/).filter(Boolean)) {
+          if (f === "*" || f.toLowerCase() === "any") { any = true; continue; }
+          const n = netOf(f.startsWith("!") ? f.slice(1) : f);
+          if (!n) { ok = false; break; }
+          (f.startsWith("!") ? not : pos).push(n);
+        }
+        if (ok) out.push({ pos, not, any: any || !pos.length && !not.length, everyone: any || !pos.length && !not.length, text: String(r.client || "*").trim(), block: isBlockRow(r, r.client || "*") });
+      }
+      return out;
+    };
     const isBlockRow = (r, client) => (r.client || "*") === client && String(r.name || "*") === "*" && (r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "nodata";
     async function unblockClient(client) {
       try {
@@ -3403,20 +3497,20 @@
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
                     title: withHost ? head + tail : tail.trim(),
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
-                  const kw = withHost ? null : blockedNames.get(e.name.toLowerCase());
-                  const rw = withHost || kw ? null : rewrittenNames.get(e.name.toLowerCase());
+                  const nd = withHost ? null : nameDecision(e.name);
+                  const blk = withHost ? blockedBy(e.name) : null, lim = withHost ? limitedBy(e.name) : null;
                   const marks = withHost ? [
-                    blocked.has(e.name) ? h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
-                      title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫") : null,
-                    limited.has(e.name) ? h("span", { class: "qblocked", role: "img", "aria-label": "rate limited",
-                      title: "Rate limited to " + limited.get(e.name) + " queries per second. Right-click ▸ Limit to change or remove it." }, gaugeIcon()) : null,
+                    blk ? h("span", { class: "qblocked" + (blk.host ? "" : " qdim"), role: "img", "aria-label": "blocked",
+                      title: blk.text === e.name ? "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it."
+                        : "Blocked: this client gets no answers (the Policy-Based Resolution row for " + blk.text + "). Edit it on Configure ▸ DNS proxy ▸ Resolution." }, "🚫") : null,
+                    lim ? h("span", { class: "qblocked" + (lim.host ? "" : " qdim"), role: "img", "aria-label": "rate limited",
+                      title: "Rate limited to " + lim.rate + " queries per second" + (lim.text === e.name ? ". Right-click ▸ Limit to change or remove it." : " (" + lim.text + "). Edit it on Configure ▸ DNS proxy ▸ Clients ▸ Per-client limits.") }, gaugeIcon()) : null,
                   ].filter(Boolean) : [];
                   return marks.length
                     ? h("div", { class: "qname" }, b, ...marks)
-                    : kw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "in the Policy-Based Resolution table",
-                      title: "Answered by the Policy-Based Resolution table: " + kw.toUpperCase() + " for every client. Edit it on Configure ▸ DNS proxy ▸ Resolution." }, "🚫"))
-                    : rw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "rewritten",
-                      title: "Rewritten by the Policy-Based Resolution table: answered with " + rw + " for every client. Right-click ▸ Remove rewrite to undo it." }, "✏️"))
+                    : nd ? h("div", { class: "qname" }, b, h("span", { class: "qblocked" + (nd.exact ? "" : " qdim"), role: "img", "aria-label": nd.kind === "block" ? "in the Policy-Based Resolution table" : "rewritten",
+                      title: (nd.kind === "block" ? "Answered by the Policy-Based Resolution table: " + nd.dest.toUpperCase() + " for every client" : "Rewritten by the Policy-Based Resolution table: answered with " + nd.dest + " for every client") +
+                        (nd.exact ? ". " + (nd.kind === "block" ? "Edit it on Configure ▸ DNS proxy ▸ Resolution." : "Right-click ▸ Remove rewrite to undo it.") : " (the row for " + nd.text + "). Edit it on Configure ▸ DNS proxy ▸ Resolution.") }, nd.kind === "block" ? "🚫" : "✏️"))
                     : b;
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
@@ -3477,7 +3571,7 @@
       try {
         const wantUpd = sel === "update"; // the card of recent updates belongs to the Updates tile
         const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null,
-          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); limited = limitedOf(r.config); blockedNames = blockedNamesOf(r.config); rewrittenNames = rewrittenNamesOf(r.config); }, () => null)]);
+          api("GET", "/api/config").then((r) => { blockRules = blockedOf(r.config); limitRules = limitedOf(r.config); nameRules = nameRulesOf(r.config); }, () => null)]);
         if (my !== seq) return;
         lastAt = Date.now();
         draw(d);

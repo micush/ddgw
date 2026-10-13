@@ -254,3 +254,23 @@ func TestRefusalLogIsThrottled(t *testing.T) {
 		t.Fatalf("after a minute the next one logs and resets: pending=%d", l.pending)
 	}
 }
+
+// A line for one address beats the network around it, whichever is listed first.
+func TestMostSpecificClientLimitWins(t *testing.T) {
+	for _, order := range [][]string{{"10.1.0.0/16 1000", "10.1.2.3 1"}, {"10.1.2.3 1", "10.1.0.0/16 1000"}} {
+		l := newClientLimits(limCfg(func(d *DNSConfig) { d.ClientLimits = order }))
+		t0 := time.Now()
+		own, other := 0, 0
+		for i := 0; i < 50; i++ {
+			if l.check(mustAddr("10.1.2.3"), t0) == admitOK {
+				own++
+			}
+			if l.check(mustAddr("10.1.9.9"), t0) == admitOK {
+				other++
+			}
+		}
+		if own != 10 || other != 50 {
+			t.Fatalf("%v: the address gets its own 1/s (a burst of 10), the rest of the network 1000/s: own=%d other=%d", order, own, other)
+		}
+	}
+}

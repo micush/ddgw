@@ -1,5 +1,30 @@
 # Changelog
 
+## [v384] - 2026-10-13 — Top domains: 🚫 and ✏️ for names covered by a `*.domain.com` or pattern row
+
+### Changed
+- The 🚫 (block) and ✏️ (rewrite) after a domain in Top domains used to show only for a row written for that exact name. They now follow the policy table the way the daemon reads it: the first row from the top that applies to every client and whose name covers the domain decides. A `*.domain.com` row covers `domain.com` and everything below it, and a pattern with `*` or `?` inside a label (`ad*.example.com`, `*.tracker?.net`) covers the names it matches; those domains get a dull icon whose tooltip names the row. A row written for the exact name gives a bright icon and is preferred among rows of the same kind. A row above that lets the name through (a pool row, other servers) means no icon, and a row below it is never reached. A row for `*` (every name) and rows for particular clients are not marked or considered.
+- The right-click menu is unchanged: Block, Unblock, Rewrite… and Remove rewrite still act on the row for that exact name (Block adds one at the top of the table, which then shows as bright).
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`; a throwaway Node script (scratchpad, not in the repo) ran the matching functions from the real `app.js` over 23 checks: wildcard at any depth and the name itself, no match on a partial label or a longer name, exact beats wildcard of the same kind, the first row decides the kind, pass-through rows above and below, globs stay inside their labels, `?`, rows for particular clients ignored, `*` ignored, unreadable rows skipped, case and trailing dot.
+
+### Not verified
+- In a browser. The page's matching was written to follow `nameglob.go` and `lookup` in `policy.go` but is a separate JavaScript copy, so a future change to the daemon's name grammar must be mirrored there. Rewrite rows with local records as the destination count as rewrites; the tooltip shows the destination text as typed.
+
+## [v383] - 2026-10-13 — Top clients: icons for limits and blocks written for networks
+
+### Changed
+- **Behaviour change:** when several `client_limits` lines contain a client, the most specific one now sets its rate (a line for one address beats the network around it, a /24 beats a /16), whatever their order in the list; equal ones still go first-listed. Before, the first line in the list won, so a client limit added from the menu (it goes to the end of the list) was ignored under an earlier network line. Existing lists only change where an address or narrower network was listed after a wider one that contains it.
+- The speedometer (rate limit) and the 🚫 (block) in Top clients now follow the rules the daemon applies instead of an exact address match. A `client_limits` line for a network marks every client inside it (the most specific line that matches a client is its rate, as in the daemon now), and a Block row (name `*`, NODATA) whose client cell is a network, a comma list or `!` exclusions marks every client it covers. The icon is bright when the deciding rule is written for that exact address (for a block: a row that names it, alone or in a list) and dull when it covers the client through a network or an exclusion; an exact rule is preferred over a general one. The tooltip names the rule when it is not written for that address alone, and says where to edit it; **Unblock** and **Limit…** on the menu still work on rows written for that exact address. The rate shared by every client (Client Rate Limiting) and a Block row for `*` are not marked on each row. For blocks the icon follows the policy table's own rule, the first row from the top that matches the client for every name (name `*`) decides: a row above the Block row that lets the client through (a pool row for one address in a blocked network, say) means the client is not marked, and a row below it is never reached. The daemon's policy order is unchanged.
+- Addresses and networks are compared as numbers in the page (IPv4, IPv6 with `::` and embedded IPv4, `::ffff:` mapped addresses).
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestMostSpecificClientLimitWins`: the address gets its own rate and the rest of the network the wider one, in either list order), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`; a throwaway Node script (scratchpad, not in the repo) ran the matching functions from the real `app.js` over 25 checks: most specific limit wins, an own-address block is preferred among the block rows that apply, an earlier pass-through row ends the search, subnet and list and `!` rows, v6 and mapped addresses, bad lines skipped, `*`, pool, per-name and garbage rows ignored.
+
+### Not verified
+- In a browser. A row for a particular name never decides for the other names, so it is ignored for the icon. Exemptions (`client_exempt`) and the allowed-clients list are not considered for the speedometer.
+
 ## [v382] - 2026-10-13 — Top clients: a speedometer icon for a rate-limited client
 
 ### Changed

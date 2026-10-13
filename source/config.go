@@ -556,7 +556,8 @@ type DNSConfig struct {
 	ClientAction string   `json:"client_action,omitempty"`
 	ClientExempt []string `json:"client_exempt,omitempty"`
 	// ClientLimits give single clients or networks a rate of their own: "192.168.1.5 50" (queries per second).  They apply
-	// even when ClientRate is 0 and before ClientExempt (see clientlimit.go).
+	// even when ClientRate is 0 and before ClientExempt; the most specific line that matches a client is its rate (see
+	// clientlimit.go).
 	ClientLimits []string `json:"client_limits,omitempty"`
 	// ClientNames are names given to clients by hand (Statistics ▸ Top clients ▸ right-click ▸ Name…): address -> name.  They are
 	// shown instead of the reverse-DNS name and can be filtered on.  Only the shared Settings' copy is used.

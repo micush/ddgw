@@ -554,6 +554,7 @@ table.qtop td:first-child { overflow: hidden; }
 .qname { display: flex; align-items: center; gap: .35rem; min-width: 0; }
 .qname .qlink { flex: 0 1 auto; min-width: 0; }
 .qblocked { flex: none; font-size: .85em; cursor: default; }
+.qblocked.qdim { opacity: .4; }   /* a rule for a network, list or exclusion covers this client; the bright icon is a rule for its own address */
 .qgauge { display: block; width: 1.5em; height: 1.4em; }
 .qfilter { width: 9rem; min-width: 0; flex: 0 1 9rem; }
 table.qtop .qlink { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
