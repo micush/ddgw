@@ -3223,6 +3223,7 @@
     // the row Block writes: this client, any name, answered NODATA
     let blocked = new Set();   // clients with a Block row, for the icon after their name
     let blockedNames = new Map();   // domains answered by a keyword (any client): lower-case name -> keyword
+    let limited = new Map();   // clients with a rate of their own (client_limits), for the icon after their name: address -> queries per second
     const KEYWORD_ROWS = ["null", "nxdomain", "nodata", "refused"];
     let rewrittenNames = new Map();   // domains answered with a Destination name (any client): lower-case name -> destination
     const isRewriteRow = (r, name) => (r.client || "*") === "*" && String(r.name || "").toLowerCase() === name.toLowerCase() && !!String(r.dest || "").trim() && String(r.dest).trim() !== "*" &&
@@ -3243,6 +3244,13 @@
       }
       return m;
     };
+    // the speedometer after a rate-limited client: an outline dome with ticks, a needle and a hub, in blue (an SVG built from nodes, never markup)
+    const gaugeIcon = () => sv("svg", { class: "qgauge", viewBox: "0 0 24 22", "aria-hidden": "true", fill: "none", stroke: "#1e88e5", "stroke-width": "2.2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+      sv("path", { d: "M4.8 18.5 A8.7 8.7 0 1 1 19.2 18.5 Z" }),
+      sv("path", { d: "M12 5.8 V7.6 M7 8.6 L8.2 9.8 M17 8.6 L15.8 9.8" }),
+      sv("path", { d: "M12 15 L15.6 9.4" }),
+      sv("circle", { cx: "12", cy: "15", r: "1.3", fill: "#1e88e5" }));
+    const limitedOf = (cfg) => new Map(((cfg.dns || {}).client_limits || []).map((x) => x.trim().split(/\s+/)).filter((f) => Number(f[1]) > 0).map((f) => [f[0], Number(f[1])]));
     const blockedOf = (cfg) => new Set(((cfg.dns || {}).policy || []).filter((r) => isBlockRow(r, r.client || "*") && (r.client || "*") !== "*").map((r) => r.client));
     const isBlockRow = (r, client) => (r.client || "*") === client && String(r.name || "*") === "*" && (r.servers || []).length === 1 && String(r.servers[0]).toLowerCase() === "nodata";
     async function unblockClient(client) {
@@ -3397,9 +3405,14 @@
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
                   const kw = withHost ? null : blockedNames.get(e.name.toLowerCase());
                   const rw = withHost || kw ? null : rewrittenNames.get(e.name.toLowerCase());
-                  return withHost && blocked.has(e.name)
-                    ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
-                      title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫"))
+                  const marks = withHost ? [
+                    blocked.has(e.name) ? h("span", { class: "qblocked", role: "img", "aria-label": "blocked",
+                      title: "Blocked: this client gets no answers (a Policy-Based Resolution row). Right-click ▸ Unblock to remove it." }, "🚫") : null,
+                    limited.has(e.name) ? h("span", { class: "qblocked", role: "img", "aria-label": "rate limited",
+                      title: "Rate limited to " + limited.get(e.name) + " queries per second. Right-click ▸ Limit to change or remove it." }, gaugeIcon()) : null,
+                  ].filter(Boolean) : [];
+                  return marks.length
+                    ? h("div", { class: "qname" }, b, ...marks)
                     : kw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "in the Policy-Based Resolution table",
                       title: "Answered by the Policy-Based Resolution table: " + kw.toUpperCase() + " for every client. Edit it on Configure ▸ DNS proxy ▸ Resolution." }, "🚫"))
                     : rw ? h("div", { class: "qname" }, b, h("span", { class: "qblocked", role: "img", "aria-label": "rewritten",
@@ -3464,7 +3477,7 @@
       try {
         const wantUpd = sel === "update"; // the card of recent updates belongs to the Updates tile
         const [d, u] = await Promise.all([fetchData(), wantUpd ? api("GET", "/api/dnsupdates").then((r) => r.data.updates, () => null) : null,
-          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); blockedNames = blockedNamesOf(r.config); rewrittenNames = rewrittenNamesOf(r.config); }, () => null)]);
+          api("GET", "/api/config").then((r) => { blocked = blockedOf(r.config); limited = limitedOf(r.config); blockedNames = blockedNamesOf(r.config); rewrittenNames = rewrittenNamesOf(r.config); }, () => null)]);
         if (my !== seq) return;
         lastAt = Date.now();
         draw(d);

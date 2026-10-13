@@ -1,5 +1,30 @@
 # Changelog
 
+## [v382] - 2026-10-13 — Top clients: a speedometer icon for a rate-limited client
+
+### Changed
+- The icon after a rate-limited client is a blue speedometer (an inline SVG drawn from DOM nodes, sized with the text), not the 🚦 emoji.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+- The icon's drawing was rendered in headless Chromium on its own and looks like a gauge; its size beside a client address was not checked in the real page.
+- One `go test -race` run of the whole suite failed once (output not kept) and passed on three reruns; this change touches only JS and CSS, so it looks like an existing flaky timing test (the failing run ended in DNS-proxy upstream-timeout logging).
+
+### Not verified
+- In the real Top clients table in a browser.
+
+## [v381] - 2026-10-13 — Top clients: an icon after a rate-limited client
+
+### Added
+- A client that has a rate of its own (Limit… on its right-click menu, or a `client_limits` line for its address) shows a 🚦 after its address in Top clients; hovering it says the rate. It sits beside the 🚫 of a blocked client, so a client can show both. A limit written for a whole network is not marked, because the icon follows the same exact-address match the menu's Limit… item uses.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser.
+
 ## [v380] - 2026-10-12 — Cluster page: the Failover dropdown is gone
 
 ### Changed
