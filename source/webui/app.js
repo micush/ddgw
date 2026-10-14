@@ -1850,7 +1850,8 @@
   // DNS  (CLI: --show-dns)
   VIEWS.dns = (() => {
     let body;
-    const stat = (k, v, small) => h("div", { class: "stat" }, h("div", { class: "k" }, k), h("div", { class: "v" + (small ? " small" : "") }, v));
+    const stat = (k, v, small, tip) => h("div", { class: "stat", title: tip || null }, h("div", { class: "k" }, k), h("div", { class: "v" + (small ? " small" : "") }, v));
+    const size = (v) => { let f = Number(v) || 0; for (const u of ["B", "KiB", "MiB", "GiB", "TiB"]) { if (f < 1024 || u === "TiB") return (u === "B" ? f : f.toFixed(1)) + " " + u; f /= 1024; } return ""; };
     return {
       mount(main) { body = h("div", {}); main.append(body); },
       async poll() {
@@ -1859,7 +1860,23 @@
         if (!r.ok) { out.append(h("div", { class: "notice bad", role: "alert" }, r.error)); morph(body, out); return; }
         const d = r.data;
         const pools = d.pools && d.pools.length ? d.pools : [{ key: 0, groups: [], servers: d.servers, down_percent: d.down_percent, probes: d.probes }];
-        out.append(h("div", { class: "stats" }, stat("Queries", d.queries), stat("Answered", d.answered), stat("SERVFAIL", d.servfail)));
+        const kept = pools.filter((p) => p.cache && p.cache.on);   // the answer caches of this node, all gateways together
+        const cacheBytes = kept.reduce((a, p) => a + p.cache.bytes, 0), cacheEntries = kept.reduce((a, p) => a + p.cache.entries, 0);
+        out.append(h("div", { class: "stats" }, stat("Queries", d.queries), stat("Answered", d.answered), stat("SERVFAIL", d.servfail),
+          (() => {
+            const tile = stat("Cache", kept.length ? size(cacheBytes) : "off", false, kept.length ? Number(cacheEntries).toLocaleString() + " answers kept" : null);
+            if (!kept.length) return tile;
+            const b = h("button", { type: "button", class: "btn small", title: "Empty the answer cache of every node",
+              onclick: async () => {
+                b.disabled = true;
+                const c = (await api("POST", "/api/cache/clear", {})).data || {};
+                b.textContent = c.cleared === undefined ? "Failed" : "Cleared";
+                setTimeout(() => { b.disabled = false; b.textContent = "Clear"; }, 2000);
+              } }, "Clear");
+            tile.firstChild.append(b);
+            tile.firstChild.classList.add("kb");
+            return tile;
+          })()));
         // "group 1 192.168.0.5:53" -> where each gateway answers, shown on its own card
         const addrsOf = {};
         for (const l of d.listeners || []) { const m = /^group (\d+) (.+)$/.exec(l); if (m) (addrsOf[m[1]] = addrsOf[m[1]] || []).push(m[2]); }

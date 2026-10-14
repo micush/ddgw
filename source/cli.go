@@ -28,7 +28,7 @@ type cliFlags struct {
 	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires, hostname                                                                                                                                                               *string
 	power, powerAt                                                                                                                                                                                                                                   *string
 	powerIn                                                                                                                                                                                                                                          *int
-	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                                                                       *bool
+	bgp, bgpDisable, bgpEnable, logShow, statsShow, statsClear, cacheClear, hostShow, dnsUpdates, nodePause, nodeResume, nodeStatus, allNodes, captureList                                                                                           *bool
 	logMin, logGrep, logSince, logLines, statsRange, statsRcode, statsClient, statsDomain, whoisName, scanAddr, pingAddr, traceAddr, lookupAddr, cacheFlush, dnsLookup, hostRange, captureIface, captureSecs, captureFilter, captureFile, tshootFile *string
 	asn, routerID, asPrepend, nbrAdd, nbrDel, nbrDisable, nbrEnable, remoteAS, descr, passwd, multihop, keepalive, hold                                                                                                                              *string
 	updateUpload, updatePush, updateCancel, updateAuto, updateRepo, clusterFailover                                                                                                                                                                  *string
@@ -63,7 +63,7 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"), hostname: s("hostname"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
-		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsClear: b("stats-clear"), scanAddr: s("scan"), pingAddr: s("ping"), lookupAddr: s("lookup"), cacheFlush: s("cache-flush"), traceAddr: s("traceroute"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
+		logShow: b("log"), logMin: s("log-min"), logGrep: s("log-grep"), logSince: s("log-since"), logLines: s("log-lines"), statsShow: b("stats"), statsClear: b("stats-clear"), cacheClear: b("cache-clear"), scanAddr: s("scan"), pingAddr: s("ping"), lookupAddr: s("lookup"), cacheFlush: s("cache-flush"), traceAddr: s("traceroute"), statsRange: s("stats-range"), statsRcode: s("stats-rcode"), statsClient: s("stats-client"), statsDomain: s("stats-domain"), whoisName: s("whois"), dnsLookup: s("dns-lookup"), hostShow: b("host"), allNodes: b("all-nodes"), captureList: b("capture-interfaces"), captureIface: s("capture"), captureSecs: s("capture-seconds"), captureFilter: s("capture-filter"), captureFile: s("capture-file"), dnsUpdates: b("dns-updates"), hostRange: s("host-range"),
 		bgp: b("bgp"), bgpDisable: b("bgp-disable"), bgpEnable: b("bgp-enable"), nbrDisable: s("bgp-neighbor-disable"), nbrEnable: s("bgp-neighbor-enable"), asn: s("asn"), routerID: s("router-id"), asPrepend: s("as-prepend"),
 		nbrAdd: s("bgp-neighbor-add"), nbrDel: s("bgp-neighbor-del"), remoteAS: s("remote-as"), descr: s("description"),
 		passwd:       s("password"),
@@ -387,6 +387,12 @@ func (f *cliFlags) run(sock string) bool {
 		var r LookupFull
 		decode(op(sock, "dns.lookup.full", map[string]string{"lookup": *f.lookupAddr}), &r)
 		fmt.Println(r.Text)
+	case *f.cacheClear:
+		var r struct {
+			Cleared int
+		}
+		decode(op(sock, "cache.clear.cluster", map[string]string{}), &r)
+		fmt.Printf("the answer cache of every node emptied (%d answers)\n", r.Cleared)
 	case *f.cacheFlush != "":
 		var r struct {
 			Name    string

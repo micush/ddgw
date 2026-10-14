@@ -137,6 +137,7 @@ td.wrap { white-space: normal; word-break: break-word; max-width: 28rem; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .7rem .9rem; box-shadow: var(--shadow); }
 .stat .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.stat .kb { display: flex; justify-content: space-between; align-items: center; }
 .stat .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; word-break: break-word; }
 .stat .v.small { font-size: .95rem; font-weight: 600; }
 

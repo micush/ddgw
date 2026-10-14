@@ -60,6 +60,8 @@ func (w *WebServer) mgmtRoutes(mux *http.ServeMux) {
 	// a flush goes to every node: this one asks the others, which are asked on the second route (this node only)
 	mux.HandleFunc("POST /api/cache/flush", w.authed(w.op("cache.flush.cluster", nil)))
 	mux.HandleFunc("POST /api/cache/flush-node", w.authed(w.op("cache.flush", nil)))
+	mux.HandleFunc("POST /api/cache/clear", w.authed(w.op("cache.clear.cluster", nil)))
+	mux.HandleFunc("POST /api/cache/clear-node", w.authed(w.op("cache.clear", nil)))
 	mux.HandleFunc("POST /api/nettool", w.authed(w.op("nettool.start", nil)))
 	mux.HandleFunc("GET /api/nettool", w.authed(w.op("nettool.get", []string{"kind", "client"})))
 	// the whole cluster's numbers added together (not relayable: the node asked does the asking of the others)

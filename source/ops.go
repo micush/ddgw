@@ -294,6 +294,33 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 			}
 		}
 		return map[string]any{"name": name, "flushed": total, "nodes": infos}, nil
+	case "cache.clear":
+		if m.clearFn == nil {
+			return nil, errors.New("the cache is not available on this node")
+		}
+		n := m.clearFn()
+		warnf("cache: %q emptied the answer cache of this node (%d answers)", actor, n)
+		return map[string]any{"cleared": n}, nil
+	case "cache.clear.cluster":
+		parts, infos := clusterGatherReq(context.Background(), m, proxyReq{User: actor, Method: "POST", Path: "/api/cache/clear-node", CT: "application/json", Body: []byte("{}")}, clusterStatsTimeout,
+			func() (*struct{ Cleared int }, error) {
+				if m.clearFn == nil {
+					return nil, errors.New("the cache is not available on this node")
+				}
+				n := m.clearFn()
+				warnf("cache: %q emptied the answer cache of this node (%d answers)", actor, n)
+				return &struct{ Cleared int }{n}, nil
+			})
+		if len(parts) == 0 {
+			return nil, errors.New("no node answered")
+		}
+		total := 0
+		for _, p := range parts {
+			if p.R != nil {
+				total += p.R.Cleared
+			}
+		}
+		return map[string]any{"cleared": total, "nodes": infos}, nil
 	case "nettool.start":
 		return netToolStart(a.NetKind, a.QClient, actor)
 	case "clientname.register":

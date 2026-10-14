@@ -537,3 +537,25 @@ func TestLargestCacheBudget(t *testing.T) {
 		t.Fatal("default and largest cache size changed")
 	}
 }
+
+func TestCacheClear(t *testing.T) {
+	c, _ := newTestCache(10, 3600)
+	for _, name := range []string{"a.example.com", "b.example.com", "c.example.org"} {
+		q := cacheQuery(name, 1, nil)
+		c.put(key(t, c, q, false, "192.0.2.5", false), mkResp(q, 0, [][]byte{aRR(name, 300)}, nil, nil))
+	}
+	if c.Len() != 3 {
+		t.Fatalf("stored %d, want 3", c.Len())
+	}
+	if n := c.clear(); n != 3 {
+		t.Fatalf("clear said %d, want 3", n)
+	}
+	if c.Len() != 0 || c.Bytes() != 0 {
+		t.Fatalf("after clear: %d entries, %d bytes", c.Len(), c.Bytes())
+	}
+	q := cacheQuery("a.example.com", 1, nil)
+	c.put(key(t, c, q, false, "192.0.2.5", false), mkResp(q, 0, [][]byte{aRR("a.example.com", 300)}, nil, nil))
+	if c.Len() != 1 {
+		t.Fatal("the cache does not store again after being cleared")
+	}
+}

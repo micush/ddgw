@@ -786,6 +786,17 @@ func addrsInPrefix(addrs []net.Addr, pfx netip.Prefix) bool {
 	return false
 }
 
+// clearCache empties the answer cache of every pool on this node and says how many answers went.
+func (s *Supervisor) clearCache() int {
+	n := 0
+	for _, pi := range s.poolList() {
+		if pi.Pool != nil && pi.Pool.cache != nil {
+			n += pi.Pool.cache.clear()
+		}
+	}
+	return n
+}
+
 // flushCache drops name from the answer cache of every pool on this node and says how many answers went.
 func (s *Supervisor) flushCache(name string) int {
 	n := 0

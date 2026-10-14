@@ -1,5 +1,18 @@
 # Changelog
 
+## [v391] - 2026-10-14 — Monitor ▸ DNS: a Cache box and Clear
+
+### Added
+- A **Cache** box beside Queries, Answered and SERVFAIL on Monitor ▸ DNS: the memory the kept answers take, all gateways of this node together (`off` when no gateway has its cache on); hover for the number of answers kept. The size is what the cache counts against its byte limit (each answer, its key and a fixed overhead), so it is an estimate of the real memory.
+- `dnsdir --show-dns`: the `answer cache:` line shows the size after the entries.
+- **Clear** button in the Cache box, and `dnsdir --cache-clear`: empty the answer cache of every gateway on every node (before, only one name could be dropped, with Flush). It reports how many answers went; the cache fills again from new queries. Op `cache.clear.cluster` (`POST /api/cache/clear`), with `cache.clear` (`/api/cache/clear-node`) for each node, written to the log with the actor like Flush.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestCacheClear`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- A multi-node run of Clear (it uses the same cluster fan-out as Flush). In a browser (the box's width next to the others, light and dark).
+
 ## [v390] - 2026-10-14 — Answer cache: default 1,000,000 entries, up to 1,000,000,000
 
 ### Changed

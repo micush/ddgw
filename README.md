@@ -169,7 +169,7 @@ A pool answers a repeated query from memory for as long as the records' TTLs all
 
 **Warm start.** A node that has just started (after a restart or an update; a node that joins later is warmed at its next start) asks a reachable cluster member for each gateway's most recently used answers, up to 20,000 and about 3 MB, with the age they have there so their TTLs go on counting down (`POST /cluster/cache`, signed like every cluster call). It runs in the background a few seconds after start-up, never delays serving, tries again a few times while the cluster comes up, and then stops. Entries are taken only if the peer's cache settings are the same, never replace or push out an answer this node already has, and nothing is replicated afterwards. A node that nobody answers starts empty.
 
-A cache hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries (`dnsdir --show-dns`: the `answer cache:` line). The cache does not serve stale answers: with every upstream down, a name whose TTL has run out gets SERVFAIL.
+A cache hit counts as a handled query in Statistics and on the DNS page, which also shows hits, misses and entries (`dnsdir --show-dns`: the `answer cache:` line, with its size) and a **Cache** box with the size of the answers kept by all gateways on the node (hover for the count). The cache does not serve stale answers: with every upstream down, a name whose TTL has run out gets SERVFAIL.
 
 ### Sort list
 
@@ -603,7 +603,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--update-auto` | Configure ▸ General ▸ **Upgrade** card |
 | `--update-repo` | Configure ▸ General ▸ **Upgrade** card (Online repository) |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
-| `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); a client's **Limit** is the `client_limits` setting, **Copy** has no command |
+| `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME`, `--cache-clear` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); `--cache-clear` is the **Clear** button of the **Cache** box on the DNS page (every node); a client's **Limit** is the `client_limits` setting, **Copy** has no command |
 | `--stats` `[--stats-range now\|1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); `--whois` is right-click ▸ **Whois**; the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |

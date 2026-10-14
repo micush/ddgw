@@ -140,6 +140,7 @@ the web GUI):
                    --ping ADDR|NAME  --traceroute ADDR|NAME   (ping / mtr of a client or domain, run from this node; needs ping and mtr)
                    --lookup ADDR|NAME   (what this node's resolver says: PTR of an address; A, AAAA, CNAME, MX, NS, TXT of a name)
                    --cache-flush NAME   (drop a name from the answer cache of every node)
+                   --cache-clear   (empty the answer cache of every node)
                    --whois NAME   (registration data of a domain, asked of its registry from this node)
                    --dns-updates   (the recent dynamic DNS updates: who, which zone, what, the primary's answer)
   Capture          --capture IFACE [--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]
@@ -521,6 +522,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	mg.anycastFn = sup.AllAnycastStates
 	mg.poolOf = sup.poolFor
 	mg.flushFn = sup.flushCache
+	mg.clearFn = sup.clearCache
 	mg.regNameFn = func(ctx context.Context, name, old string, addr netip.Addr) ([]string, error) {
 		return sup.registerClientName(ctx, sup.config().DNS, name, old, addr)
 	}
@@ -794,8 +796,8 @@ func showDNSTable(sock string) {
 			if total > 0 {
 				rate = fmt.Sprintf("%.1f%%", 100*float64(c.Hits)/float64(total))
 			}
-			fmt.Printf("answer cache: on, %d of %d entries, %d hits, %d misses (hit rate %s), %d not cacheable, %d evicted; answers kept at most %ds\n",
-				c.Entries, c.Max, c.Hits, c.Misses, rate, c.Bypassed, c.Evicted, c.MaxTTL)
+			fmt.Printf("answer cache: on, %d of %d entries (%s), %d hits, %d misses (hit rate %s), %d not cacheable, %d evicted; answers kept at most %ds\n",
+				c.Entries, c.Max, humanBytes(uint64(c.Bytes)), c.Hits, c.Misses, rate, c.Bypassed, c.Evicted, c.MaxTTL)
 		} else {
 			fmt.Println("answer cache: off (every query goes to an upstream server)")
 		}

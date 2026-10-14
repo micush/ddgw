@@ -148,6 +148,20 @@ func (c *respCache) flushName(name string) int {
 	return n
 }
 
+// clear drops every cached answer and says how many there were.
+func (c *respCache) clear() int {
+	n := 0
+	for _, sh := range c.shards {
+		sh.mu.Lock()
+		n += len(sh.m)
+		sh.m = map[string]*cacheEntry{}
+		sh.lru.Init()
+		sh.bytes = 0
+		sh.mu.Unlock()
+	}
+	return n
+}
+
 func (c *respCache) Bytes() int {
 	n := 0
 	for _, sh := range c.shards {
