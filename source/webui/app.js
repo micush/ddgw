@@ -3017,10 +3017,11 @@
       const cross = sv("line", { class: "qcross hidden", y1: T, y2: T + ph });
       const dots = shown.map((s) => sv("circle", { class: "qdot hidden " + s.cls, r: 4, cx: 0, cy: 0 }));   // parked out of sight until the pointer is over the chart
       const tip = sv("g", { class: "qtip hidden" });
-      const tipBg = sv("rect", { class: "qtipbg", rx: 6, width: 210, height: 20 + 18 * (shown.length + 1) });
+      const tipBg = sv("rect", { class: "qtipbg", rx: 6, width: 210, height: 20 + 18 * (shown.length + 1 + (qpsView ? 0 : 1)) });
       const tipHead = sv("text", { class: "qtiph", x: 10, y: 17 });
       const tipRows = shown.map((s, k) => sv("g", { transform: `translate(10 ${36 + 18 * k})` }, sv("rect", { class: s.cls + " sw", width: 10, height: 10, y: -9, rx: 2 }), sv("text", { class: "qtipt", x: 16, y: 0 }, "")));
-      tip.append(tipBg, tipHead, ...tipRows);
+      const qpsRow = qpsView ? null : sv("text", { class: "qtipt", x: 10, y: 36 + 18 * shown.length }, "");   // the rate at this point, beside the counts
+      tip.append(tipBg, tipHead, ...tipRows, ...(qpsRow ? [qpsRow] : []));
       const hit = sv("rect", { class: "qhit", x: L, y: T, width: pw, height: ph,
         onmousemove: (e) => {
           const r = svg.getBoundingClientRect();
@@ -3030,6 +3031,7 @@
           shown.forEach((s, k) => { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(d[s.key][i])); dots[k].classList.remove("hidden"); });
           tipHead.textContent = when((d.start + i * d.step) * 1000);
           shown.forEach((s, k) => { tipRows[k].lastChild.textContent = s.label + ": " + (qpsView ? fq(d[s.key][i]) : n0(d[s.key][i])); });
+          if (qpsRow) qpsRow.textContent = "QPS" + (only ? " — " + qs.label : "") + ": " + fq(d[only || "total"][i] / (d.step || 60));
           const tx = x(i) > W / 2 ? x(i) - 220 : x(i) + 12;
           tip.setAttribute("transform", `translate(${tx} ${T + 6})`); tip.classList.remove("hidden");
         },

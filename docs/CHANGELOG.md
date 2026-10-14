@@ -1,5 +1,16 @@
 # Changelog
 
+## [v388] - 2026-10-14 — Statistics chart: QPS in the tooltip
+
+### Added
+- Hovering the Statistics chart in the counts view shows a **QPS** line under the values (the queries of that point divided by its step; of the picked answer kind when a tile is picked, otherwise of all queries). The QPS view is unchanged.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser.
+
 ## [v387] - 2026-10-14 — Statistics: a "Now" range
 
 ### Added
