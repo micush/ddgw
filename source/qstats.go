@@ -766,9 +766,19 @@ func qstatsRange(from, to string) (time.Time, time.Time, error) {
 	if n, err := strconv.ParseInt(from, 10, 64); err == nil && n > 1e9 {
 		return time.Unix(n, 0), end, nil
 	}
+	if from == "now" {
+		// the top lists are kept in 10-minute slots; starting at a slot boundary makes the totals and the top
+		// lists cover the same period, and a start in the last 5 minutes of a slot reaches back one more slot
+		slot := int64(qsFineSpan * 60)
+		start := end.Unix() / slot * slot
+		if end.Unix()-start < slot/2 {
+			start -= slot
+		}
+		return time.Unix(start, 0), end, nil
+	}
 	d, err := parseSince(from)
 	if err != nil || d == 0 {
-		return time.Time{}, time.Time{}, fmt.Errorf("%q is not a range: use 1h, 1d, 7d, 30d or unix seconds", from)
+		return time.Time{}, time.Time{}, fmt.Errorf("%q is not a range: use now, 1h, 1d, 7d, 30d or unix seconds", from)
 	}
 	return end.Add(-d), end, nil
 }

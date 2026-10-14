@@ -435,3 +435,16 @@ func TestQStatsTimerCountsWithoutAnyRead(t *testing.T) {
 		t.Fatalf("counted %d, want 1", total)
 	}
 }
+
+func TestQstatsRangeNow(t *testing.T) {
+	from, to, err := qstatsRange("now", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from.Unix()%600 != 0 {
+		t.Fatalf("start %v is not on a 10-minute slot", from)
+	}
+	if d := to.Sub(from); d < 5*time.Minute || d > 15*time.Minute+2*time.Second {
+		t.Fatalf("Now covers %v, want 5 to 15 minutes", d)
+	}
+}

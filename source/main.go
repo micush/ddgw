@@ -131,7 +131,7 @@ the web GUI):
                    --update-cancel all|ADDR,...  --update-auto on|off
                    --update-repo URL|default   (where "fetch online" downloads from;
                    default https://github.com/micush/dnsdir)
-  Statistics       --stats [--stats-range 1h|1d|7d|30d]
+  Statistics       --stats [--stats-range now|1h|1d|7d|30d]
                    [--stats-rcode nxdomain|servfail|refused|noerror|other|update]
                    [--stats-client ADDR | --stats-domain NAME]
                    [--all-nodes]   (every cluster node's numbers added together)

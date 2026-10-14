@@ -604,7 +604,7 @@ The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubun
 | `--update-repo` | Configure ▸ General ▸ **Upgrade** card (Online repository) |
 | `--update-cancel` | command line only (the Upgrade tab shows what is queued) |
 | `--stats-clear` `[--all-nodes]`, `--scan ADDR`, `--ping ADDR\|NAME`, `--traceroute ADDR\|NAME`, `--lookup ADDR\|NAME`, `--cache-flush NAME` | Statistics page: **Clear**; right-click a client ▸ **Scan** (prints the report); right-click a client or domain ▸ **Ping**, **Traceroute**, **Lookup** (the popup's output, printed when done); right-click a domain ▸ **Flush** (every node); a client's **Limit** is the `client_limits` setting, **Copy** has no command |
-| `--stats` `[--stats-range 1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); `--whois` is right-click ▸ **Whois**; the last is its **Recent dynamic updates** card |
+| `--stats` `[--stats-range now\|1h\|1d\|7d\|30d] [--stats-rcode KIND] [--stats-client ADDR \| --stats-domain NAME] [--all-nodes]`, `--whois NAME`, `--dns-updates` | Statistics page (Monitor); `--whois` is right-click ▸ **Whois**; the last is its **Recent dynamic updates** card |
 | `--host` `[--host-range 1h\|1d\|7d\|30d] [--all-nodes]` | Host page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry (also on Statistics) |
 | `--capture IFACE` `[--capture-seconds N] [--capture-filter EXPR] [--capture-file FILE] [--all-nodes]`, `--capture-interfaces` | Capture page (Monitor); `--all-nodes` is the Node menu's **Cluster** entry there |
 | `--tshoot` `[--all-nodes] [--tshoot-file F]` | Log page ▸ tshoot |
@@ -807,6 +807,7 @@ dnsdir --stats --stats-rcode nxdomain
 dnsdir --stats --stats-client 192.0.2.7        (what that client asked for)
 dnsdir --stats --stats-domain example.com      (who asked for it)
 dnsdir --whois example.com                     (registration data, from its registry)
+dnsdir --stats --stats-range now
 dnsdir --stats --stats-range 1d
 dnsdir --stats --stats-range 30d
 dnsdir --stats --all-nodes                     (every cluster node's numbers added together)

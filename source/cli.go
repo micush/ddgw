@@ -879,7 +879,7 @@ func runLog(sock string, f *cliFlags) {
 	}
 }
 
-// runStats is --stats [--stats-range 1h|1d|7d|30d] [--stats-rcode noerror|servfail|nxdomain|refused|other|update]: totals, query types, transports and the
+// runStats is --stats [--stats-range now|1h|1d|7d|30d] [--stats-rcode noerror|servfail|nxdomain|refused|other|update]: totals, query types, transports and the
 // top clients and domains of the last hour (or day, week, month).  Memory only, last 30 days.
 func runStats(sock string, f *cliFlags) {
 	rng := *f.statsRange

@@ -2909,7 +2909,7 @@
     // a record type keeps its colour whatever its rank; the rest fold into "Other"
     const TYPE_CLS = { A: "t1", AAAA: "t2", HTTPS: "t3", PTR: "t4", SRV: "t5", TXT: "t6", SOA: "t7", MX: "t8" };
     const PROTO_CLS = { UDP: "t1", TCP: "t2" };
-    const RANGES = [["1h", "Last Hour"], ["1d", "Last Day"], ["7d", "Last Week"], ["30d", "Last Month"], ["custom", "Custom"]];
+    const RANGES = [["now", "Now"], ["1h", "Last Hour"], ["1d", "Last Day"], ["7d", "Last Week"], ["30d", "Last Month"], ["custom", "Custom"]];
     const REFRESH_MS = 10000;
     const n0 = (n) => Number(n || 0).toLocaleString();
     // a share is rounded to two decimals at most, but never to 100% unless it is all of them (99.99%) or to 0% unless it is none (<0.01%)
