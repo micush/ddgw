@@ -1,5 +1,19 @@
 # Changelog
 
+## [v392] - 2026-10-14 — Clear cache always acts on every node
+
+### Fixed
+- The **Clear** button in the Cache box on Monitor ▸ DNS went through the Node menu's choice like other requests; like **Flush** it now always goes to the node you are signed in to, which asks every node (so it works even when the picked node is not reachable from the browser's node, and the result is the same whichever node is picked). `LOCAL_API` in `app.js` lists `cache/clear` next to `cache/flush`.
+
+### Not changed
+- The Cache box size is per node: each node keeps its own answer cache, filled by the queries it answers (a restarted node takes up to 20,000 answers from a peer once, nothing is replicated after that). The size is shown to 0.1 of a unit, so nodes with similar traffic can show the same figure; hover for the exact number of answers.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser, and on a live multi-node cluster.
+
 ## [v391] - 2026-10-14 — Monitor ▸ DNS: a Cache box and Clear
 
 ### Added

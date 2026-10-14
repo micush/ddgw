@@ -67,7 +67,7 @@
   // Everything follows the node picked in the top bar (relayed through the node
   // you are logged in to) except the login itself.  The picker's own list of
   // nodes is asked of the login node explicitly (api(..., true)).
-  const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download|cache\/flush)(\/|\?|$)/;
+  const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download|cache\/flush|cache\/clear)(\/|\?|$)/;
   // The Node menu's "Cluster" entry: Monitor ▸ Statistics and Monitor ▸ Host show every node's numbers added together
   // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
   // anything else a page asks goes to this node as before.
