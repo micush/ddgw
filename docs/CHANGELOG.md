@@ -1,5 +1,16 @@
 # Changelog
 
+## [v389] - 2026-10-14 — Chart tooltip: a black box before QPS
+
+### Changed
+- The **QPS** line in the Statistics chart tooltip has a black box in front of it, lined up with the coloured boxes of the other rows.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser. One full `go test -race` run failed `TestBGPOperateAPIAndStatus` once; it passed alone three times and in the full rerun (flaky under load, unrelated to this change).
+
 ## [v388] - 2026-10-14 — Statistics chart: QPS in the tooltip
 
 ### Added

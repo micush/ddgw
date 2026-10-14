@@ -435,6 +435,7 @@ svg rect.sw { fill: var(--c); background: none; }
 .qtipbg { fill: var(--surface-2); stroke: var(--border); }
 .qtip text { fill: var(--text); font-size: 12px; }
 .qtiph { font-weight: 600; }
+.qpsw { fill: #000; stroke: var(--border); }
 .qpies { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; margin: 1rem 0; }
 .qdonut { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .8rem 1rem; box-shadow: var(--shadow); }
 .qdonut h3 { margin: 0 0 .5rem; font-size: .95rem; }
