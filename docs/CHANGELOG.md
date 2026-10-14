@@ -1,5 +1,16 @@
 # Changelog
 
+## [v386] - 2026-10-14 — Charts: no stray dot in the corner
+
+### Fixed
+- A small dot (pink, the colour of a series) sometimes showed at the top-left corner of the Statistics chart. The dots that follow the pointer over a chart were drawn at the corner from the start and never hidden: on the Statistics chart they were visible until the pointer first moved over it, and on all three charts (Statistics, and the two on the Host page) a dot stayed where the pointer left the chart. They are hidden until the pointer is over the chart and hidden again when it leaves.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser. The cause was found from a screenshot and the drawing code; the dot was not reproduced.
+
 ## [v385] - 2026-10-13 — BGP: FRR's reload script is found on the RPM distributions
 
 ### Fixed

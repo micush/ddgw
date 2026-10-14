@@ -1167,7 +1167,7 @@
           const tx = x(i) > W / 2 ? x(i) - 260 : x(i) + 12;
           tip.setAttribute("transform", `translate(${tx} ${T + 6})`); tip.classList.remove("hidden");
         },
-        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); } });
+        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); dots.forEach((dt) => dt.classList.add("hidden")); } });
       svg.append(cross, ...dots, hit, tip);
       const legend = series.length > 1 || o.legend ? h("div", { class: "qlegend" }, series.map((s) => h("span", { class: "qchip " + s.cls }, h("span", { class: "sw" }), s.label))) : null;
       return h("div", { class: "tsc" }, h("h3", {}, title), legend, svg);
@@ -3015,7 +3015,7 @@
       }
       // hover: a crosshair, a dot per series and one tooltip with the values
       const cross = sv("line", { class: "qcross hidden", y1: T, y2: T + ph });
-      const dots = shown.map((s) => sv("circle", { class: "qdot " + s.cls, r: 4, cx: 0, cy: 0 }));
+      const dots = shown.map((s) => sv("circle", { class: "qdot hidden " + s.cls, r: 4, cx: 0, cy: 0 }));   // parked out of sight until the pointer is over the chart
       const tip = sv("g", { class: "qtip hidden" });
       const tipBg = sv("rect", { class: "qtipbg", rx: 6, width: 210, height: 20 + 18 * (shown.length + 1) });
       const tipHead = sv("text", { class: "qtiph", x: 10, y: 17 });
@@ -3027,13 +3027,13 @@
           const px = ((e.clientX - r.left) / r.width) * W;
           const i = Math.max(0, Math.min(n - 1, Math.round(((px - L) / pw) * (n - 1))));
           cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.classList.remove("hidden");
-          shown.forEach((s, k) => { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(d[s.key][i])); });
+          shown.forEach((s, k) => { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(d[s.key][i])); dots[k].classList.remove("hidden"); });
           tipHead.textContent = when((d.start + i * d.step) * 1000);
           shown.forEach((s, k) => { tipRows[k].lastChild.textContent = s.label + ": " + (qpsView ? fq(d[s.key][i]) : n0(d[s.key][i])); });
           const tx = x(i) > W / 2 ? x(i) - 220 : x(i) + 12;
           tip.setAttribute("transform", `translate(${tx} ${T + 6})`); tip.classList.remove("hidden");
         },
-        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); } });
+        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); dots.forEach((dt) => dt.classList.add("hidden")); } });
       svg.append(cross, ...dots, hit, tip);
       chartBox.append(legend, svg);
     }
@@ -3694,7 +3694,7 @@
           const tx = x(i) > W / 2 ? x(i) - 260 : x(i) + 12;
           tip.setAttribute("transform", `translate(${tx} ${T + 6})`); tip.classList.remove("hidden");
         },
-        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); } });
+        onmouseleave: () => { cross.classList.add("hidden"); tip.classList.add("hidden"); dots.forEach((dt) => dt.classList.add("hidden")); } });
       svg.append(cross, ...dots, hit, tip);
       const legend = series.length > 1 || o.legend ? h("div", { class: "qlegend" }, series.map((s) => h("span", { class: "qchip " + s.cls }, h("span", { class: "sw" }), s.label))) : null;
       return h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, title)), h("div", { class: "body" }, legend, svg));
