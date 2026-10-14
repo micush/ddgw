@@ -301,7 +301,7 @@ install_deps() {
 # until a local AS number is set, so an install on a host that never uses BGP is
 # unchanged.  A failure to install it is only a warning: everything else works.
 install_frr() {
-  if ! assumed_missing frr && { have vtysh || [ -x /usr/lib/frr/bgpd ]; }; then
+  if ! assumed_missing frr && { have vtysh || [ -x /usr/lib/frr/bgpd ] || [ -x /usr/libexec/frr/bgpd ]; }; then
     info "FRR already present"
   else
     info "installing FRR (used by the BGP page; idle until a local AS is set there)"
@@ -318,9 +318,10 @@ install_frr() {
     [ "$DRY" = 1 ] || have vtysh || warn "FRR installed but 'vtysh' is not on the PATH"
   fi
   # FRR's reload (how dnsdir applies a changed BGP setting without dropping the sessions)
-  # needs frr-reload.py, which Debian and the RHEL family ship in a separate package;
-  # on Arch it is part of frr.  Without it dnsdir has to restart FRR for every change.
-  if [ "$FAMILY" != arch ] && { assumed_missing frr-reload || [ ! -e /usr/lib/frr/frr-reload.py ]; }; then
+  # needs frr-reload.py, which Debian ships in a separate package (frr-pythontools, in
+  # /usr/lib/frr); on the RHEL family, Fedora and Arch it is part of frr (/usr/libexec/frr
+  # on the RPM ones).  Without it dnsdir has to restart FRR for every change.
+  if [ "$FAMILY" = debian ] && { assumed_missing frr-reload || { [ ! -e /usr/lib/frr/frr-reload.py ] && [ ! -e /usr/libexec/frr/frr-reload.py ]; }; }; then
     info "installing frr-pythontools (lets FRR reload a changed config without dropping BGP sessions)"
     (pkg_install frr-pythontools) || warn "frr-pythontools could not be installed; AnyName will restart FRR (briefly dropping BGP sessions) when the BGP setting changes."
   fi

@@ -1,5 +1,17 @@
 # Changelog
 
+## [v385] - 2026-10-13 — BGP: FRR's reload script is found on the RPM distributions
+
+### Fixed
+- The BGP page said "FRR cannot reload its config here (the frr-pythontools package is missing)" on a RHEL-family host that had it: FRR's reload script is `/usr/libexec/frr/frr-reload.py` there (part of the `frr` package), and only `/usr/lib/frr/frr-reload.py` (the Debian path) was checked. A BGP change then restarted FRR and dropped the sessions every time, though a reload would have worked. Both paths are checked now, the note no longer tells an RPM host to install a package it already has (it names `frr-pythontools` only for Debian and Ubuntu), and the log line says the same.
+- `install.sh` installs `frr-pythontools` only on the Debian family, when neither path has the script; the RHEL family, Fedora and Arch get the script with `frr`. It also looks for `bgpd` in `/usr/libexec/frr` when deciding whether FRR is already installed (the `vtysh` check already covered it).
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestFRRReloadScriptPaths`: no script means no reload, a script under the libexec layout counts), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`, `bash -n` and `shellcheck -x -S warning` on install.sh, and `--dry-run` with fake os-release files for ubuntu (installs `frr-pythontools`), fedora, rocky and arch (does not).
+
+### Not verified
+- A real install run in the sandbox (fresh, upgrade, rollback) and a real reload on a RHEL-family host. The fix follows a screenshot of `find` on the user's host showing `/usr/libexec/frr/frr-reload.py`.
+
 ## [v384] - 2026-10-13 — Top domains: 🚫 and ✏️ for names covered by a `*.domain.com` or pattern row
 
 ### Changed

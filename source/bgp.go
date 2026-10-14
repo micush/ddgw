@@ -431,9 +431,9 @@ func (b *BGPManager) applyNow(dc *DaemonConfig) *BGPApplied {
 			}
 		}
 	case confChanged:
-		// FRR's reload needs frr-reload.py (package frr-pythontools); without it a reload
+		// FRR's reload needs frr-reload.py (package frr-pythontools on Debian); without it a reload
 		// fails and every attempt costs a restart, so restart once, on purpose
-		warnf("bgp: frr-reload.py is missing (package frr-pythontools), restarting FRR to apply the change")
+		warnf("bgp: frr-reload.py was not found (on Debian it is in the package frr-pythontools), restarting FRR to apply the change")
 		if out, err := frrRestart(); err != nil {
 			return res(false, "restarting FRR failed: %v %s", err, out)
 		}
@@ -456,11 +456,18 @@ func (b *BGPManager) applyNow(dc *DaemonConfig) *BGPApplied {
 	return res(true, "FRR is configured")
 }
 
-// frrCanReload says whether "systemctl reload frr" can work: FRR's reload script
-// lives in the separate frr-pythontools package on Debian and the RHEL family.
+// frrReloadScripts are where FRR's reload script is installed: /usr/lib/frr on Debian and Arch (Debian ships it in the
+// separate frr-pythontools package), /usr/libexec/frr on the RHEL family and Fedora (part of the frr package).
+var frrReloadScripts = []string{"/usr/lib/frr/frr-reload.py", "/usr/libexec/frr/frr-reload.py"}
+
+// frrCanReload says whether "systemctl reload frr" can work: FRR's reload script is installed.
 var frrCanReload = func() bool {
-	_, err := os.Stat("/usr/lib/frr/frr-reload.py")
-	return err == nil
+	for _, p := range frrReloadScripts {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // frrRestart restarts FRR.  A failed unit is reset first: systemd refuses to start
@@ -666,7 +673,7 @@ func (m *Mgmt) BGPStatus() (*BGPStatus, error) {
 	}
 	if st.Config.Active() {
 		if st.Installed && !frrCanReload() {
-			st.Notes = append(st.Notes, "FRR cannot reload its config here (the frr-pythontools package is missing), so every BGP change restarts FRR and drops the sessions briefly. Install frr-pythontools.")
+			st.Notes = append(st.Notes, "FRR cannot reload its config here (frr-reload.py was not found; Debian and Ubuntu have it in the frr-pythontools package), so every BGP change restarts FRR and drops the sessions briefly.")
 		}
 		if len(st.Announce) == 0 {
 			st.Notes = append(st.Notes, "Nothing is announced yet: add an anycast address to a gateway on the Topology page.")

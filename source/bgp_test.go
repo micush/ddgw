@@ -428,3 +428,25 @@ func TestRenderFRRASPrepend(t *testing.T) {
 		t.Fatal("the inbound route-map must not change")
 	}
 }
+
+// FRR's reload script is in /usr/lib/frr on Debian and in /usr/libexec/frr on the RPM distributions.
+func TestFRRReloadScriptPaths(t *testing.T) {
+	dir := t.TempDir()
+	old := frrReloadScripts
+	t.Cleanup(func() { frrReloadScripts = old })
+	a, b := filepath.Join(dir, "lib", "frr-reload.py"), filepath.Join(dir, "libexec", "frr-reload.py")
+	frrReloadScripts = []string{a, b}
+	can := frrCanReload // the real one: the other tests put it back when they finish
+	if can() {
+		t.Fatal("no script, no reload")
+	}
+	if err := os.MkdirAll(filepath.Dir(b), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("#!/usr/bin/python3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !can() {
+		t.Fatal("the script under libexec (RPM layout) counts")
+	}
+}

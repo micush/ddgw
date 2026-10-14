@@ -412,7 +412,7 @@ const DNSDIR_HELP = {
         "**Announce only.** The node announces its anycast addresses and nothing else, and accepts no routes from its neighbors, so a peer cannot change this host's routing table.",
         "**Withdrawal.** An address exists in FRR's table only while AnyName holds it on `lo` (a DNS server answers, the gateway is not paused, AnyName is running), so the route is withdrawn when the node cannot answer. **BFD** is on for every neighbor; lower the timers on your router to shorten the time it takes to notice a dead node.",
         "An **IPv4** address is announced to IPv4 neighbors and an **IPv6** address to IPv6 neighbors; add a neighbor of each family to announce both.",
-        "**Existing FRR setup.** The first time AnyName takes `frr.conf` over, the old file is kept as `frr.conf.pre-dnsdir`. A change is applied with a reload, which needs the `frr-pythontools` package (the installer adds it); without it AnyName restarts FRR instead and the sessions drop briefly.",
+        "**Existing FRR setup.** The first time AnyName takes `frr.conf` over, the old file is kept as `frr.conf.pre-dnsdir`. A change is applied with a reload, which needs FRR's `frr-reload.py` (the `frr-pythontools` package on Debian and Ubuntu, part of `frr` on the RHEL family and Fedora; the installer takes care of it); without it AnyName restarts FRR instead and the sessions drop briefly.",
       ]],
       ["h", "Neighbors"],
       ["ul", [
