@@ -525,3 +525,15 @@ func TestCacheShardedStaysBounded(t *testing.T) {
 		t.Fatalf("dropOldest removed %d", d)
 	}
 }
+
+func TestLargestCacheBudget(t *testing.T) {
+	c := newRespCache(cacheMaxEntries, 60)
+	for _, sh := range c.shards {
+		if sh.maxBytes <= 0 || sh.max <= 0 {
+			t.Fatalf("shard budget %d bytes for %d entries", sh.maxBytes, sh.max)
+		}
+	}
+	if cacheDefaultEntries != 1000000 || cacheMaxEntries != 1000000000 {
+		t.Fatal("default and largest cache size changed")
+	}
+}

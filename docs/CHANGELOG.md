@@ -1,5 +1,18 @@
 # Changelog
 
+## [v390] - 2026-10-14 — Answer cache: default 1,000,000 entries, up to 1,000,000,000
+
+### Changed
+- `cache_entries` now defaults to **1,000,000** (was 10,000) and may be set up to **1,000,000,000** (was 1,000,000); the minimum stays 100. A config that already sets `cache_entries` keeps its value; only configs without it get the new default. Measured with small A answers, a full 1,000,000-entry cache holds about 360 MB per gateway; the byte limit of 4 KB per entry is unchanged. The cache grows as answers arrive, nothing is allocated up front.
+- The byte budget of a shard is capped at the largest integer, so a huge cache on a 32-bit build (arm, 386) cannot overflow it.
+- GUI (Configure ▸ DNS proxy ▸ Most answers kept), `help.js`, `--help` text and the README show the new numbers.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`; new test for the largest cache size.
+
+### Not verified
+- A live node filling a cache toward these sizes; the 360 MB figure is from an in-process test with 1,000,000 small answers, not a running daemon.
+
 ## [v389] - 2026-10-14 — Chart tooltip: a black box before QPS
 
 ### Changed

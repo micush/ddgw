@@ -1969,7 +1969,7 @@
     { shared: true, k: "ecs_prefix6", l: "IPv6 prefix bits", t: "int", min: 1, max: 128 },
     { section: "Cache" },
     { shared: true, k: "cache", l: "Answer repeated queries from a cache", t: "bool" },
-    { shared: true, k: "cache_entries", l: "Most answers kept", t: "int", min: 100, max: 1000000 },
+    { shared: true, k: "cache_entries", l: "Most answers kept", t: "int", min: 100, max: 1000000000 },
     { shared: true, k: "cache_max_ttl", l: "Cache TTL (s)", t: "int", min: 1, max: 604800 },
     { section: "Timing" },
     { shared: true, k: "probe_interval_ms", l: "Probe interval (ms)", t: "int", min: 1 },

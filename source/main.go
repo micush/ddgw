@@ -209,7 +209,7 @@ DNS proxy ("dns" block at the top level of the config):
   spread             true (default) shares queries out: servers within spread_band (20) percent
                      of the fastest one's latency take turns (round-robin); false = fastest first
   cache              true (default) answers repeated queries from memory while the records'
-                     TTLs allow (negative answers per their SOA); cache_entries (10000) is the
+                     TTLs allow (negative answers per their SOA); cache_entries (1000000) is the
                      most answers kept, cache_max_ttl (3600) the most seconds one is kept
   probe_interval_ms  default 5000     probe_timeout_ms  default 1000
   query_timeout_ms   default 1500     max_attempts      default 3

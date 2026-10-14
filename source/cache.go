@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"hash/maphash"
+	"math"
 	"net/netip"
 	"strconv"
 	"sync"
@@ -29,10 +30,10 @@ import (
 // EDNS options in the stored answer (cookie, padding, NSID) are dropped.
 
 const (
-	cacheDefaultEntries = 10000
+	cacheDefaultEntries = 1000000
 	cacheDefaultMaxTTL  = 3600
 	cacheMinEntries     = 100
-	cacheMaxEntries     = 1000000
+	cacheMaxEntries     = 1000000000
 	cacheMaxTTLLimit    = 7 * 24 * 3600
 	optCookie           = 10
 	optNSID             = 3
@@ -71,7 +72,7 @@ const (
 
 	// The cache is bounded by bytes as well as by entries: cache_entries times cacheBytesPerEntry is its memory
 	// budget.  A count alone lets a client that asks for names with very large answers (its own zone, big TXT
-	// records) make a "10000 entry" cache hold hundreds of megabytes.  An ordinary answer is a few hundred
+	// records) make a "1000000 entry" cache hold hundreds of megabytes.  An ordinary answer is a few hundred
 	// bytes, so the budget is only reached by unusually large ones; the oldest entries leave first, as for the count.
 	cacheBytesPerEntry = 4096
 	cacheEntryOverhead = 256 // bookkeeping counted on top of the message and the key
@@ -103,7 +104,12 @@ func newRespCache(max, maxTTL int) *respCache {
 	}
 	c := &respCache{max: max, maxTTL: uint32(maxTTL), seed: maphash.MakeSeed(), now: time.Now}
 	for i := 0; i < n; i++ {
-		c.shards = append(c.shards, &cacheShard{max: (max + n - 1) / n, maxBytes: ((max + n - 1) / n) * cacheBytesPerEntry,
+		per := (max + n - 1) / n
+		budget := math.MaxInt // a very large cache on a 32-bit machine must not overflow the byte budget
+		if per <= math.MaxInt/cacheBytesPerEntry {
+			budget = per * cacheBytesPerEntry
+		}
+		c.shards = append(c.shards, &cacheShard{max: per, maxBytes: budget,
 			m: map[string]*cacheEntry{}, lru: list.New()})
 	}
 	return c
