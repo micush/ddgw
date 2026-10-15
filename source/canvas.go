@@ -136,6 +136,45 @@ func membersOf(rows []SnapshotRow, gid int) []CanvasMember {
 	return out
 }
 
+// mergeMembersByNode folds the entries of one node into one.  membersOf sees one row per (address family, peer
+// address), and a node's IPv6 gateway address is a different (link-local) address from its IPv4 one, so on a
+// dual-stack gateway every node would otherwise be counted twice.  names maps node addresses to node names (ipNames);
+// an address it does not know stays an entry of its own.
+func mergeMembersByNode(groups []CanvasGateway, names map[string]string) {
+	for i := range groups {
+		var out []CanvasMember
+		at := map[string]int{}
+		for _, m := range groups[i].Members {
+			key := names[normIP(m.IP)]
+			if key == "" {
+				out = append(out, m)
+				continue
+			}
+			j, ok := at[key]
+			if !ok {
+				at[key] = len(out)
+				out = append(out, m)
+				continue
+			}
+			o := &out[j]
+			o.Local = o.Local || m.Local
+			o.AGC = o.AGC || m.AGC
+			for _, af := range strings.Split(m.AFs, "+") {
+				if af != "" && !containsStr(strings.Split(o.AFs, "+"), af) {
+					o.AFs += "+" + af
+				}
+			}
+			if m.Local { // this node's own entry keeps its own address
+				o.IP = m.IP
+			}
+		}
+		if out == nil {
+			out = []CanvasMember{}
+		}
+		groups[i].Members = out
+	}
+}
+
 // buildCanvas combines the running configuration with what the engines and
 // the probe pools currently report.
 func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []CanvasGateway {
@@ -380,6 +419,7 @@ func (s *StatusServer) canvasGroups() []CanvasGateway {
 	markVmac(groups, real)
 	s.markAnycast(groups)
 	s.markNodes(groups)
+	mergeMembersByNode(groups, s.ipNames())
 	s.up.annotate(groups, time.Now())
 	storeAnycastLocal(groups)
 	if s.mg != nil {
@@ -676,6 +716,60 @@ func ownDNS(dc *DaemonConfig, g *GroupConfig) *DNSConfig {
 	return g.DNS
 }
 
+// defaultTopologyServers are the public resolvers every newly created gateway starts with, as address -> name.  The
+// server is the IP address (so nothing has to be resolved before DNS works) and the host name is its label.  The web
+// page's "New gateway" form keeps the same list in app.js, DEFAULT_SERVERS.  They can be removed afterwards.
+var defaultTopologyServers = []struct{ Addr, Name string }{
+	{"8.8.8.8", "dns.google"},
+	{"1.1.1.1", "one.one.one.one"},
+	{"9.9.9.9", "dns9.quad9.net"},
+	{"4.2.2.2", "b.resolvers.level3.net"},
+}
+
+// defaultTopologyDomains are the domains each default server is tested with.
+var defaultTopologyDomains = []string{"google.com", "amazon.com"}
+
+// addDefaultServers adds defaultTopologyServers to d (each tested with defaultTopologyDomains, type A), skipping any already there,
+// and returns the ones it added.
+func addDefaultServers(d *DNSConfig) []string {
+	if d.ServerQueries == nil {
+		d.ServerQueries = map[string][]DNSQuery{}
+	}
+	have := map[string]bool{}
+	for _, s := range d.Servers {
+		if n, err := normalizeServer(s); err == nil {
+			have[n] = true
+		}
+	}
+	var added []string
+	for _, ds := range defaultTopologyServers {
+		n, err := normalizeServer(ds.Addr)
+		if err != nil || have[n] {
+			continue
+		}
+		d.Servers = append(d.Servers, n)
+		qs := []DNSQuery{}
+		for _, dom := range defaultTopologyDomains {
+			qs = append(qs, DNSQuery{Name: dom, Type: "A"})
+		}
+		d.ServerQueries[n] = qs
+		if d.ServerNames[n] == "" {
+			setServerName(d, n, ds.Name)
+		}
+		have[n] = true
+		added = append(added, n)
+	}
+	return added
+}
+
+func defaultServerList() string {
+	var l []string
+	for _, ds := range defaultTopologyServers {
+		l = append(l, ds.Name+"="+ds.Addr)
+	}
+	return strings.Join(l, ", ")
+}
+
 // setServerName gives a server a name, or clears it with "".
 func setServerName(d *DNSConfig, addr, name string) {
 	name = strings.TrimSpace(name)
@@ -807,13 +901,21 @@ func applyCanvasEdit(dc *DaemonConfig, e canvasEdit) (string, error) {
 				}
 			}
 			dc.Groups = append(dc.Groups, g)
+			var first string
 			if e.Server != "" { // draw the first server (and its first domain) in the same step
 				if _, err := applyCanvasEdit(dc, canvasEdit{Action: "add", Kind: "server", Group: id, Server: e.Server, Name: e.Name, Type: e.Type}); err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("added gateway %d (%s) with DNS server %s", id, orDefault(e.VIP, e.VIP6), e.Server), nil
+				first = " with DNS server " + e.Server
 			}
-			return fmt.Sprintf("added gateway %d (%s) — now add a DNS server with --canvas-add server --group %d --server ADDR --name DOMAIN", id, orDefault(e.VIP, e.VIP6), id), nil
+			// A new gateway starts with the well-known public resolvers; remove any you don't want.
+			if len(addDefaultServers(dc.Groups[len(dc.Groups)-1].DNS)) > 0 {
+				return fmt.Sprintf("added gateway %d (%s)%s and the default DNS servers (%s); remove any you don't want with --canvas-del server --group %d --server ADDR", id, orDefault(e.VIP, e.VIP6), first, defaultServerList(), id), nil
+			}
+			if first != "" {
+				return fmt.Sprintf("added gateway %d (%s)%s", id, orDefault(e.VIP, e.VIP6), first), nil
+			}
+			return fmt.Sprintf("added gateway %d (%s); now add a DNS server with --canvas-add server --group %d --server ADDR --name DOMAIN", id, orDefault(e.VIP, e.VIP6), id), nil
 		case "pause", "resume":
 			g, err := findGroup(dc, e.Group)
 			if err != nil {

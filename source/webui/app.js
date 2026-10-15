@@ -1496,6 +1496,9 @@
         return null;
       }, "Rename");
     }
+    // Every new gateway starts with these public resolvers (remove any you don't want); keep in step with defaultTopologyServers in canvas.go.
+    const DEFAULT_SERVERS = [["8.8.8.8", "dns.google"], ["1.1.1.1", "one.one.one.one"], ["9.9.9.9", "dns9.quad9.net"], ["4.2.2.2", "b.resolvers.level3.net"]];   // [address, name]
+    const DEFAULT_DOMAINS = ["google.com", "amazon.com"];   // each default server is tested with these; keep in step with defaultTopologyDomains in canvas.go
     function gatewayForm(g) {
       const base = g || groups()[0];
       form(g ? "Edit gateway" : "New gateway", [
@@ -1558,7 +1561,7 @@
         }
         const id = Number(v.id);
         if (!(id >= 1 && id <= 255) || groups().some((x) => x.group_id === id)) return "Pick an unused group number between 1 and 255.";
-        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, ...(more4.length ? { more_vip4: more4 } : {}), ...(more6.length ? { more_vip6: more6 } : {}), real_macs: true, dns: { servers: [], server_queries: {}, ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
+        groups().push({ ...(v.name.trim() ? { name: v.name.trim() } : {}), group_id: id, interface: v.iface, vip4: v.vip4, vip6: v.vip6, ...(more4.length ? { more_vip4: more4 } : {}), ...(more6.length ? { more_vip6: more6 } : {}), real_macs: true, dns: { servers: DEFAULT_SERVERS.map(([a]) => a + ":53"), server_queries: Object.fromEntries(DEFAULT_SERVERS.map(([a]) => [a + ":53", DEFAULT_DOMAINS.map((name) => ({ name, type: "A" }))])), server_names: Object.fromEntries(DEFAULT_SERVERS.map(([a, n]) => [a + ":53", n])), ecs: v.ecs === "on", ...(fb.length ? { fallback_servers: fb } : {}), ...(lbOwn ? { lb: lbOwn } : {}) } });
         setGid(id); cv.sel = { kind: "gw" };
         return null;
       }, g ? "Save" : "Add gateway");

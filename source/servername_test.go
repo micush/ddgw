@@ -26,13 +26,13 @@ func TestPlanServerRegistration(t *testing.T) {
 	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "add", Kind: "gateway", VIP: "10.0.0.1/24", Interface: "eth0"}); err != nil {
 		t.Fatal(err)
 	}
-	add := canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "8.8.8.8", Name: "google.com", Label: "dns-a.corp.example"}
+	add := canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "5.5.5.5", Name: "google.com", Label: "dns-a.corp.example"}
 	if _, err := applyCanvasEdit(dc, add); err != nil {
 		t.Fatal(err)
 	}
-	set := canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "DNS-B.Corp.Example"}
+	set := canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "DNS-B.Corp.Example"}
 	r := planServerRegistration(dc, set)
-	if r == nil || r.fqdn != "dns-b.corp.example" || r.old != "dns-a.corp.example" || r.addr != netip.MustParseAddr("8.8.8.8") {
+	if r == nil || r.fqdn != "dns-b.corp.example" || r.old != "dns-a.corp.example" || r.addr != netip.MustParseAddr("5.5.5.5") {
 		t.Fatalf("a full name is registered and the old full name removed: %+v", r)
 	}
 	// the same name again: nothing old to remove
@@ -41,21 +41,21 @@ func TestPlanServerRegistration(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 	// a short name is only a label; an old short name has no record to remove
-	if r := planServerRegistration(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "dns-a"}); r != nil {
+	if r := planServerRegistration(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "dns-a"}); r != nil {
 		t.Fatalf("a short name registers nothing: %+v", r)
 	}
-	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "dns-a"}); err != nil {
+	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "dns-a"}); err != nil {
 		t.Fatal(err)
 	}
-	if r := planServerRegistration(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "dns-c.corp.example"}); r == nil || r.old != "" {
+	if r := planServerRegistration(dc, canvasEdit{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "dns-c.corp.example"}); r == nil || r.old != "" {
 		t.Fatalf("%+v", r)
 	}
 	for _, e := range []canvasEdit{
-		{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "-"},
-		{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "Google DNS v2.0"}, // not a host name
-		{Action: "set", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "a..b"},
+		{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "-"},
+		{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "Google DNS v2.0"}, // not a host name
+		{Action: "set", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "a..b"},
 		{Action: "set", Kind: "server", Group: 1, Server: "dns.example.com", Label: "x.corp.example"}, // no address of its own
-		{Action: "del", Kind: "server", Group: 1, Server: "8.8.8.8", Label: "x.corp.example"},
+		{Action: "del", Kind: "server", Group: 1, Server: "5.5.5.5", Label: "x.corp.example"},
 		{Action: "set", Kind: "gateway", Group: 1, Label: "x.corp.example"},
 	} {
 		if r := planServerRegistration(dc, e); r != nil {

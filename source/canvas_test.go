@@ -274,25 +274,25 @@ func TestApplyCanvasEdit(t *testing.T) {
 	fail(canvasEdit{Action: "add", Kind: "gateway", Group: 1, VIP: "10.9.9.9/24"}, "already exists")
 	fail(canvasEdit{Action: "add", Kind: "gateway"}, "--vip")
 	// a server and domains
-	do(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "8.8.8.8"})
-	fail(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "8.8.8.8:53"}, "already")
-	fail(canvasEdit{Action: "add", Kind: "server", Group: 9, Server: "8.8.8.8"}, "no gateway")
+	do(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "5.5.5.5"})
+	fail(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "5.5.5.5:53"}, "already")
+	fail(canvasEdit{Action: "add", Kind: "server", Group: 9, Server: "5.5.5.5"}, "no gateway")
 	if err := dc.Validate(); err == nil {
 		t.Fatal("a server with no domain must not validate yet")
 	}
-	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "8.8.8.8", Name: "google.com"})
-	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "8.8.8.8", Name: "microsoft.com", Type: "aaaa"})
-	fail(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "8.8.8.8", Name: "GOOGLE.com"}, "already")
-	fail(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "1.1.1.1", Name: "x.com"}, "not on gateway")
-	do(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "8.8.4.4"})
-	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "8.8.4.4", Name: "apple.com"})
-	do(canvasEdit{Action: "add", Kind: "server", Group: 2, Server: "9.9.9.9"})
-	do(canvasEdit{Action: "add", Kind: "domain", Group: 2, Server: "9.9.9.9", Name: "ford.com"})
+	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "5.5.5.5", Name: "google.com"})
+	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "5.5.5.5", Name: "microsoft.com", Type: "aaaa"})
+	fail(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "5.5.5.5", Name: "GOOGLE.com"}, "already")
+	fail(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "7.7.7.7", Name: "x.com"}, "not on gateway")
+	do(canvasEdit{Action: "add", Kind: "server", Group: 1, Server: "5.5.4.4"})
+	do(canvasEdit{Action: "add", Kind: "domain", Group: 1, Server: "5.5.4.4", Name: "apple.com"})
+	do(canvasEdit{Action: "add", Kind: "server", Group: 2, Server: "6.6.6.6"})
+	do(canvasEdit{Action: "add", Kind: "domain", Group: 2, Server: "6.6.6.6", Name: "ford.com"})
 	if err := dc.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	g1 := dc.Groups[0].DNS
-	if len(g1.Servers) != 2 || len(g1.ServerQueries["8.8.8.8:53"]) != 2 || g1.ServerQueries["8.8.8.8:53"][1].Type != "AAAA" {
+	if len(g1.Servers) != 2+len(defaultTopologyServers) || len(g1.ServerQueries["5.5.5.5:53"]) != 2 || g1.ServerQueries["5.5.5.5:53"][1].Type != "AAAA" {
 		t.Fatalf("group 1 pool: %+v", g1)
 	}
 	// a gateway can be drawn complete in one step
@@ -305,20 +305,20 @@ func TestApplyCanvasEdit(t *testing.T) {
 	}
 	do(canvasEdit{Action: "del", Kind: "gateway", Group: 7})
 	// delete a trapezoid: only that test goes
-	do(canvasEdit{Action: "del", Kind: "domain", Group: 1, Server: "8.8.8.8", Name: "google.com"})
-	if q := dc.Groups[0].DNS.ServerQueries["8.8.8.8:53"]; len(q) != 1 || q[0].Name != "microsoft.com" {
+	do(canvasEdit{Action: "del", Kind: "domain", Group: 1, Server: "5.5.5.5", Name: "google.com"})
+	if q := dc.Groups[0].DNS.ServerQueries["5.5.5.5:53"]; len(q) != 1 || q[0].Name != "microsoft.com" {
 		t.Fatalf("after domain delete: %v", q)
 	}
-	fail(canvasEdit{Action: "del", Kind: "domain", Group: 1, Server: "8.8.8.8", Name: "nope.com"}, "not tested")
+	fail(canvasEdit{Action: "del", Kind: "domain", Group: 1, Server: "5.5.5.5", Name: "nope.com"}, "not tested")
 	// delete a square: its domains go with it, siblings stay
-	do(canvasEdit{Action: "del", Kind: "server", Group: 1, Server: "8.8.8.8"})
+	do(canvasEdit{Action: "del", Kind: "server", Group: 1, Server: "5.5.5.5"})
 	g1 = dc.Groups[0].DNS
-	if len(g1.Servers) != 1 || g1.Servers[0] != "8.8.4.4:53" || len(g1.ServerQueries) != 1 {
+	if len(g1.Servers) != 1+len(defaultTopologyServers) || g1.Servers[len(defaultTopologyServers)] != "5.5.4.4:53" || len(g1.ServerQueries) != 1+len(defaultTopologyServers) {
 		t.Fatalf("after server delete: %+v", g1)
 	}
 	// delete a circle: the whole gateway goes, the other one is untouched
 	do(canvasEdit{Action: "del", Kind: "gateway", Group: 1})
-	if len(dc.Groups) != 1 || dc.Groups[0].GroupID != 2 || len(dc.Groups[0].DNS.Servers) != 1 {
+	if len(dc.Groups) != 1 || dc.Groups[0].GroupID != 2 || len(dc.Groups[0].DNS.Servers) != 1+len(defaultTopologyServers) {
 		t.Fatalf("after gateway delete: %+v", dc.Groups)
 	}
 	do(canvasEdit{Action: "del", Kind: "gateway", Group: 2})
@@ -330,6 +330,40 @@ func TestApplyCanvasEdit(t *testing.T) {
 	}
 	fail(canvasEdit{Action: "del", Kind: "gateway", Group: 2}, "no gateway")
 	fail(canvasEdit{Action: "zap", Kind: "gateway"}, "unknown canvas edit")
+}
+
+// A new gateway starts with the public resolvers by address (named by host name), each probed, and they can be removed.
+func TestNewGatewayHasDefaultServers(t *testing.T) {
+	dc := newDaemonConfig()
+	dc.Groups = []GroupConfig{}
+	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "add", Kind: "gateway", VIP: "10.0.0.1/24", Server: "8.8.8.8", Name: "example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	d := dc.Groups[0].DNS
+	want := [][2]string{{"8.8.8.8:53", "dns.google"}, {"1.1.1.1:53", "one.one.one.one"}, {"9.9.9.9:53", "dns9.quad9.net"}, {"4.2.2.2:53", "b.resolvers.level3.net"}}
+	if len(d.Servers) != len(want) {
+		t.Fatalf("servers (8.8.8.8 given explicitly must not be doubled): %v", d.Servers)
+	}
+	for i, w := range want {
+		if d.Servers[i] != w[0] {
+			t.Fatalf("server %d: %v", i, d.Servers)
+		}
+		if q := d.ServerQueries[w[0]]; i > 0 && (len(q) != 2 || q[0].Name != "google.com" || q[1].Name != "amazon.com") {
+			t.Fatalf("domains of %s: %v", w[0], q)
+		}
+		if i > 0 && d.ServerNames[w[0]] != w[1] {
+			t.Fatalf("name of %s: %q", w[0], d.ServerNames[w[0]])
+		}
+	}
+	if err := dc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyCanvasEdit(dc, canvasEdit{Action: "del", Kind: "server", Group: 1, Server: "9.9.9.9"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(dc.Groups[0].DNS.Servers) != 3 || dc.Groups[0].DNS.ServerNames["9.9.9.9:53"] != "" {
+		t.Fatalf("after removing one: %v %v", dc.Groups[0].DNS.Servers, dc.Groups[0].DNS.ServerNames)
+	}
 }
 
 func TestCanvasEditFromSharedPoolCopiesIt(t *testing.T) {
@@ -563,6 +597,22 @@ func TestCanvasMembers(t *testing.T) {
 	}
 	if got := membersOf(nil, 1); got == nil || len(got) != 0 {
 		t.Fatalf("empty must be a non-nil list for JSON: %#v", got)
+	}
+}
+
+// On a dual-stack gateway a node has an IPv4 and a (link-local) IPv6 gateway address; it is still one serving node.
+func TestMergeMembersByNode(t *testing.T) {
+	g := []CanvasGateway{{Members: []CanvasMember{
+		{IP: "10.0.0.5", Local: true, AfnID: 1, AFs: "v4"},
+		{IP: "fe80::5", Local: true, AfnID: 1, AFs: "v6"},
+		{IP: "10.0.0.6", AfnID: 2, AFs: "v4"},
+		{IP: "fe80::6", AfnID: 2, AFs: "v6", AGC: true},
+		{IP: "10.0.0.7", AfnID: 3, AFs: "v4"}, // a node the cluster cannot name yet stays as it is
+	}}}
+	mergeMembersByNode(g, map[string]string{"10.0.0.5": "ns1", "fe80::5": "ns1", "10.0.0.6": "ns2", "fe80::6": "ns2"})
+	m := g[0].Members
+	if len(m) != 3 || !m[0].Local || m[0].AFs != "v4+v6" || m[1].AFs != "v4+v6" || !m[1].AGC || m[2].IP != "10.0.0.7" {
+		t.Fatalf("merged: %+v", m)
 	}
 }
 
