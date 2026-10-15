@@ -2374,7 +2374,7 @@
         const titleOf = (c) => ((c.querySelector("header h2") || {}).textContent || "");
         const panes = TABS.map(() => h("div", { role: "tabpanel" }));
         for (const c of [...dns.el.children]) {
-          const i = TABS.findIndex(([, names]) => names.includes(titleOf(c)));
+          const i = TABS.findIndex(([, names]) => names.some((n) => n.toLowerCase() === titleOf(c).toLowerCase()));   // the headings are in title case ("Upstream Servers"), the lists here are not
           panes[i < 0 ? TABS.length - 1 : i].append(c);
         }
         const buttons = TABS.map(([name], i) => h("button", { type: "button", role: "tab", class: "dtab", onclick: () => show(i) }, name));

@@ -1,5 +1,17 @@
 # Changelog
 
+## [v406] - 2026-10-15 — Configure tabs: cards back in the right tab
+
+### Fixed
+- Configure ▸ DNS Proxy: the Servers tab was empty (its card, Upstream Servers, sat under Clients) and Client Network (ECS) sat under Clients instead of Cache & ECS. Both are back where they belong.
+- Cause: the card headings went to title case in v400 and the tab code matched cards to tabs by their exact old spelling, so "Upstream Servers" no longer matched "Upstream servers". The match now ignores case.
+
+### Verified
+- Headless Chromium: each card is in its own tab's panel, no script errors. The project builds.
+
+### Not verified
+- Go tests not re-run (UI-only change; they passed on the previous version).
+
 ## [v405] - 2026-10-15 — Eye button on the BGP neighbor password
 
 ### Changed
