@@ -34,7 +34,7 @@ const (
 	qsCoarseSlots = 30 * 24
 	qsCapClients  = 300
 	qsCapDomains  = 600
-	qsKeepResult  = 100 // entries per top list in a reply
+	qsKeepResult  = 500 // entries per top list in a reply
 	qsMaxPoints   = 800
 	qsOthers      = "(others)"
 	qsRDNSTTL     = 10 * time.Minute

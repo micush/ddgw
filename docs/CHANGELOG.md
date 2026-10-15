@@ -1,5 +1,17 @@
 # Changelog
 
+## [v404] - 2026-10-15 — Top lists hold 500 names
+
+### Changed
+- Top Clients and Top Domains return the top 500 names (was 100), plus the “(others)” row, ten or twelve to a page. Also applies to the cluster-wide totals.
+- How many distinct names each time slot remembers is unchanged (it bounds memory), so a list can hold fewer than 500 when few names were seen.
+
+### Verified
+- Go test suite.
+
+### Not verified
+- Not run with real traffic; the larger reply is a few tens of KB more JSON per refresh.
+
 ## [v403] - 2026-10-15 — Top cards keep one size
 
 ### Changed

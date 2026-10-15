@@ -86,7 +86,7 @@ func TestMergeQStatsAddsSeriesSumsAndLists(t *testing.T) {
 func TestMergeQStatsKeepsOnlyTheTopOfALongList(t *testing.T) {
 	mk := func(prefix string) *QStatsResult {
 		r := &QStatsResult{Start: 0, Step: 60, Total: []uint64{0}, NoError: []uint64{0}, ServFail: []uint64{0}, NXDomain: []uint64{0}, Refused: []uint64{0}, Other: []uint64{0}, Updates: []uint64{0}}
-		for i := 0; i < 90; i++ {
+		for i := 0; i < qsKeepResult; i++ {
 			r.Domains = append(r.Domains, NameCount{Name: fmt.Sprintf("%s%03d.example", prefix, i), Count: uint64(1000 - i)})
 		}
 		return r
@@ -95,7 +95,7 @@ func TestMergeQStatsKeepsOnlyTheTopOfALongList(t *testing.T) {
 	if len(r.Domains) != qsKeepResult {
 		t.Fatalf("%d domains kept, want %d", len(r.Domains), qsKeepResult)
 	}
-	if r.Domains[0].Count != 1000 || r.Domains[len(r.Domains)-1].Count < 1000-60 {
+	if r.Domains[0].Count != 1000 || r.Domains[len(r.Domains)-1].Count < 1000-qsKeepResult/2 {
 		t.Fatalf("the wrong ones were kept: %+v ... %+v", r.Domains[0], r.Domains[len(r.Domains)-1])
 	}
 }
