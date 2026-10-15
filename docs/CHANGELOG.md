@@ -1,5 +1,17 @@
 # Changelog
 
+## [v400] - 2026-10-15 — Card headings in title case; Statistics: "Top Clients: No Error"
+
+### Changed
+- Every card heading on every page is in title case: "Upload a Release", "Join an Existing Cluster", "Recent Dynamic Updates", "Anycast Addresses", the Configure sections, the Statistics donuts and charts, the Host charts, and so on. Short joining words stay small (a, an, of, on, per, the …) except first, and a word with a capital inside it (BGP, NXDOMAIN, GUI) is left alone. Headings that are data (a user name, a gateway's own name) and dialog titles are unchanged. One helper, `tc()`, does it where the headings are built, so a new card is covered too.
+- Monitor ▸ Statistics: with a tile picked, the two top lists are titled `Top Clients: No Error` and `Top Domains: No Error` (also Server Failure, NX Domain, Refused, Updates), not `Top clients — No Error`. The two donuts (Query Types, Transport) and the chart keep the dash. The help and README say Top Clients / Top Domains too.
+
+### Verified
+- `node --check`, gofmt, vet, `go test`. `tc()` on 15 sample headings. Headless Chromium against the real `app.js` with a mocked Statistics answer: clicking each of the five tiles gave exactly the ten list titles above, and the donuts read Query Types and Transport.
+
+### Not verified
+- Every page was not opened in a browser: the other pages' headings follow from the code (every card-heading constructor goes through `tc()`), not from looking at them.
+
 ## [v399] - 2026-10-15 — The Node drop-down stays open while the page refreshes
 
 ### Fixed
