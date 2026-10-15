@@ -4238,6 +4238,18 @@
       for (const [k, tr] of rows) tr.classList.toggle("sel", k === key);
     }
 
+    // a password box with an eye beside it: click to see what is typed, click again to hide it
+    function withEye(input) {
+      const btn = h("button", { class: "pweye", type: "button", title: "Show password", "aria-label": "Show password", "aria-pressed": "false", onclick: () => {
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        btn.setAttribute("aria-pressed", String(show));
+        btn.title = show ? "Hide password" : "Show password"; btn.setAttribute("aria-label", btn.title);
+        btn.classList.toggle("on", show);
+      } }, "\u{1F441}");
+      return h("div", { class: "pwwrap" }, input, btn);
+    }
+
     function neighborRow(n, idx) {
       const as = h("input", { class: "as", type: "text", inputmode: "numeric", pattern: "[0-9]*", autocomplete: "off", value: String(n.remote_as), "aria-label": "AS of " + n.peer });
       const desc = h("input", { type: "text", value: n.description || "", maxlength: "60", "aria-label": "Description of " + n.peer });
@@ -4249,7 +4261,7 @@
         save(next);
       };
       for (const el of [as, desc, pw, mh]) el.addEventListener("change", commit);
-      return h("tr", { "data-peer": n.peer }, h("td", { class: "mono" }, n.peer), h("td", {}, as), h("td", {}, desc), h("td", {}, pw), h("td", {}, mh));
+      return h("tr", { "data-peer": n.peer }, h("td", { class: "mono" }, n.peer), h("td", {}, as), h("td", {}, desc), h("td", {}, withEye(pw)), h("td", {}, mh));
     }
 
     // the new row: becomes a neighbor once it has an address and an AS
@@ -4267,7 +4279,7 @@
       };
       for (const el of [peer, as, desc, pw, mh]) el.addEventListener("change", commit);
       draft = { peer, focus: () => peer.focus() };
-      return h("tr", { "data-peer": "" }, h("td", {}, peer), h("td", {}, as), h("td", {}, desc), h("td", {}, pw), h("td", {}, mh));
+      return h("tr", { "data-peer": "" }, h("td", {}, peer), h("td", {}, as), h("td", {}, desc), h("td", {}, withEye(pw)), h("td", {}, mh));
     }
 
     function drawNeighbors() {

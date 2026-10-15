@@ -1,5 +1,16 @@
 # Changelog
 
+## [v405] - 2026-10-15 — Eye button on the BGP neighbor password
+
+### Changed
+- Configure ▸ Anycast ▸ Neighbors: the Password box of each neighbor (and of the new-neighbor row) has an eye button beside it. Click it to see the password, click again to hide it. The box still starts hidden, and the toggle changes nothing that is saved.
+
+### Verified
+- Headless Chromium: the box is `password` at first, `text` after one click (aria-pressed true, label “Hide password”), `password` after the second; no script errors; the layout looks right.
+
+### Not verified
+- The Go test suite was not re-run for this UI-only change (it passed on v404).
+
 ## [v404] - 2026-10-15 — Top lists hold 500 names
 
 ### Changed

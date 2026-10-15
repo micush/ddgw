@@ -591,3 +591,8 @@ table.qtop td .small { margin-top: 0; line-height: 1.2; }
 .card.qcard > .body .empty { padding-top: 2rem; }
 .card > footer.qpager { margin-top: auto; }
 table.qtop.plain tbody tr { height: 2.6667rem; }   /* twelve of these are as tall as ten rows with a host name under them */
+.pwwrap { display: flex; align-items: center; gap: .25rem; }
+.pwwrap input { flex: 1; min-width: 0; }
+.pweye { flex: none; background: none; border: 1px solid transparent; border-radius: .4rem; cursor: pointer; padding: .1rem .3rem; line-height: 1; color: var(--muted); opacity: .7; }
+.pweye:hover, .pweye:focus-visible { opacity: 1; border-color: var(--border); }
+.pweye.on { opacity: 1; color: var(--accent); }

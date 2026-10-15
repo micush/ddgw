@@ -429,7 +429,7 @@ const DNSDIR_HELP = {
         ["Hold time (seconds)", "How long a silent peer is kept before the session is declared down. Default `9`, minimum `3`. The session uses the lower hold time of the two ends, so a peer with longer timers agrees down to this."],
         ["AS of (a neighbor's row)", "The neighbor's AS number. A neighbor is created once it has an address and an AS."],
         ["Description of (a neighbor's row)", "A note of up to 60 characters shown with the neighbor."],
-        ["Password for (a neighbor's row)", "Optional MD5 session password; it must match the router's. Kept in the config file and its history, readable by root only."],
+        ["Password for (a neighbor's row)", "Optional MD5 session password; it must match the router's. The eye beside the box shows or hides what is typed. Kept in the config file and its history, readable by root only."],
         ["New neighbor address", "The router's IPv4 or IPv6 address, for example `192.0.2.1` or `2001:db8::1`, in the empty row above the table."],
         ["New neighbor AS", "That router's AS number."],
         ["Multihop of (a neighbor's row)", "For an eBGP peer that is not on a directly connected subnet, for example an AWS VPC Route Server endpoint: the hop limit, usually `2`. Empty means directly connected. FRR then runs BFD to that peer in multihop mode as well, so the peer must be set up the same way (one side multihop and the other not leaves BFD down and the session resetting). Ignored for an iBGP neighbor."],
