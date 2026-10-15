@@ -1,5 +1,21 @@
 # Changelog
 
+## [v393] - 2026-10-14 — Long names: whole name in the tooltip
+
+### Fixed
+- Statistics ▸ Top domains: a long domain name is cut with an ellipsis so Queries and Share stay in view, and the tooltip was meant to hold the full name but only said "Click: show who asked for this domain". The tooltip now starts with the whole name (a client's tooltip already listed its reverse names). Right-click ▸ **Copy** also copies the whole name.
+
+### Added
+- A text box in any table (the Resolution table of Configure ▸ DNS proxy, the other editable tables) whose value is wider than the box shows the whole value in a tooltip when the pointer is over it; a value that fits has no tooltip, and a box that already has one keeps it. One handler on the page, not one per table.
+- The cluster members table: a node's tooltip lists its full name as well as its cluster address (it showed only the address).
+- Checked the other tables: the DNS server names and the node names in the gateway table already carry the whole name as a tooltip; the remaining tables wrap or scroll instead of cutting a value.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+
+### Not verified
+- In a browser.
+
 ## [v392] - 2026-10-14 — Clear cache always acts on every node
 
 ### Fixed

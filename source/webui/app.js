@@ -67,6 +67,15 @@
   // Everything follows the node picked in the top bar (relayed through the node
   // you are logged in to) except the login itself.  The picker's own list of
   // nodes is asked of the login node explicitly (api(..., true)).
+  // A text box in any table whose value is wider than the box shows the whole value in its tooltip (nothing when it fits,
+  // and never over a tooltip a box was given on purpose).
+  document.addEventListener("mouseover", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== "text" || !t.closest("td")) return;
+    if (t.title && !t.dataset.fit) return;
+    t.dataset.fit = "1";
+    t.title = t.scrollWidth > t.clientWidth ? t.value : "";
+  });
   const LOCAL_API = /^\/api\/(login|logout|session|proxy|tshoot\/download|cache\/flush|cache\/clear)(\/|\?|$)/;
   // The Node menu's "Cluster" entry: Monitor ▸ Statistics and Monitor ▸ Host show every node's numbers added together
   // (the node you are logged in to asks the others).  Only those two pages offer it, and only their two requests change;
@@ -2483,7 +2492,7 @@
   const membersTable = (v, onRemove, named) => {
     const roleOf = (p) => (p.is_primary ? "primary" : (p.role || "replica"));
     const rows = v.peers.map((p) => h("tr", Object.assign({ class: p.self ? "local" : "" }, onRemove && !p.self ? { tabindex: "0", oncontextmenu: rowMenu([["Remove", () => onRemove(p), "danger"]]) } : {}),
-      named ? h("td", { class: "nname", title: p.addr }, p.hostname || p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)) : h("td", { class: "mono" }, p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)),
+      named ? h("td", { class: "nname", title: p.hostname && p.hostname !== p.addr ? p.hostname + "\n" + p.addr : p.addr }, p.hostname || p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)) : h("td", { class: "mono" }, p.addr, p.self ? " ★" : "", soakMark(p.soak_sec)),
       named ? h("td", { class: "mono" }, (p.ips && p.ips.length) ? p.ips.map((ip) => h("div", {}, ip)) : "–") : null,
       h("td", {}, pill(roleOf(p), p.is_primary ? "ok" : "info")),
       h("td", {}, p.reachable ? pill("yes", "ok") : p.restarting ? pill("restarting", "info") : pill("NO", "bad"), p.updating || p.restarting ? [" ", pill("updating", "warn")] : null),
@@ -3514,7 +3523,7 @@
                   const tail = withHost ? "\n\nClick: show what this client asked for" : "\n\nClick: show who asked for this domain";
                   const head = withHost ? (e.hosts && e.hosts.length ? e.hosts.join("\n") : "No reverse DNS name known (yet)") : "";
                   const b = h("button", { type: "button", class: "qlink mono", "data-name": e.name, "aria-pressed": e.name === o.picked ? "true" : "false",
-                    title: withHost ? head + tail : tail.trim(),
+                    title: withHost ? head + tail : e.name + tail,   // a long domain is cut in the cell; the tooltip has all of it
                     onclick: () => o.onPick(e.name === o.picked ? "" : e.name) }, e.name);
                   const nd = withHost ? null : nameDecision(e.name);
                   const blk = withHost ? blockedBy(e.name) : null, lim = withHost ? limitedBy(e.name) : null;
