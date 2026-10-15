@@ -1,5 +1,16 @@
 # Changelog
 
+## [v398] - 2026-10-15 — The IPv6 controller is drawn in blue
+
+### Changed
+- On the Topology drawing, when a dual-stack gateway has its IPv4 and IPv6 controllers on two different nodes, the dot of the node that is only the IPv6 controller is soft blue (its tooltip says "Gateway controller (IPv6)"). A node that is the IPv4 controller, or both, keeps the plain dot. New field `agc_afs` on a gateway member ("v4", "v6" or "v4+v6").
+
+### Verified
+- gofmt, vet, `go test`; headless Chromium (light and dark) with a mocked API: split controllers draw one plain and one blue dot, both on one node draws a single plain dot.
+
+### Not verified
+- Against a live cluster. A node that sits in a gateway only by its IPv6 address (no IPv4 member) is still not matched to its shape, as before.
+
 ## [v397] - 2026-10-15 — New gateways start with public DNS servers
 
 ### Added

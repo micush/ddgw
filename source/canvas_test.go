@@ -591,6 +591,9 @@ func TestCanvasMembers(t *testing.T) {
 		{GroupID: 1, AF: "v4", PeerIP: "10.0.0.8", AfnID: 0, State: "active"},  // no slot, not serving
 		{GroupID: 2, AF: "v4", PeerIP: "10.0.0.9", AfnID: 1, State: "active"},  // another gateway
 	}
+	if m := membersOf(rows, 1); m[0].AGCAFs != "v4+v6" || m[1].AGCAFs != "" {
+		t.Fatalf("a node that is the controller for both families says so, one that is not says nothing: %+v", m)
+	}
 	m := membersOf(rows, 1)
 	if len(m) != 2 || m[0].IP != "10.0.0.5" || !m[0].Local || !m[0].AGC || m[0].AFs != "v4+v6" || m[1].IP != "10.0.0.6" || m[1].AGC {
 		t.Fatalf("members: %+v", m)
@@ -603,14 +606,17 @@ func TestCanvasMembers(t *testing.T) {
 // On a dual-stack gateway a node has an IPv4 and a (link-local) IPv6 gateway address; it is still one serving node.
 func TestMergeMembersByNode(t *testing.T) {
 	g := []CanvasGateway{{Members: []CanvasMember{
-		{IP: "10.0.0.5", Local: true, AfnID: 1, AFs: "v4"},
+		{IP: "10.0.0.5", Local: true, AfnID: 1, AFs: "v4", AGC: true, AGCAFs: "v4"},
 		{IP: "fe80::5", Local: true, AfnID: 1, AFs: "v6"},
 		{IP: "10.0.0.6", AfnID: 2, AFs: "v4"},
-		{IP: "fe80::6", AfnID: 2, AFs: "v6", AGC: true},
+		{IP: "fe80::6", AfnID: 2, AFs: "v6", AGC: true, AGCAFs: "v6"},
 		{IP: "10.0.0.7", AfnID: 3, AFs: "v4"}, // a node the cluster cannot name yet stays as it is
 	}}}
 	mergeMembersByNode(g, map[string]string{"10.0.0.5": "ns1", "fe80::5": "ns1", "10.0.0.6": "ns2", "fe80::6": "ns2"})
 	m := g[0].Members
+	if m[0].AGCAFs != "v4" || m[1].AGCAFs != "v6" {
+		t.Fatalf("the controller of each family stays with its node after the merge: %+v", m)
+	}
 	if len(m) != 3 || !m[0].Local || m[0].AFs != "v4+v6" || m[1].AFs != "v4+v6" || !m[1].AGC || m[2].IP != "10.0.0.7" {
 		t.Fatalf("merged: %+v", m)
 	}

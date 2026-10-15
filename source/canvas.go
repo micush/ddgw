@@ -101,9 +101,12 @@ type CanvasGateway struct {
 // CanvasMember is one cluster node currently serving the gateway: it holds an
 // address-forwarding slot (AFN) and is still sending hellos.
 type CanvasMember struct {
-	IP     string `json:"ip"`
-	Local  bool   `json:"local"`
-	AGC    bool   `json:"agc"`
+	IP    string `json:"ip"`
+	Local bool   `json:"local"`
+	AGC   bool   `json:"agc"`
+	// AGCAFs is the address families this node is the controller for ("v4", "v6" or "v4+v6"), empty when it is not.  A
+	// dual-stack gateway elects its controllers separately, so they may be two nodes.
+	AGCAFs string `json:"agc_afs,omitempty"`
 	AfnID  int    `json:"afn_id"`
 	Weight int    `json:"weight"`
 	AFs    string `json:"afs"`
@@ -130,6 +133,10 @@ func membersOf(rows []SnapshotRow, gid int) []CanvasMember {
 		out[i].AFs += r.AF
 		if r.AGCIP == r.PeerIP {
 			out[i].AGC = true
+			if out[i].AGCAFs != "" {
+				out[i].AGCAFs += "+"
+			}
+			out[i].AGCAFs += r.AF
 		}
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].IP < out[b].IP })
@@ -159,6 +166,14 @@ func mergeMembersByNode(groups []CanvasGateway, names map[string]string) {
 			o := &out[j]
 			o.Local = o.Local || m.Local
 			o.AGC = o.AGC || m.AGC
+			for _, af := range strings.Split(m.AGCAFs, "+") {
+				if af != "" && !containsStr(strings.Split(o.AGCAFs, "+"), af) {
+					if o.AGCAFs != "" {
+						o.AGCAFs += "+"
+					}
+					o.AGCAFs += af
+				}
+			}
 			for _, af := range strings.Split(m.AFs, "+") {
 				if af != "" && !containsStr(strings.Split(o.AFs, "+"), af) {
 					o.AFs += "+" + af

@@ -278,6 +278,7 @@ svg.cv .shape.st-paused text.t1 { fill: var(--muted); }
 svg.cv .shape.sel circle, svg.cv .shape.sel rect, svg.cv .shape.sel polygon { stroke-width: 5; }
 svg.cv .shape:focus-visible circle, svg.cv .shape:focus-visible rect, svg.cv .shape:focus-visible polygon { stroke-width: 5; stroke-dasharray: 6 3; }
 svg.cv text { fill: var(--text); font: 600 13px system-ui, sans-serif; pointer-events: none; }
+svg.cv tspan.agc6 { fill: var(--info); }   /* the IPv6 gateway controller, when it is not the IPv4 one */
 svg.cv text.t2 { font-weight: 400; font-size: 11px; fill: var(--muted); }
 .nav-item.add { color: var(--muted); font-style: italic; }
 .nav-item .dot { margin: 0 .55rem 0 0; vertical-align: baseline; }
