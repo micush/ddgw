@@ -459,21 +459,34 @@
     renderTopbar();
   }
 
-  function renderTopbar() {
+  // The picker is rebuilt only when what it shows changed, and not while it is open: the list is refreshed every few
+  // seconds, and replacing the <select> under an open drop-down closes it.  A change that arrives meanwhile is drawn
+  // as soon as the picker loses focus.  force: the person just picked something, draw it now.
+  let topbarSig = "";
+  function renderTopbar(force) {
     const bar = document.getElementById("topbar");
     if (!bar) return;
+    const hidden = state.nodes.length < 2;
+    const items = hidden ? [] : [["", nodeLabel(selfNode()) + " (this node)", false]].concat(state.nodes.filter((x) => !x.self).map((n) =>
+      [n.addr, nodeLabel(n) + (n.is_primary ? " · primary" : "") + (n.reachable ? "" : " · unreachable"), !n.reachable && n.addr !== state.target]));
+    if (!hidden && CLUSTER_TABS.includes(state.tab)) items.push([CLUSTER, "Cluster (" + state.nodes.length + ")", false]);
+    const sig = JSON.stringify([hidden, items, state.target || ""]);
+    const cur = bar.querySelector("select");
+    if (!force && cur && sig === topbarSig) return;   // nothing to change
+    if (!force && cur && document.activeElement === cur) {   // open or in use: draw it when it is let go
+      if (!cur.dataset.pending) { cur.dataset.pending = "1"; cur.addEventListener("blur", () => { delete cur.dataset.pending; renderTopbar(); }, { once: true }); }
+      return;
+    }
+    topbarSig = sig;
     clear(bar);
-    bar.classList.toggle("hidden", state.nodes.length < 2);
-    if (state.nodes.length < 2) return;
+    bar.classList.toggle("hidden", hidden);
+    if (hidden) return;
     const sel = h("select", { id: "node-pick", "aria-label": "Node to configure and monitor", onchange: (e) => setTarget(e.target.value || null) });
-    const self = selfNode();
-    sel.append(h("option", { value: "" }, nodeLabel(self) + " (this node)"));
-    for (const n of state.nodes.filter((x) => !x.self)) {
-      const o = h("option", { value: n.addr }, nodeLabel(n) + (n.is_primary ? " · primary" : "") + (n.reachable ? "" : " · unreachable"));
-      if (!n.reachable && n.addr !== state.target) o.disabled = true;
+    for (const [value, text, disabled] of items) {
+      const o = h("option", { value }, text);
+      if (disabled) o.disabled = true;
       sel.append(o);
     }
-    if (CLUSTER_TABS.includes(state.tab)) sel.append(h("option", { value: CLUSTER }, "Cluster (" + state.nodes.length + ")"));
     sel.value = state.target || "";
     bar.append(h("label", { for: "node-pick", class: "muted small" }, "Node"), sel);
   }
@@ -482,7 +495,7 @@
     if ((addr || null) === state.target) return;
     state.target = addr || null;
     document.body.classList.toggle("remote", !!state.target && state.target !== CLUSTER);   // another node's page is marked; the cluster's is no node
-    renderTopbar();
+    renderTopbar(true);
     state.topo.action = null;   // the gateway picked stays picked: the sidebar list is the signed-in node's, whichever node is driven
     refreshTopoNav();
     certBanner();

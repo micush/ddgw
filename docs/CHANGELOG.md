@@ -1,5 +1,16 @@
 # Changelog
 
+## [v399] - 2026-10-15 — The Node drop-down stays open while the page refreshes
+
+### Fixed
+- The **Node** picker at the top right closed by itself when it was open at the moment the node list was refreshed (every 6 seconds): the whole `<select>` was thrown away and rebuilt each time. It is now rebuilt only when what it shows has changed, and not while it has focus; a change that arrives meanwhile (a node going unreachable, say) is drawn as soon as the picker is let go. Picking a node still takes effect at once.
+
+### Verified
+- `node --check`, gofmt, vet, `go test`. Headless Chromium against the real `app.js` with a mocked two-node cluster: before, the picker element was replaced on every refresh; now it survives refreshes, survives a change of the list while focused (and shows the change after it loses focus), and picking a node still switches to it.
+
+### Not verified
+- A real open native drop-down (headless Chromium cannot show one); focus is used as the stand-in for "open". Other lists redrawn by polling (the sidebar's gateway list, for example) were not looked at.
+
 ## [v398] - 2026-10-15 — The IPv6 controller is drawn in blue
 
 ### Changed
