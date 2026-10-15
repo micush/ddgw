@@ -575,7 +575,7 @@ usermod -aG dnsdir alice
 cp contrib/pam.d/dnsdir.debian /etc/pam.d/dnsdir     # or dnsdir.rhel
 ```
 
-Without `/etc/pam.d/dnsdir`, PAM falls back to its `other` policy, which usually denies everything. `root` is not special: add it to the group if you want it to log in. Removing a user from the group ends their session within a minute.
+Without `/etc/pam.d/dnsdir`, PAM falls back to its `other` policy, which usually denies everything. The help panel has a **Find** box at its top: every match in the page's help is marked, Enter goes to the next one (Shift+Enter the one before) and Esc empties the box. `root` is not special: add it to the group if you want it to log in. Removing a user from the group ends their session within a minute.
 
 The PAM binding uses cgo, so build natively with `libpam0g-dev` (Debian and Ubuntu) or `pam-devel` (RHEL) installed. A build without cgo, including any cross-compile, has no PAM, so it **refuses to start the GUI** rather than serve it unauthenticated. The daemon and the command line work normally.
 

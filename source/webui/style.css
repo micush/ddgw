@@ -333,6 +333,11 @@ body.remote .topbar select { border-color: var(--amber); }
 .help-panel-header h2 { margin: 0; font-size: 1.1rem; }
 .help-close-btn { border: 0; background: none; color: var(--muted); font-size: 1.6rem; line-height: 1; cursor: pointer; }
 .help-close-btn:hover { color: var(--text); }
+.help-find-row { display: flex; align-items: center; gap: .6rem; padding: .5rem 1.1rem; border-bottom: 1px solid var(--border); }
+.help-find { flex: 1 1 auto; min-width: 0; }
+.help-find-count { flex: none; min-width: 3.2rem; text-align: right; }
+mark.help-hit { background: #ffe066; color: #000; border-radius: 2px; padding: 0 1px; }
+mark.help-hit.cur { background: #ff9f1a; outline: 2px solid var(--accent); }
 .help-panel-body { overflow-y: auto; padding: 1rem 1.1rem 2rem; line-height: 1.5; }
 .help-panel-body h3 { margin: 1.1rem 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .help-panel-body h3:first-child { margin-top: 0; }

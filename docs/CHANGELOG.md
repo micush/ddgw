@@ -1,5 +1,17 @@
 # Changelog
 
+## [v396] - 2026-10-14 — Help: a Find box
+
+### Added
+- The help panel (the **?** at the top right) has a **Find** box above the text. Typing marks every match in the page's help (not case sensitive) and shows `1 / 12`; Enter goes to the next match, Shift+Enter to the one before, and the current one has its own colour and is scrolled into view. Esc empties the box (a second Esc closes the panel). The word stays marked when the help changes to another page's. A match is found inside one piece of text, so a phrase that runs from plain text into bold or code is not found as one.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1`, CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+- In headless Chromium against the real `app.js`, `style.css` and `help.js` (mocked API, light and dark): the panel opened, typing marked the matches (331 for "the" on the Topology help), the counter, Enter and Shift+Enter moved through them, an unknown word marked nothing and said `0`, upper case found the same matches, Esc emptied the box and left the panel open, and the help's text was unchanged after marking and unmarking. No page errors.
+
+### Not verified
+- Against a live daemon.
+
 ## [v395] - 2026-10-14 — Policy names: `**` for any number of labels
 
 ### Added

@@ -365,8 +365,16 @@
     const overlay = h("div", { class: "help-overlay hidden", id: "help-overlay" });
     const title = h("h2", { id: "help-title" });
     const body = h("div", { class: "help-panel-body", id: "help-body" });
+    // Find: every match in the page's help is marked; Enter goes to the next one, Shift+Enter to the one before, Esc empties the box
+    const find = h("input", { type: "text", class: "help-find", id: "help-find", placeholder: "Find", "aria-label": "Find in help", autocomplete: "off", spellcheck: "false",
+      oninput: () => markHelp(true),
+      onkeydown: (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); stepHelp(ev.shiftKey ? -1 : 1); }
+        else if (ev.key === "Escape" && find.value) { ev.stopPropagation(); find.value = ""; markHelp(true); }
+      } });
     const panel = h("aside", { class: "help-panel", id: "help-panel", "aria-hidden": "true", "aria-label": "Help" },
-      h("div", { class: "help-panel-header" }, title), body);
+      h("div", { class: "help-panel-header" }, title),
+      h("div", { class: "help-find-row" }, find, h("span", { class: "help-find-count muted small", id: "help-find-count" })), body);
     const btn = h("button", { class: "help-btn", id: "help-btn", type: "button", title: "Help for this page", "aria-label": "Help",
       onclick: () => setHelp(!panel.classList.contains("open")) }, "?");
     overlay.addEventListener("click", () => setHelp(false));
@@ -384,6 +392,42 @@
     b.setAttribute("aria-label", open ? "Close help" : "Help");
     b.title = open ? "Close help (Esc)" : "Help for this page";
   }
+  let helpHits = [], helpAt = 0;
+  function markHelp(jump) {
+    const body = document.getElementById("help-body"), box = document.getElementById("help-find"), count = document.getElementById("help-find-count");
+    if (!body || !box) return;
+    for (const m of body.querySelectorAll("mark.help-hit")) m.replaceWith(document.createTextNode(m.textContent));   // take the old marks out
+    body.normalize();
+    helpHits = []; helpAt = 0;
+    const q = box.value.toLowerCase();
+    if (q) {
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+      const texts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n);
+      for (const node of texts) {
+        let cur = node;
+        for (let i = cur.data.toLowerCase().indexOf(q); i >= 0; i = cur.data.toLowerCase().indexOf(q)) {
+          const hit = cur.splitText(i), rest = hit.splitText(q.length);
+          const m = h("mark", { class: "help-hit" }, hit.data);
+          hit.replaceWith(m);
+          helpHits.push(m);
+          cur = rest;
+        }
+      }
+    }
+    count.textContent = q ? (helpHits.length ? "1 / " + helpHits.length : "0") : "";
+    if (helpHits.length) stepHelp(0, jump);
+  }
+  // the current match gets its own colour and is scrolled into view
+  function stepHelp(d, jump = true) {
+    if (!helpHits.length) return;
+    helpHits[helpAt].classList.remove("cur");
+    helpAt = (helpAt + d + helpHits.length) % helpHits.length;
+    const m = helpHits[helpAt];
+    m.classList.add("cur");
+    document.getElementById("help-find-count").textContent = (helpAt + 1) + " / " + helpHits.length;
+    if (jump) m.scrollIntoView({ block: "center" });
+  }
   function fillHelp() {
     // the DNS proxy page has a help page for each of its tabs
     const topic = state.tab === "cfg_dns" && DNSDIR_HELP["config_dns" + state.dnsTab] ? "config_dns" + state.dnsTab : state.tab.startsWith("cfg_") ? "config" : state.tab;
@@ -392,6 +436,7 @@
     const body = clear(document.getElementById("help-body"));
     body.append(...kids);
     body.scrollTop = 0;
+    markHelp(false);   // a word typed in Find stays marked on the next page's help
   }
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setHelp(false); });
 
