@@ -582,3 +582,12 @@ dialog.nt-dialog { width: min(48rem, calc(100vw - 2rem)); }
 button.linkbtn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--accent); cursor: pointer; }
 button.linkbtn:hover { text-decoration: underline; }
 .card > footer.qpager { display: flex; justify-content: flex-end; padding: .5rem .75rem; border-top: 1px solid var(--border); }
+/* the Top cards keep one size: ten fixed-height rows, and the page buttons always in the same place at the foot */
+.card.qcard { display: flex; flex-direction: column; }
+.card.qcard > .body { flex: 1; min-height: 34.5rem; }
+table.qtop tbody tr { height: 3.2rem; }
+table.qtop td { padding-top: .3rem; padding-bottom: .3rem; vertical-align: middle; }
+table.qtop td .small { margin-top: 0; line-height: 1.2; }
+.card.qcard > .body .empty { padding-top: 2rem; }
+.card > footer.qpager { margin-top: auto; }
+table.qtop.plain tbody tr { height: 2.6667rem; }   /* twelve of these are as tall as ten rows with a host name under them */

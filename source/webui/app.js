@@ -3602,29 +3602,30 @@
       clearTimeout(filterTimer);
       filterTimer = setTimeout(load, 300);
     }
-    const TOP_PAGE = 10;
+    const TOP_PAGE = 10, TOP_PAGE_PLAIN = 12;   // rows with a host name under them are taller, so the list without them holds more and the two cards stay level
     function topTable(title, items, total, withHost, o) {
       const filtered = !!(withHost ? cFilter : dFilter);
       const pk = withHost ? "c" : "d";
-      const pages = Math.max(1, Math.ceil(items.length / TOP_PAGE));
+      const size = withHost ? TOP_PAGE : TOP_PAGE_PLAIN;
+      const pages = Math.max(1, Math.ceil(items.length / size));
       topPage[pk] = Math.min(Math.max(topPage[pk], 0), pages - 1);
-      const from = topPage[pk] * TOP_PAGE;
-      const rows = items.slice(from, from + TOP_PAGE);   // every result is listed, a page at a time
+      const from = topPage[pk] * size;
+      const rows = items.slice(from, from + size);   // every result is listed, a page at a time
       const go = (d) => () => { topPage[pk] += d; draw(last); };
-      const pager = pages > 1 ? h("span", { class: "pager" },
-        h("span", { class: "muted small" }, (from + 1) + "–" + (from + rows.length) + " of " + items.length),
+      const pager = h("span", { class: "pager" },
+        h("span", { class: "muted small" }, (rows.length ? (from + 1) + "–" + (from + rows.length) : "0") + " of " + items.length),
         h("button", { class: "btn small", type: "button", "aria-label": "Previous page", disabled: topPage[pk] === 0, onclick: go(-1) }, "‹"),
         h("span", { class: "muted small" }, "Page " + (topPage[pk] + 1) + " of " + pages),
-        h("button", { class: "btn small", type: "button", "aria-label": "Next page", disabled: topPage[pk] >= pages - 1, onclick: go(1) }, "›")) : null;
+        h("button", { class: "btn small", type: "button", "aria-label": "Next page", disabled: topPage[pk] >= pages - 1, onclick: go(1) }, "›"));
       const mine = withHost ? "Client" : "Domain";
-      return h("div", { class: "card" }, h("header", { class: "bar" }, h("h2", {}, tc(title)), h("span", { class: "grow" }),
+      return h("div", { class: "card qcard" }, h("header", { class: "bar" }, h("h2", {}, tc(title)), h("span", { class: "grow" }),
         h("input", { type: "text", class: "qfilter", placeholder: "Filter", "aria-label": "Filter " + (withHost ? "clients" : "domains"), autocomplete: "off", spellcheck: "false",
           value: withHost ? cFilter : dFilter, oninput: (ev) => onFilter(withHost, ev.currentTarget.value),
           onkeydown: (ev) => { if (ev.key === "Escape" && ev.currentTarget.value) { ev.currentTarget.value = ""; onFilter(withHost, ""); } } }),
         ),
         h("div", { class: "hint qnote" }, o.note ? [o.note, " ", h("button", { class: "qlink", type: "button", onclick: o.onClear }, "Show all")] : "\u00a0"),
         h("div", { class: "body flush" }, rows.length
-          ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
+          ? h("div", { class: "scroll" }, h("table", { class: "qtop" + (withHost ? "" : " plain") }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
             h("tbody", {}, rows.map((e) => h("tr", { class: e.name === o.picked ? "picked" : null,
               // right-click a domain: add a Policy-Based Resolution row for it
               oncontextmenu: e.name === "(others)" ? null : (ev) => (withHost ? clientMenu(ev, e.name, e) : domainMenu(ev, e.name)) },
@@ -3654,7 +3655,7 @@
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
               h("td", { class: "num", title: n0(e.count) }, shortCount(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
           : h("div", { class: "empty" }, filtered ? "Nothing matches “" + (withHost ? cFilter : dFilter) + "”." : "No queries in this range.")),
-        pager ? h("footer", { class: "qpager" }, pager) : null);
+        h("footer", { class: "qpager" }, pager));
     }
 
     const shareBase = (d) => { const k = Object.keys(KINDS).find((x) => KINDS[x] === sel); return k ? d.sums[k] : d.sums.total; };

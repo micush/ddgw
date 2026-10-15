@@ -1,5 +1,17 @@
 # Changelog
 
+## [v403] - 2026-10-15 — Top cards keep one size
+
+### Changed
+- The Top Clients and Top Domains cards are always the same height and the page buttons (“1–10 of n”, ‹ ›) always sit in the same place at the foot, whatever the number of results; a card with one page shows them disabled.
+- Client rows (which can show a host name underneath) are taller than domains rows, so Top Domains lists 12 to a page against 10 for Top Clients, which makes the two lists equally tall.
+
+### Verified
+- Headless Chromium with 25 clients and 30 domains: both cards 697 px high, tables 546 px, footers at the same offset. The projects build.
+
+### Not verified
+- Not looked at with real host names under the client addresses, and the Go test suite was not re-run for this UI-only change (it passed on v402).
+
 ## [v402] - 2026-10-15 — Top cards: page controls at the bottom
 
 ### Changed
