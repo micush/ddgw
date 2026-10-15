@@ -3621,7 +3621,7 @@
         h("input", { type: "text", class: "qfilter", placeholder: "Filter", "aria-label": "Filter " + (withHost ? "clients" : "domains"), autocomplete: "off", spellcheck: "false",
           value: withHost ? cFilter : dFilter, oninput: (ev) => onFilter(withHost, ev.currentTarget.value),
           onkeydown: (ev) => { if (ev.key === "Escape" && ev.currentTarget.value) { ev.currentTarget.value = ""; onFilter(withHost, ""); } } }),
-        pager),
+        ),
         h("div", { class: "hint qnote" }, o.note ? [o.note, " ", h("button", { class: "qlink", type: "button", onclick: o.onClear }, "Show all")] : "\u00a0"),
         h("div", { class: "body flush" }, rows.length
           ? h("div", { class: "scroll" }, h("table", { class: "qtop" }, h("thead", {}, h("tr", {}, h("th", {}, mine), h("th", { class: "num" }, "Queries"), h("th", { class: "num" }, "Share"))),
@@ -3653,7 +3653,8 @@
                 })(),
                 e.host ? h("div", { class: "muted small" }, e.host) : null),
               h("td", { class: "num", title: n0(e.count) }, shortCount(e.count)), h("td", { class: "num" }, pct(e.count, total)))))))
-          : h("div", { class: "empty" }, filtered ? "Nothing matches “" + (withHost ? cFilter : dFilter) + "”." : "No queries in this range.")));
+          : h("div", { class: "empty" }, filtered ? "Nothing matches “" + (withHost ? cFilter : dFilter) + "”." : "No queries in this range.")),
+        pager ? h("footer", { class: "qpager" }, pager) : null);
     }
 
     const shareBase = (d) => { const k = Object.keys(KINDS).find((x) => KINDS[x] === sel); return k ? d.sums[k] : d.sums.total; };

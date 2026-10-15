@@ -581,3 +581,4 @@ dialog.nt-dialog { width: min(48rem, calc(100vw - 2rem)); }
 /* a button that reads as plain clickable text */
 button.linkbtn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--accent); cursor: pointer; }
 button.linkbtn:hover { text-decoration: underline; }
+.card > footer.qpager { display: flex; justify-content: flex-end; padding: .5rem .75rem; border-top: 1px solid var(--border); }

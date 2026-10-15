@@ -1,9 +1,20 @@
 # Changelog
 
+## [v402] - 2026-10-15 — Top cards: page controls at the bottom
+
+### Changed
+- The page controls of the Top Clients / Top Domains cards moved from the card header to a footer at the bottom of the card.
+
+### Verified
+- Headless Chromium with 25 clients: the footer shows "1–10 of 25", Page 1 of 3, and ‹ › step through the pages; a single page shows no footer. The project builds.
+
+### Not verified
+- The full Go test suite was not re-run for this UI-only change (it passed on v401).
+
 ## [v401] - 2026-10-15 — Top Clients / Top Domains paginate
 
 ### Changed
-- The Top Clients / Top Domains cards no longer have More / Fewer buttons. They list every result the server returns (up to 100 names plus “(others)”), ten to a page, with ‹ › buttons and “1–10 of n” in the card header. A new filter, tile, pick or range starts again on page one.
+- The Top Clients / Top Domains cards no longer have More / Fewer buttons. They list every result the server returns (up to 100 names plus “(others)”), ten to a page, with ‹ › buttons and “1–10 of n” at the bottom of the card. A new filter, tile, pick or range starts again on page one.
 
 ### Verified
 - Headless Chromium with 25 clients: ten rows a page, "1–10 of 25", Page 1 of 3, ‹ › step through, the last page holds 5, a new filter or pick returns to page one, no More/Fewer button left.
