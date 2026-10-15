@@ -489,13 +489,47 @@ func policyAction(servers []string) string {
 	return ""
 }
 
+// defaultBlockTTL is how long (seconds) a client may remember a blocked answer unless policy_block_ttl says otherwise.
+const defaultBlockTTL = 4 * 3600
+
+func (p *Pool) blockTTL() uint32 {
+	if p != nil && p.cfg.PolicyBlockTTL > 0 {
+		n := p.cfg.PolicyBlockTTL
+		return uint32(n)
+	}
+	return defaultBlockTTL
+}
+
+// negativeAnswer is an empty answer with rcode (NOERROR for "no data", NXDOMAIN) that carries a made-up SOA record in its
+// authority section.  RFC 2308 lets a client remember a negative answer only for the SOA's TTL or MINIMUM, whichever is
+// smaller, and only when there is an SOA; without one most resolvers ask again every time.
+func negativeAnswer(query []byte, rcode int, ttl uint32) []byte {
+	resp := errorResponse(query, rcode)
+	if resp == nil || len(resp) <= 12 { // no question to hang the record on
+		return resp
+	}
+	rd := dnsWireName("ns.invalid")
+	rd = append(rd, dnsWireName("hostmaster.invalid")...)
+	for _, v := range []uint32{1, 3600, 600, 1209600, ttl} { // serial, refresh, retry, expire, minimum
+		rd = binary.BigEndian.AppendUint32(rd, v)
+	}
+	resp = append(resp, 0xC0, 0x0C) // the owner is the name asked for
+	resp = binary.BigEndian.AppendUint16(resp, typeSOA)
+	resp = binary.BigEndian.AppendUint16(resp, 1)
+	resp = binary.BigEndian.AppendUint32(resp, ttl)
+	resp = binary.BigEndian.AppendUint16(resp, uint16(len(rd)))
+	resp = append(resp, rd...)
+	binary.BigEndian.PutUint16(resp[8:], 1) // NSCOUNT
+	return resp
+}
+
 // localAnswer is the row's own answer to query.
 func (r *policyRule) localAnswer(ctx context.Context, p *Pool, query []byte, qi *qinfo) []byte {
 	switch r.action {
 	case polRecord:
 		return r.recordAnswer(ctx, p, query, qi)
 	case polNXDomain:
-		return errorResponse(query, rcodeNXDomain)
+		return negativeAnswer(query, rcodeNXDomain, p.blockTTL())
 	case polRefused:
 		return errorResponse(query, rcodeRefused)
 	case polNull:
@@ -513,7 +547,7 @@ func (r *policyRule) localAnswer(ctx context.Context, p *Pool, query []byte, qi 
 			return resp
 		}
 	}
-	return errorResponse(query, rcodeNoError) // nodata, and null for a type that has no null address
+	return negativeAnswer(query, rcodeNoError, p.blockTTL()) // nodata, and null for a type that has no null address
 }
 
 // order is the row's servers in the order to try them: as listed, those whose last query failed after the others.

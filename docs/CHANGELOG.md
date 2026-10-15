@@ -1,5 +1,18 @@
 # Changelog
 
+## [v394] - 2026-10-14 — Blocked answers carry an SOA, so clients can remember them
+
+### Added
+- A blocked answer (a Policy-Based Resolution row's `nodata`, `nxdomain`, and `null` for a type other than A and AAAA, which is also what Block writes) now carries a made-up SOA record in its authority section (owner: the name asked for; MNAME `ns.invalid`; TTL and MINIMUM: the new setting). RFC 2308 lets a client remember a negative answer only for that time, and only when there is an SOA, so before this most resolvers asked again every time. Clients with a cache of their own (systemd-resolved, dnsmasq, Windows, most forwarders) now ask once per period; a client with no cache still asks every time, and `refused` cannot be remembered at all.
+- **Blocked answer cache (s)** (`policy_block_ttl`, Configure ▸ DNS proxy ▸ Resolution; shared): 0–604800 seconds, default **14400** (4 hours); 0 or empty means 14400. The key is omitted from the config while it is unset, so a config that never used it stays readable by older versions.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestNegativeAnswerCarriesSOA`, `TestBlockTTLDefault`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`.
+- A real daemon on loopback with one `nodata` row and one `nxdomain` row: both answers came back with one SOA in the authority section, TTL and MINIMUM 14400, no answer records; an ordinary name was answered as before.
+
+### Not verified
+- Real clients' behaviour with the SOA (which of them stop asking); in a browser; a multi-node run (the setting is shared like the other policy settings).
+
 ## [v393] - 2026-10-14 — Long names: whole name in the tooltip
 
 ### Fixed

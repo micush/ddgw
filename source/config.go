@@ -547,6 +547,10 @@ type DNSConfig struct {
 	PolicyOn bool `json:"policy_on"`
 	// PolicyLog writes a log line for each query a policy row applies to (default true; at most 100 a second).
 	PolicyLog bool `json:"policy_log"`
+	// PolicyBlockTTL is how many seconds a client may remember a blocked answer (a row's nodata, nxdomain, or null for a
+	// type that has no null address): the answer carries a made-up SOA whose TTL and MINIMUM are this (RFC 2308), so a
+	// client that caches negative answers stops asking.  0 means the default, 14400 (4 hours).
+	PolicyBlockTTL int `json:"policy_block_ttl,omitempty"`
 	// ClientRate limits each client (an IPv4 address or an IPv6 /64) to this many queries a second; 0 (the default)
 	// is no limit. ClientBurst is how many it may send at once (0 = twice the rate, at least 10). ClientAction is what
 	// a client over its rate gets: "drop" (the default, kept as empty in the file), "truncate" (UDP: a short answer
@@ -1048,7 +1052,7 @@ func (c *DNSConfig) followSettings(shared DNSConfig) {
 	if len(c.ClientLimits) == 0 {
 		c.ClientLimits = nil
 	}
-	c.PolicyOn, c.PolicyLog = shared.PolicyOn, shared.PolicyLog
+	c.PolicyOn, c.PolicyLog, c.PolicyBlockTTL = shared.PolicyOn, shared.PolicyLog, shared.PolicyBlockTTL
 	c.Policy = clonePolicy(shared.Policy)
 	c.SortListOn = shared.SortListOn
 	c.SortList = append([]string(nil), shared.SortList...)
@@ -1551,6 +1555,9 @@ func (d *DNSConfig) validateClientNames() error {
 		if _, err := validHostName(d.RegisterKeyName); err != nil {
 			return fmt.Errorf("dns: register_key_name: %v", err)
 		}
+	}
+	if d.PolicyBlockTTL < 0 || d.PolicyBlockTTL > 604800 {
+		return errors.New("dns: policy_block_ttl is 0-604800 seconds (0: 14400)")
 	}
 	if d.RegisterTTL < 0 || d.RegisterTTL > 86400 {
 		return errors.New("dns: register_ttl is 0-86400 seconds (0: 300)")

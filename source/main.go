@@ -207,6 +207,8 @@ DNS proxy ("dns" block at the top level of the config):
                      refuses it (FORMERR/REFUSED) is asked again without and then left alone
   forward_updates    true (default) forwards dynamic DNS updates (RFC 2136) to the primary
                      server named in the zone's SOA record, unchanged; false answers REFUSED
+  policy_block_ttl   seconds (default 14400) a client may remember a blocked answer (nodata,
+                     nxdomain, null for other types): they carry a made-up SOA with this time
   spread             true (default) shares queries out: servers within spread_band (20) percent
                      of the fastest one's latency take turns (round-robin); false = fastest first
   cache              true (default) answers repeated queries from memory while the records'

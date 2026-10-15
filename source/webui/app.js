@@ -1981,6 +1981,7 @@
     { section: "Policy-Based Resolution" },
     { shared: true, k: "policy_on", l: "Policy-Based Resolution enabled", t: "bool" },
     { shared: true, k: "policy_log", l: "Log policy matches", t: "bool" },
+    { shared: true, k: "policy_block_ttl", l: "Blocked answer cache (s)", t: "int", min: 0, max: 604800, hint: "0 = 14400" },
     { shared: true, k: "policy", l: "Policy rows", t: "policy", wide: true },
     { section: "Client Rate Limiting", note: "Applies to every gateway that uses these settings, over UDP, TCP, DoT and DoH, before the cache. This node itself is always allowed and never limited. Counters are per node." },
     { shared: true, k: "allowed_clients", l: "Allowed clients", t: "list", wide: true, hint: "Networks that may use the proxy, one per line: 10.0.0.0/8, 192.168.1.5, 2001:db8::/32. Empty = everyone. Anyone else is answered REFUSED (dynamic updates too)." },

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"strings"
 	"testing"
 )
@@ -244,5 +245,52 @@ func TestPolicyClientCellValidation(t *testing.T) {
 		if _, err := normalizePolicy([]PolicyRule{{Client: bad, Name: "x.example", Servers: []string{"10.9.0.1"}}}); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func TestNegativeAnswerCarriesSOA(t *testing.T) {
+	q := cacheQuery("blocked.example.com", 1, nil)
+	for _, rc := range []int{rcodeNoError, rcodeNXDomain} {
+		resp := negativeAnswer(q, rc, 14400)
+		h, ok := parseHeader(resp)
+		if !ok || h.rcode != rc {
+			t.Fatalf("rcode %d: header %+v", rc, h)
+		}
+		if binary.BigEndian.Uint16(resp[6:]) != 0 || binary.BigEndian.Uint16(resp[8:]) != 1 {
+			t.Fatalf("counts: answers %d, authority %d", binary.BigEndian.Uint16(resp[6:]), binary.BigEndian.Uint16(resp[8:]))
+		}
+		rrs, _ := parseRRs(resp)
+		found := false
+		for _, rr := range rrs {
+			if rr.typ == typeSOA && rr.sec == 1 && rr.name == "blocked.example.com" {
+				found = true
+				if rr.ttl != 14400 {
+					t.Fatalf("SOA ttl %d", rr.ttl)
+				}
+				// the last 4 bytes of the rdata are MINIMUM
+				end := rr.off + rr.length
+				if got := binary.BigEndian.Uint32(resp[end-4 : end]); got != 14400 {
+					t.Fatalf("SOA minimum %d", got)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("no SOA for the name in %x", resp)
+		}
+	}
+}
+
+func TestBlockTTLDefault(t *testing.T) {
+	var p Pool
+	if p.blockTTL() != 14400 {
+		t.Fatal("default is 4 hours")
+	}
+	p.cfg.PolicyBlockTTL = 60
+	if p.blockTTL() != 60 {
+		t.Fatal("setting ignored")
+	}
+	var nilPool *Pool
+	if nilPool.blockTTL() != 14400 {
+		t.Fatal("nil pool")
 	}
 }

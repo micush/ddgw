@@ -253,6 +253,7 @@ When the Destination name is a name, the servers are asked for that name instead
 - **Servers of a row are not probed**, so they are never marked down. If none of them answers, the client gets SERVFAIL; the query does not fall back to the gateway's servers.
 - **Caching.** Answers are cached for each row's servers and destination separately, so a client sent to one set never gets an answer cached for another.
 - **Size and speed.** The table holds up to 10000 rows. Rows are found by name through an index, so a long table does not slow queries down.
+- **Blocked answers.** A row's `nodata`, `nxdomain` and `null` (for a type other than A and AAAA) carry a made-up SOA record in the authority section, with `policy_block_ttl` seconds (default 14400, 4 hours; the **Blocked answer cache (s)** box) as its TTL and MINIMUM. A client that remembers negative answers (RFC 2308: systemd-resolved, dnsmasq, Windows, most forwarders) then stops asking for that long. A client with no cache of its own asks again whatever it is told, and `refused` cannot be remembered at all.
 - **Log.** `policy_log` (default true; the **Log policy matches** tick box) logs each query a row applied to, at most 100 a second, for example `dns: policy row 3: 10.1.1.1 asked www.example.com A: answered null`.
 - **The sort list and the client limits** apply as before.
 
