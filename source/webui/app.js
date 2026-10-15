@@ -3272,6 +3272,20 @@
       if (rest.startsWith("*.")) { any = true; rest = rest.slice(2); }
       const labels = rest.split(".");
       if (labels.some((l) => !/^[a-z0-9_*?-]{1,63}$/.test(l))) return null;
+      if (labels.filter((l) => l === "**").length > 3 || !labels.some((l) => !/[*?]/.test(l)) && labels.includes("**")) return null;   // the daemon refuses these
+      if (labels.includes("**")) {   // "**" is any number of whole labels, none included (a leading "*." counts as one)
+        const pat = any ? ["**", ...labels] : labels;
+        return { test: (d) => {
+          const ls = d.split(".");
+          let prev = Array(ls.length + 1).fill(false); prev[0] = true;
+          for (const p of pat) {
+            const cur = Array(ls.length + 1).fill(false);
+            for (let j = 0; j <= ls.length; j++) cur[j] = p === "**" ? (prev[j] || (j > 0 && cur[j - 1])) : j > 0 && prev[j - 1] && wild(p, ls[j - 1]);
+            prev = cur;
+          }
+          return prev[ls.length];
+        } };
+      }
       return { test: (d) => { let ls = d.split("."); if (any) { if (ls.length < labels.length) return false; ls = ls.slice(ls.length - labels.length); } else if (ls.length !== labels.length) return false; return labels.every((p, i) => wild(p, ls[i])); } };
     };
     const nameRulesOf = (cfg) => {

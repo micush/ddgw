@@ -318,3 +318,67 @@ func TestNameGlob(t *testing.T) {
 		t.Fatal("a pattern as a destination must be refused")
 	}
 }
+
+func TestGlobMultiLabel(t *testing.T) {
+	name := "esxnzaydev502.marc.fr.ssg.lab.ptx.sbs.corp"
+	for _, c := range []struct {
+		pat  string
+		name string
+		want bool
+	}{
+		{"**.marc.fr.ssg.**", name, true},
+		{"**.marc.fr.ssg.**", "marc.fr.ssg", true}, // none counts
+		{"**.marc.fr.ssg.**", "a.b.marc.fr.ssg.c.d.e", true},
+		{"**.marc.fr.ssg.**", "marc.fr.other.lab", false},
+		{"**.marc.fr.ssg.**", "xmarc.fr.ssg.lab", false}, // whole labels only
+		{"esx*.marc.fr.ssg.**", name, true},
+		{"esx*.marc.fr.ssg.**", "web.marc.fr.ssg.lab", false},
+		{"*.marc.fr.ssg.**", name, true},
+		{"**.corp", name, true},
+		{"**.corp", "corp", true},
+		{"**.corp", "corp.example", false},
+		{"a.**.z", "a.z", true},
+		{"a.**.z", "a.b.c.z", true},
+		{"a.**.z", "a.b.c.y", false},
+		{"*.marc.fr.ssg.*", name, false}, // the single * keeps meaning one label
+		{"*.marc.fr.ssg.*", "host.marc.fr.ssg.lab", true},
+	} {
+		g, is, err := parseGlob(c.pat)
+		if !is || err != nil {
+			t.Fatalf("%q: is %v err %v", c.pat, is, err)
+		}
+		if got := g.match(c.name); got != c.want {
+			t.Errorf("%q vs %q: got %v, want %v", c.pat, c.name, got, c.want)
+		}
+	}
+	for _, bad := range []string{"**", "**.**", "*.**", "**.*", "?.**.*", "**.a.**.b.**.c.**.d"} {
+		if _, is, err := parseGlob(bad); bad == "**" {
+			// "**" alone is "*" followed by "*": not a glob label at all, still refused as a name
+			if is && err == nil {
+				t.Errorf("%q accepted", bad)
+			}
+		} else if !is || err == nil {
+			t.Errorf("%q should be refused, is %v err %v", bad, is, err)
+		}
+	}
+}
+
+func TestGlobMultiLookup(t *testing.T) {
+	p := NewPool(DNSConfig{Policy: nil})
+	rules := []PolicyRule{{Client: "*", Name: "**.marc.fr.ssg.**", Servers: []string{"nodata"}}}
+	rows, err := normalizePolicy(rules)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows %v err %v", rows, err)
+	}
+	p.policy = buildPolicy(rows)
+	var qi qinfo
+	parseQuestion(cacheQuery("esxnzaydev502.marc.fr.ssg.lab.ptx.sbs.corp", 1, nil), &qi)
+	if r := p.lookup(netip.MustParseAddr("10.1.1.1"), &qi); r == nil || r.action != polNoData {
+		t.Fatalf("the row did not apply: %+v", r)
+	}
+	qi = qinfo{}
+	parseQuestion(cacheQuery("www.example.com", 1, nil), &qi)
+	if r := p.lookup(netip.MustParseAddr("10.1.1.1"), &qi); r != nil {
+		t.Fatalf("an unrelated name matched: %+v", r)
+	}
+}

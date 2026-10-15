@@ -1,5 +1,21 @@
 # Changelog
 
+## [v395] - 2026-10-14 — Policy names: `**` for any number of labels
+
+### Added
+- In a Policy-Based Resolution **Source name**, a label that is exactly `**` stands for any number of whole labels, none included, anywhere in the pattern: `**.marc.fr.ssg.**` matches `esxnzaydev502.marc.fr.ssg.lab.ptx.sbs.corp`, `marc.fr.ssg` and `a.b.marc.fr.ssg.c`, but not `xmarc.fr.ssg.lab` (whole labels only). `*` and `?` keep their meaning (a single `*` label still means exactly one label, so `*.marc.fr.ssg.*` does not match the name above).
+- Safety: a pattern with `**` needs at least one label without `*` or `?` (`**`, `**.**`, `*.**` are refused on save, with a message), and has at most three `**`. Matching is a table over (pattern label, name label), so the work is bounded by the product of the two lengths whatever the pattern. A row with no literal ending (one that ends in `**`) cannot be found through the name index and is checked for every query: measured at about 2.3 ms per query with 10,000 such rows (about 0.2 µs per row). Rows with a literal ending use the index as before.
+- The Top domains icons (blocked or rewritten) follow the new patterns: the page's copy of the matching was extended and checked against the same cases with a throwaway Node script.
+
+### Changed
+- A label written `**` used to mean one label like `*`; it now means any number of labels. No existing row is expected to use it.
+
+### Verified
+- gofmt, build, vet, `go test -race -count=1` (new `TestGlobMultiLabel`, `TestGlobMultiLookup`), CGO-off vet and test, cross-compiles for amd64, arm64, arm, 386 and riscv64, `node --check`; the page's matcher against 16 cases (identical results to the Go matcher).
+
+### Not verified
+- In a browser; a live daemon with such a row (the lookup was tested in process).
+
 ## [v394] - 2026-10-14 — Blocked answers carry an SOA, so clients can remember them
 
 ### Added
