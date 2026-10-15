@@ -1,5 +1,13 @@
 # Changelog
 
+## [v397] - 2026-10-15 — New gateways start with public DNS servers
+
+### Added
+- A new gateway (**＋ New gateway…** on the Topology page, or `--canvas-add gateway`) starts with four DNS servers, each tested with `google.com` and `amazon.com` (A): 8.8.8.8 (dns.google), 1.1.1.1 (one.one.one.one), 9.9.9.9 (dns9.quad9.net) and 4.2.2.2 (b.resolvers.level3.net). The server is the address, so nothing has to be resolved first; the host name is its name. Remove any you don't want. Existing gateways are not changed, and a server given with `--server` is not added twice.
+
+### Fixed
+- The gateway tooltip's "Serving nodes" counted a dual-stack node twice (its IPv4 and its link-local IPv6 gateway address): four nodes showed as 8. Each node is now counted once.
+
 ## [v396] - 2026-10-14 — Help: a Find box
 
 ### Added

@@ -251,7 +251,7 @@
         oncontextmenu: rowMenu([["Rename…", () => { state.topo.gid = g.id; state.topo.action = "rename"; selectTab("topology"); }],
           ["Delete", () => { state.topo.gid = g.id; state.topo.action = "delete"; selectTab("topology"); }, "danger"]]) },
       h("span", { class: "dot st-" + g.status }), g.label)),
-      h("button", { type: "button", class: "nav-item add", onclick: () => { state.topo.action = "new"; selectTab("topology"); } }, "＋ New gateway…"));
+      h("button", { type: "button", class: "nav-item add", onclick: () => { state.topo.action = "new"; selectTab("topology"); } }, "＋ New gateway"));
   }
 
   function openNavGroup(name) {
@@ -713,7 +713,7 @@
       const oldWrap = svgHost.querySelector(".cv-wrap");
       const keep = oldWrap && cv.drawn === cv.gid ? { x: oldWrap.scrollLeft, y: oldWrap.scrollTop } : { x: 0, y: 0 };
       const g = curGroup();
-      if (!g) { clear(svgHost); svgHost.append(h("div", { class: "empty" }, "No gateway yet. Click “＋ New gateway…” under Topology in the sidebar (or right-click here) to draw one.")); return; }
+      if (!g) { clear(svgHost); svgHost.append(h("div", { class: "empty" }, "No gateway yet. Click “＋ New gateway” under Topology in the sidebar (or right-click here) to draw one.")); return; }
       const st = statusOf(g);
       const servers = (g.dns && g.dns.servers) || [];
       const COLW = 190, SW = 156, DW = 156, DH = 34, DG = 46;
