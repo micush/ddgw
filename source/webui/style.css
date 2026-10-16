@@ -623,3 +623,6 @@ table.sched .sched-cmd { max-width: 13rem; }
 .sched-dialog .f.check { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; color: var(--text); }
 .sched-dialog .f.check input[type=number], .sched-dialog .f.check input[type=time], .sched-dialog .f.check select { width: auto; }
 .sched-dialog .f.check .sched-days { flex-basis: 100%; margin-left: 1.6rem; }
+.sched-dialog div.f.sched-range { flex-direction: row; gap: 1rem; }
+.sched-dialog .sched-range > label.f { flex: 1; }
+.sched-dialog .sched-every select { width: auto; }

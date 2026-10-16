@@ -56,7 +56,7 @@ type SchedTask struct {
 	Weekday int `json:"weekday,omitempty"`
 	// Month (yearly): 1-12.
 	Month int `json:"month,omitempty"`
-	// TZ is an IANA zone name; empty is the node's own zone.
+	// TZ is no longer used: every time is UTC.  The field stays so older settings still load; validate clears it.
 	TZ string `json:"tz,omitempty"`
 	// WindowSec is the offset window: each node runs the task at the scheduled time plus a time of its own between 0 and
 	// this many seconds.
@@ -83,19 +83,14 @@ var schedActions = map[string]string{
 	"node_pause":     "Pause this node",
 	"node_resume":    "Resume this node",
 	"stats_clear":    "Clear the statistics",
+	"update_online":  "Update from online (newest release, when newer)",
+	"node_reboot":    "Reboot this node (waits until it is safe)",
 }
 
 var schedEveryMax = map[string]int{"hourly": 720, "daily": 366, "weekly": 52, "monthly": 24, "yearly": 10}
 
-func (t *SchedTask) loc() *time.Location {
-	if t.TZ == "" {
-		return time.Local
-	}
-	if l, err := time.LoadLocation(t.TZ); err == nil {
-		return l
-	}
-	return time.Local
-}
+// loc is UTC: the scheduler works in UTC on every node.
+func (t *SchedTask) loc() *time.Location { return time.UTC }
 
 func parseSchedAt(s string) (h, m, sec int, err error) {
 	parts := strings.Split(s, ":")
@@ -189,11 +184,7 @@ func (t *SchedTask) validate() error {
 		}
 		t.WindowSec = w
 	}
-	if t.TZ != "" {
-		if _, err := time.LoadLocation(t.TZ); err != nil {
-			return fmt.Errorf("scheduler: %q: unknown time zone %q", t.Name, t.TZ)
-		}
-	}
+	t.TZ = ""
 	// the fields of the other frequencies are dropped, so a copy of a task compares equal to the original
 	days := t.Days
 	t.Days = nil
@@ -471,9 +462,14 @@ func (t *SchedTask) describe() string {
 	}
 	if t.Until != "" {
 		out += " to " + t.Until
-		out = strings.Replace(out, " at "+at+" to ", " between "+at+" and ", 1)
-	} else if t.WindowSec > 0 {
-		out += ", within " + fmtSchedWindow(t.WindowSec)
+		out = strings.Replace(out, " at "+at+" to ", " between "+at+" and ", 1) + " UTC"
+	} else {
+		if t.Freq != "hourly" {
+			out = strings.Replace(out, " at "+at, " at "+at+" UTC", 1)
+		}
+		if t.WindowSec > 0 {
+			out += ", within " + fmtSchedWindow(t.WindowSec)
+		}
 	}
 	return out
 }
@@ -784,6 +780,10 @@ func (s *Scheduler) builtin(action, actor string) (string, error) {
 		return fmt.Sprintf("%d answers dropped", s.m.clearFn()), nil
 	case "node_pause", "node_resume":
 		return s.m.NodePause(action == "node_pause", actor)
+	case "update_online":
+		return s.updateOnline(actor)
+	case "node_reboot":
+		return s.rebootHost(actor)
 	case "stats_clear":
 		qstats.Clear()
 		if err := savePersisted(s.m.stateDir); err != nil {

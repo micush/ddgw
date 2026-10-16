@@ -1,12 +1,20 @@
 # Changelog
 
+## [v417] - 2026-10-16 — Scheduler: update, reboot, UTC
+
+### Added
+- Two built-in scheduler actions. **Update from online** looks up the newest release the way the Upgrade page's *Fetch from online* does and, when it is newer than the running version, stages it and queues this node for the normal update (one node at a time, canary, rollback); nothing is downloaded when the node is current. **Reboot this node** restarts the host once no gateway would lose its last serving member.
+
+### Changed
+- Scheduler times are UTC on every node and the per-task time zone field is gone (a zone saved by v416 is ignored, so such a task now runs at its UTC time).
+
 ## [v416] - 2026-10-16 — Scheduler
 
 ### Added
 - **Scheduler rules**: a monthly or yearly task can pick several occurrences and several weekdays at once ("the 2nd or 3rd Saturday or Sunday of every month"), and the offset window can be stated as an end time ("between 01:00 and 10:00", running into the next day if the end is not later than the start) instead of "up to N after". Each node still runs once, at a time of its own inside the window. Tasks saved with the single `nth`/`weekday` form are converted when loaded.
-- **Operate ▸ Scheduler**: tasks that run on every cluster node or on chosen nodes. Frequencies: hourly, daily, weekly (chosen days), monthly (a day of the month, the last day, or the 1st to 4th / last weekday, e.g. the 3rd Saturday) and yearly, each "every N". Time zone per task (empty: the node's own).
+- **Operate ▸ Scheduler**: tasks that run on every cluster node or on chosen nodes. Frequencies: hourly, daily, weekly (chosen days), monthly (a day of the month, the last day, or the 1st to 4th / last weekday, e.g. the 3rd Saturday) and yearly, each "every N". All times are UTC.
 - **Offset window**: a task is due at its time and each node runs it at its own stable place (a hash of node, task and occurrence) inside that window, so the nodes do not all run it at once. A node that was down runs a missed task once on return if still inside the window; older runs are skipped and logged. A task that is still running is not started again.
-- Actions: restart dnsdir (once it is safe to go down), empty the answer cache, pause or resume the node, clear the statistics, or a shell command (`/bin/sh -c`, as root, with a time limit; the whole process group is stopped on timeout). Output and result of the last 300 runs are kept per node (`scheduler.json` in the state directory).
+- Actions: restart dnsdir (once it is safe to go down), empty the answer cache, pause or resume the node, clear the statistics, update from online (fetches the newest release and queues this node for the normal, one-at-a-time update when it is newer), reboot the host (once it is safe), or a shell command (`/bin/sh -c`, as root, with a time limit; the whole process group is stopped on timeout). Output and result of the last 300 runs are kept per node (`scheduler.json` in the state directory).
 - The list: New task, and right-click ▸ Edit, Copy, Paste, Run now on this node, Disable/Enable, Delete (Paste adds a copy with a new name; double-click edits). The task list is part of the shared `dns` settings (`schedule`) and replicates; a replica's change goes through the primary like any shared edit.
 - CLI: `--schedule`, `--schedule-history`, `--schedule-set JSON`, `--schedule-del ID`, `--schedule-run ID`. Help topic, README section.
 

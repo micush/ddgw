@@ -4451,7 +4451,6 @@
     const NTH = [[1, "1st"], [2, "2nd"], [3, "3rd"], [4, "4th"], [-1, "last"]];
     const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const when = (u) => (u ? new Date(u * 1000).toLocaleString() : "–");
-    const schedZones = () => { try { return ["UTC"].concat(Intl.supportedValuesOf("timeZone")); } catch (_) { return ["UTC"]; } };
     const unitSec = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
 
     async function call(path, body, done) {
@@ -4517,19 +4516,15 @@
       const dayBox = h("div", { class: "f wide" }, h("span", {}, "On"),
         h("label", { class: "f check" }, byDay, "day", dom, " of the month"),
         h("div", { class: "f check" }, byNth, "the", nthRow, wdRow, "of the month"));
-      const tz = h("input", { type: "text", list: "sched-tz", value: t.tz || "", placeholder: "this node's own time zone", "aria-label": "Time zone", autocomplete: "off", spellcheck: "false" });
-      const tzl = h("datalist", { id: "sched-tz" }, schedZones().map((z) => h("option", { value: z })));
       const wsec = t.window_sec || 0;
       const unit = wsec && wsec % 86400 === 0 ? "days" : wsec && wsec % 3600 === 0 ? "hours" : wsec && wsec % 60 === 0 ? "minutes" : wsec ? "seconds" : "minutes";
       const win = h("input", { type: "number", min: "0", value: String(wsec / unitSec[unit]), "aria-label": "Offset window" });
-      const winAfter = h("input", { type: "radio", name: "sched-win", checked: !t.until });
-      const winUntil = h("input", { type: "radio", name: "sched-win", checked: !!t.until });
-      const until = h("input", { type: "time", value: t.until || "", "aria-label": "Window ends" });
+      const until = h("input", { type: "time", value: t.until || "", "aria-label": "To (UTC)" });
       const winUnit = h("select", { "aria-label": "Offset unit" }, Object.keys(unitSec).map((u) => h("option", { value: u, selected: u === unit }, u)));
       const enabled = h("input", { type: "checkbox", checked: !t.disabled });
       const rows = {
         shell: shellBox, every: h("label", { class: "f" }, "Every", h("span", { class: "sched-every" }, every, everyUnit)),
-        at: h("label", { class: "f" }, "At", at), minute: h("label", { class: "f" }, "At minute", minute), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
+        at: h("div", { class: "f sched-range" }, h("label", { class: "f" }, "At (UTC)", at), h("label", { class: "f" }, "To (optional)", until)), minute: h("label", { class: "f" }, "At minute", minute), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
       };
       const sync = () => {
         const f = freq.value;
@@ -4540,22 +4535,22 @@
         rows.at.hidden = f === "hourly"; rows.minute.hidden = f !== "hourly";
         rows.days.hidden = f !== "weekly"; rows.month.hidden = f !== "yearly"; rows.day.hidden = f !== "monthly" && f !== "yearly";
         dom.disabled = !byDay.checked; nths.concat(wds).forEach((x) => { x.el.disabled = !byNth.checked; });
-        win.disabled = winUnit.disabled = !winAfter.checked; until.disabled = !winUntil.checked; winUntil.parentElement.hidden = f === "hourly";
+        win.disabled = winUnit.disabled = !!until.value && f !== "hourly";
         nodesList.hidden = !someNodes.checked;
       };
-      [action, freq, every, byDay, byNth, allNodes, someNodes, winAfter, winUntil].forEach((el) => el.addEventListener("change", sync));
+      [action, freq, every, byDay, byNth, allNodes, someNodes, until].forEach((el) => el.addEventListener("change", sync));
       every.addEventListener("input", sync);
       const submit = (ev) => {
         ev.preventDefault();
         const f = freq.value;
-        const task = { id: isNew ? "" : t.id, name: name.value.trim(), action: action.value, freq: f, every: Math.max(1, +every.value || 1), tz: tz.value.trim(),
-          window_sec: winUntil.checked && f !== "hourly" ? 0 : Math.round((+win.value || 0) * unitSec[winUnit.value]), disabled: !enabled.checked };
+        const task = { id: isNew ? "" : t.id, name: name.value.trim(), action: action.value, freq: f, every: Math.max(1, +every.value || 1),
+          window_sec: until.value && f !== "hourly" ? 0 : Math.round((+win.value || 0) * unitSec[winUnit.value]), disabled: !enabled.checked };
         if (action.value === "shell") { task.command = cmd.value; task.timeout_sec = +tmo.value || 300; }
         if (f === "hourly") { const m = Math.min(59, Math.max(0, +minute.value || 0)); task.at = "00:" + String(m).padStart(2, "0") + ":00"; } else task.at = at.value.length === 5 ? at.value + ":00" : at.value;
         if (f === "weekly") task.days = days.filter((x) => x.el.checked).map((x) => x.i);
         if (f === "monthly" || f === "yearly") { if (byNth.checked) { task.nths = nths.filter((x) => x.el.checked).map((x) => x.v); task.weekdays = wds.filter((x) => x.el.checked).map((x) => x.i); if (!task.nths.length || !task.weekdays.length) { errorBox(err, "Pick at least one occurrence and one weekday."); return; } } else task.day = +dom.value; }
         if (f === "yearly") task.month = +month.value;
-        if (winUntil.checked && f !== "hourly") { if (!until.value) { errorBox(err, "Pick the time the window ends."); return; } task.until = until.value.slice(0, 5); }
+        if (until.value && f !== "hourly") task.until = until.value.slice(0, 5);
         if (state.nodes.length > 1 && someNodes.checked) task.nodes = nodeBoxes.filter((x) => x.el.checked).map((x) => x.n.node_id);
         if (state.nodes.length > 1 && someNodes.checked && !task.nodes.length) { errorBox(err, "Pick at least one node, or choose every node."); return; }
         if (!task.name) { errorBox(err, "Give the task a name."); return; }
@@ -4567,11 +4562,9 @@
             h("label", { class: "f wide" }, "Name", name),
             h("label", { class: "f wide" }, "Does", action), rows.shell, where,
             h("label", { class: "f" }, "How often", freq), rows.every, rows.at, rows.minute, rows.days, rows.month, rows.day,
-            h("label", { class: "f wide" }, "Time zone", tz, tzl, h("span", { class: "hint" }, "The time above is read in this zone. Empty is each node's own zone.")),
             h("div", { class: "f wide" }, h("span", {}, "Offset window"),
-              h("label", { class: "f check" }, winAfter, "up to ", win, winUnit, " after the scheduled time"),
-              h("label", { class: "f check" }, winUntil, "between the time above and ", until),
-              h("span", { class: "hint" }, "Each node runs the task at a time of its own somewhere in this window, so the nodes do not all run it at once. 0 runs every node at the scheduled time. A node that was off and comes back inside the window still runs it.")),
+              h("span", { class: "sched-every" }, "up to ", win, winUnit, " after the scheduled time"),
+              h("span", { class: "hint" }, "With a To time above, the window is from At to To and this is not used. Each node runs the task at a time of its own somewhere in the window, so the nodes do not all run it at once. 0 runs every node at the scheduled time. A node that was off and comes back inside the window still runs it.")),
             h("label", { class: "f check wide" }, enabled, "Enabled")),
           err,
           h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, isNew ? "Add task" : "Save"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
@@ -4596,7 +4589,7 @@
         const where = (v) => (v.task.nodes || []).length ? v.task.nodes.map(nodeName).join(", ") : "every node";
         const row = (v) => h("tr", { tabindex: "0", class: v.disabled ? "paused" : "", oncontextmenu: menu(v), ondblclick: () => editor(v.task, tasks) },
           h("td", {}, v.name), h("td", {}, actionLabel(v.task, st.actions), v.task.action === "shell" ? h("div", { class: "mono small muted sched-cmd", title: v.task.command }, v.task.command) : null),
-          h("td", {}, where(v)), h("td", {}, v.describe, v.task.tz ? h("div", { class: "small muted" }, v.task.tz) : null),
+          h("td", {}, where(v)), h("td", {}, v.describe),
           h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.next_run ? h("span", { title: "scheduled for " + when(v.next) }, when(v.next_run)) : "–"),
           h("td", {}, lastCell(v)));
         box.append(section("Scheduled tasks",
@@ -4605,7 +4598,7 @@
           h("div", { class: "scroll", oncontextmenu: emptyMenu }, h("table", { class: "sched" },
             h("thead", {}, h("tr", {}, ["Task", "Does", "Runs on", "Schedule", "Next run (this node)", "Last run (this node)"].map((x) => h("th", {}, x)))),
             h("tbody", {}, st.tasks.length ? st.tasks.map(row) : h("tr", {}, h("td", { colspan: 6, class: "empty" }, "No tasks yet. Add one with New task, or right-click here."))))),
-          h("p", { class: "hint" }, "Right-click a task to edit, copy, paste, run, disable or delete it. Times are shown in this browser's zone.")));
+          h("p", { class: "hint" }, "Right-click a task to edit, copy, paste, run, disable or delete it. Schedules are in UTC; the run times shown here follow this browser.")));
         box.append(section("History of this node",
           h("div", { class: "scroll" }, h("table", { class: "sched" },
             h("thead", {}, h("tr", {}, ["Started", "Task", "Result", "Output"].map((x) => h("th", {}, x)))),

@@ -254,7 +254,6 @@ func TestScheduleValidation(t *testing.T) {
 		{Name: "x", Action: "stats_clear", Freq: "monthly", Day: 32},
 		{Name: "x", Action: "stats_clear", Freq: "monthly", Nth: 5, Weekday: 1},
 		{Name: "x", Action: "stats_clear", Freq: "yearly"},
-		{Name: "x", Action: "stats_clear", Freq: "daily", TZ: "Mars/Base"},
 		{Name: "x", Action: "stats_clear", Freq: "daily", WindowSec: -1},
 		{Name: "x", Action: "stats_clear", Freq: "daily", Every: 400},
 	}
@@ -276,7 +275,7 @@ func TestScheduleValidation(t *testing.T) {
 
 func TestScheduleDescribe(t *testing.T) {
 	task := mustTask(t, SchedTask{Freq: "monthly", Nth: 3, Weekday: 6, At: "12:00", WindowSec: 5400})
-	if got := task.describe(); got != "every month, the 3rd Saturday at 12:00, within 1h 30m" {
+	if got := task.describe(); got != "every month, the 3rd Saturday at 12:00 UTC, within 1h 30m" {
 		t.Fatalf("%q", got)
 	}
 }
@@ -361,7 +360,7 @@ func TestMultipleOrdinalsAndWeekdaysWithAWindow(t *testing.T) {
 	if want := "11-08 01:00,11-14 01:00,11-15 01:00,11-21 01:00"; strings.Join(got, ",") != want {
 		t.Fatalf("got %v want %s", got, want)
 	}
-	if d := task.describe(); d != "every month, the 2nd or 3rd Sunday or Saturday at 01:00 between 01:00 and 10:00" && !strings.Contains(d, "between 01:00 and 10:00") {
+	if d := task.describe(); d != "every month, the 2nd or 3rd Sunday or Saturday between 01:00 and 10:00 UTC" && !strings.Contains(d, "between 01:00 and 10:00") {
 		t.Fatal(d)
 	}
 	old := mustTask(t, SchedTask{Freq: "monthly", Nth: 3, Weekday: 6, At: "12:00"})
