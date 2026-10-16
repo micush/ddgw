@@ -2369,18 +2369,13 @@
       // what snmpd is doing, under the form (refreshed after every save)
       const snmpShared = () => { const v = snmp.get(); return { snmp_communities: v.snmp_communities, snmp_contact: v.snmp_contact }; };
       const snmpLocal = () => { const v = snmp.get(); return { location: v.location }; };
-      const snmpNote = h("div", { "aria-live": "polite" });
+      const snmpPill = h("span");   // ACTIVE beside the heading while snmpd is running
       refreshSNMP = async () => {
         try {
           const st = (await api("GET", "/api/snmp")).data;
-          clear(snmpNote);
-          if (st.enabled && !st.installed) snmpNote.append(h("div", { class: "notice bad", role: "alert" }, "snmpd is not installed on this node, so SNMP cannot answer. Install the snmpd package (net-snmp on Fedora, RHEL and Arch), or run the installer again."));
-          else if (st.enabled && !st.running) snmpNote.append(h("div", { class: "notice warn" }, "snmpd is not running yet. It was told to start; reload this page in a moment."));
-          else snmpNote.append(h("p", { class: "hint" }, st.enabled ? "snmpd is on and answering SNMP on UDP 161." : "SNMP is off: no community string is set."));
-        } catch (e) {
-          if (e.message === "unauthenticated") return;
-          clear(snmpNote).append(h("p", { class: "hint" }, "Could not read what snmpd is doing on this node: " + e.message + ". (A node running an older version cannot answer this.)"));
-        }
+          clear(snmpPill);
+          if (st.enabled && st.installed && st.running) snmpPill.append(pill("ACTIVE", "ok tiny"));
+        } catch (_) { clear(snmpPill); }  // no tag when the node cannot be asked
       };
       refreshSNMP();
       const cluster = fieldset(CLUSTER_FIELDS, cfg.cluster || {});
@@ -2491,7 +2486,7 @@
         ["groups", "Gateway groups", h("div", {}, groupsEl)],
         ["dns", "DNS proxy", dnsTabs()],
         ["web", "Web GUI", h("div", {}, section("Web GUI", web.el), certBox)],
-        ["snmp", "SNMP", h("div", {}, section("SNMP", snmp.el), snmpNote)],
+        ["snmp", "SNMP", h("div", {}, (() => { const c = section("SNMP", snmp.el); c.querySelector("h2").append(snmpPill); return c; })())],
         ["cluster", "Cluster", section("Cluster", cluster.el)],
       ];
       for (const [pid, , el] of panels) el.hidden = pid !== tab;

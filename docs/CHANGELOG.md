@@ -1,5 +1,29 @@
 # Changelog
 
+## [v412] - 2026-10-15 — SNMP: nothing under the form
+
+### Changed
+- Configure ▸ SNMP: the last note ("Could not read what snmpd is doing on this node") is removed too. The ACTIVE tag beside the heading is the only status; no tag when snmpd is not running or the node cannot be asked.
+
+### Verified
+- The page in headless Chromium.
+
+## [v411] - 2026-10-15 — SNMP: no status notes
+
+### Changed
+- Configure ▸ SNMP: the notes under the form ("SNMP is off", "snmpd is not installed", "snmpd is not running yet") are removed. The ACTIVE tag beside the heading is the only status; no tag means SNMP is not answering. A node that cannot be asked (an older version) still says so.
+
+### Verified
+- The page in headless Chromium; the help tests.
+
+## [v410] - 2026-10-15 — SNMP: ACTIVE tag
+
+### Changed
+- Configure ▸ SNMP: a green ACTIVE tag sits beside the heading while snmpd is running, and is gone when it is not. The line "snmpd is on and answering SNMP on UDP 161." is removed. The warnings (not installed, not running) and the "SNMP is off" note stay.
+
+### Verified
+- The page in headless Chromium (tag shown once snmpd runs); the help tests.
+
 ## [v409] - 2026-10-15 — SNMP status of the node picked in the top bar
 
 ### Fixed
