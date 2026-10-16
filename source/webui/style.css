@@ -596,3 +596,5 @@ table.qtop.plain tbody tr { height: 2.6667rem; }   /* twelve of these are as tal
 .pweye { flex: none; background: none; border: 1px solid transparent; border-radius: .4rem; cursor: pointer; padding: .1rem .3rem; line-height: 1; color: var(--muted); opacity: .7; }
 .pweye:hover, .pweye:focus-visible { opacity: 1; border-color: var(--border); }
 .pweye.on { opacity: 1; color: var(--accent); }
+
+.nt-opt { margin-right: auto; display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--muted); }

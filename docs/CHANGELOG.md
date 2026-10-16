@@ -1,5 +1,16 @@
 # Changelog
 
+## [v414] - 2026-10-16 — Traceroute: resolve names
+
+### Added
+- The traceroute popup has a **Resolve names** tickbox. Ticked, each hop is shown by its reverse-DNS name where it has one; unticked, by its address. It can be switched while the trace runs or after it ends, with no new trace; the choice is remembered in the browser. The node looks the hop names up in the background as hops appear (the job now also carries the table as data: `hops` in `/api/nettool`).
+
+### Verified
+- `go test -race .` passes, with a test that a hop's table row and background name arrive; headless Chromium check of the tickbox switching names and addresses (ntpdir only).
+
+### Not verified
+- Not run with a real `mtr`; the sandbox has none and the dnsdir popup was not clicked through in a browser (same script as ntpdir).
+
 ### Verified
 - `go test -race .` passes, with a new test that closes the gate for no BGP, disabled BGP, and no established neighbor and reopens it on Established.
 

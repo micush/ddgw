@@ -3246,7 +3246,7 @@
 
     // A popup with text in it that a function fills in (and can fill in again: Run again): Whois, Ping, Traceroute.
     // run(put, live) calls put(text) as often as it likes and returns when done; live() says whether the popup still wants it.
-    function textPopup(title, run) {
+    function textPopup(title, run, extra) {
       const out = h("pre", { class: "nt-out", tabindex: "0", "aria-live": "off" }, "…");
       const again = h("button", { class: "btn", type: "button", disabled: true }, "Run again");
       const d = h("dialog", { class: "cv-dialog nt-dialog", "aria-label": title });
@@ -3254,7 +3254,7 @@
       const close = () => { alive = false; try { d.close(); } catch (_) { /* closed */ } d.remove(); };
       d.addEventListener("close", () => { alive = false; d.remove(); });
       d.append(h("button", { class: "dlg-x", type: "button", "aria-label": "Close", title: "Close", onclick: close }, "✕"), h("h2", {}, title), out,
-        h("div", { class: "toolbar" }, again, h("button", { class: "btn", type: "button", onclick: close }, "Close")));
+        h("div", { class: "toolbar" }, extra || null, again, h("button", { class: "btn", type: "button", onclick: close }, "Close")));
       root.append(d);
       d.showModal();
       const go = async () => {
@@ -3270,17 +3270,35 @@
       go();
     }
     // Ping / Traceroute of a client address or a domain: ping or mtr run on the picked node, shown as it comes in
+    // a traceroute as a table, with the host names or the addresses (the daemon looks the names up as the hops appear, so the box can be ticked at any time)
+    let traceNames = false;
+    try { traceNames = localStorage.getItem("nt_trace_names") === "1"; } catch (_) { /* no storage */ }
+    const traceText = (j, names) => {
+      if (!j.hops || !j.hops.length) return j.text || "";
+      const who = (x) => (names && x.name ? x.name : x.addr) || "???";
+      const w = Math.max(7, ...j.hops.map((x) => who(x).length));
+      const f = (v) => v.toFixed(1).padStart(7);
+      return (j.text || "").split("\n")[0] + "\n" + "".padEnd(w + 4) + "  " + "Loss%".padStart(6) + " " + "Snt".padStart(4) + " " + ["Last", "Avg", "Best", "Wrst"].map((x) => x.padStart(7)).join(" ") + "\n" +
+        j.hops.map((x, i) => String(i + 1).padStart(2) + ". " + who(x).padEnd(w) + "  " + (x.loss.toFixed(1) + "%").padStart(6) + " " + String(x.sent).padStart(4) + " " + [x.last, x.avg, x.best, x.worst].map(f).join(" ")).join("\n") + "\n";
+    };
     function netTool(kind, name) {
+      let putFn = null, last = null;
+      const box = h("input", { type: "checkbox", checked: traceNames });
+      const show = () => { if (putFn && last) putFn(kind === "trace" ? traceText(last, box.checked) : last.text); };
+      box.addEventListener("change", () => { traceNames = box.checked; try { localStorage.setItem("nt_trace_names", traceNames ? "1" : "0"); } catch (_) { /* no storage */ } show(); });
+      const extra = kind === "trace" ? h("label", { class: "nt-opt", title: "Show the host name of each hop where it has one; untick for the addresses" }, box, " Resolve names") : null;
       textPopup((kind === "ping" ? "Ping " : "Traceroute ") + name, async (put, live) => {
+        putFn = put;
         let j = (await api("POST", "/api/nettool", { kind, client: name })).data;
         for (;;) {
-          if (j.text) put(j.text);
+          last = j;
+          if (j.text) show();
           if (j.state !== "running") return;
           await new Promise((r) => setTimeout(r, 1000));
           if (!live()) return;
           j = (await api("GET", "/api/nettool?kind=" + kind + "&client=" + encodeURIComponent(name))).data;
         }
-      });
+      }, extra);
     }
     function whoisPopup(name) {
       textPopup("Whois " + name, async (put) => put(whoisText((await api("GET", "/api/whois?domain=" + encodeURIComponent(name))).data)));

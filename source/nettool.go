@@ -34,6 +34,20 @@ type NetJob struct {
 	Text  string `json:"text,omitempty"`
 	At    int64  `json:"at,omitempty"`
 	End   int64  `json:"end,omitempty"`
+	// Hops is the traceroute table as data, so the page can show the host names or the addresses without asking again.
+	Hops []NetHop `json:"hops,omitempty"`
+}
+
+// NetHop is one row of a traceroute.  Name is the reverse-DNS name of Addr, when one was found.
+type NetHop struct {
+	Addr  string  `json:"addr"`
+	Name  string  `json:"name,omitempty"`
+	Loss  float64 `json:"loss"`
+	Sent  int     `json:"sent"`
+	Last  float64 `json:"last"`
+	Avg   float64 `json:"avg"`
+	Best  float64 `json:"best"`
+	Worst float64 `json:"worst"`
 }
 
 var netJobs = struct {
@@ -245,6 +259,8 @@ func netToolGet(kind, addr string) (*NetJob, error) {
 // mtrHop is what mtr's raw output has told so far about one hop.
 type mtrHop struct {
 	host                   string
+	name                   string // reverse-DNS name of host, filled in by a background lookup
+	asked                  bool
 	sent, got              int
 	last, sum, best, worst float64 // milliseconds
 }
@@ -278,6 +294,27 @@ func (m *mtrRaw) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// resolve looks up the reverse name of a hop in the background; the table is rebuilt when it arrives.
+func (m *mtrRaw) resolve(n int, addr string) {
+	netToolRDNS <- struct{}{}
+	defer func() { <-netToolRDNS }()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	names, _ := net.DefaultResolver.LookupAddr(ctx, addr)
+	cancel()
+	if len(names) == 0 {
+		return
+	}
+	netJobs.mu.Lock()
+	defer netJobs.mu.Unlock()
+	if h := m.hops[n]; h != nil {
+		h.name = strings.TrimSuffix(names[0], ".")
+		m.render()
+	}
+}
+
+// netToolRDNS bounds the hop lookups running at once.
+var netToolRDNS = make(chan struct{}, 8)
+
 func (m *mtrRaw) titleOr() string {
 	if m.title != "" {
 		return m.title
@@ -305,6 +342,10 @@ func (m *mtrRaw) line(l string) {
 	case "h":
 		if a, err := netip.ParseAddr(f[2]); err == nil {
 			h.host = a.String()
+			if !h.asked {
+				h.asked = true
+				go m.resolve(n, h.host)
+			}
 		}
 	case "p":
 		us, err := strconv.ParseFloat(f[2], 64)
@@ -357,6 +398,7 @@ func (m *mtrRaw) render() {
 		w = 7
 	}
 	var b strings.Builder
+	var hops []NetHop
 	fmt.Fprintf(&b, "to %s\n%-*s  %6s %4s %7s %7s %7s %7s\n", m.titleOr(), w+4, "", "Loss%", "Snt", "Last", "Avg", "Best", "Wrst")
 	for i, k := range keys {
 		h := m.hops[k]
@@ -372,8 +414,10 @@ func (m *mtrRaw) render() {
 			avg = h.sum / float64(h.got)
 		}
 		fmt.Fprintf(&b, "%2d. %-*s  %5.1f%% %4d %7.1f %7.1f %7.1f %7.1f\n", i+1, w, host, loss, h.sent, h.last, avg, h.best, h.worst)
+		hops = append(hops, NetHop{Addr: h.host, Name: h.name, Loss: loss, Sent: h.sent, Last: h.last, Avg: avg, Best: h.best, Worst: h.worst})
 	}
 	m.j.Text = b.String()
+	m.j.Hops = hops
 }
 
 // cacheFlushName checks and normalises the name to drop from the cache.
