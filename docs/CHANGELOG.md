@@ -1,5 +1,10 @@
 # Changelog
 
+## [v423] - 2026-10-16 — Scheduler: run now on all nodes
+
+### Changed
+- The right-click entry *Run now on this node* is now a sub-menu, **Run now on… ▸ this node / all nodes**. *All nodes* asks each node the task is for to run it now, one after another 30 seconds apart in node-ID order; each node queues it behind whatever it is running. A node that already has the task running or waiting says so in the result. The sub-menu works with the mouse and with the arrow keys.
+
 ## [v422] - 2026-10-16 — Scheduler: one job at a time
 
 ### Changed

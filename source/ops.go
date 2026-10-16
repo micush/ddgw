@@ -61,6 +61,9 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		Seconds  int        `json:"seconds"`
 		Group    int        `json:"group"`
 		Task     *SchedTask `json:"task"`
+		All      bool       `json:"all"`       // schedule.run: on every node of the task
+		Queue    bool       `json:"queue"`     // schedule.run: wait for the running job instead of refusing
+		DelaySec int        `json:"delay_sec"` // schedule.run with queue: not before this many seconds
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -269,6 +272,18 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 	case "schedule.del":
 		return map[string]any{"deleted": true}, m.SchedDel(a.ID, actor)
 	case "schedule.run":
+		if a.All {
+			return m.SchedRunAll(a.ID, actor)
+		}
+		if a.Queue {
+			if a.DelaySec < 0 || a.DelaySec > 3600 {
+				return nil, errors.New("delay_sec must be 0 to 3600")
+			}
+			if err := m.sched.RunQueued(a.ID, actor, time.Duration(a.DelaySec)*time.Second); err != nil {
+				return nil, err
+			}
+			return map[string]any{"queued": true}, nil
+		}
 		if err := m.sched.RunNow(a.ID, actor); err != nil {
 			return nil, err
 		}

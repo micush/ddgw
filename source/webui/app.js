@@ -2560,11 +2560,29 @@
     return [h("div", { class: "notice bad", role: "alert" }, "Not included in these numbers: " + lost.map((n) => n.name + " (" + n.error + ")").join(", "))];
   };
   // A right-click menu for a table row: items are [label, handler, "danger"?]. Reuses the Topology menu's look.
-  let rowMenuEl = null;
+  let rowMenuEl = null, rowSubEl = null;
+  const closeRowSub = () => { if (rowSubEl) { rowSubEl.remove(); rowSubEl = null; } if (rowMenuEl) rowMenuEl.querySelectorAll(".has-sub.open").forEach((b) => b.classList.remove("open")); };
+  // an item whose handler is an array is a sub-menu: [label, [[label, handler], ...]]; it opens beside the item
+  const openRowSub = (btn, subItems) => {
+    closeRowSub();
+    btn.classList.add("open");
+    rowSubEl = h("div", { class: "cv-menu", role: "menu" }, subItems.map((it) => h("button", { type: "button", role: "menuitem", onclick: () => { closeRowMenu(); it[1](); } }, plain(it[0]))));
+    document.body.append(rowSubEl);
+    const br = btn.getBoundingClientRect(), r = rowSubEl.getBoundingClientRect();
+    const left = br.right + r.width + 4 <= window.innerWidth ? br.right - 2 : Math.max(4, br.left - r.width + 2);
+    rowSubEl.style.left = left + "px";
+    rowSubEl.style.top = Math.max(4, Math.min(br.top - 4, window.innerHeight - r.height - 4)) + "px";
+  };
+  const rowMenuClick = (e) => {
+    const b = e.target.closest ? e.target.closest("button.has-sub") : null;
+    if (b && rowMenuEl && rowMenuEl.contains(b)) { e.stopPropagation(); e.preventDefault(); b.dispatchEvent(new Event("opensub")); return; }
+    closeRowMenu();
+  };
   const closeRowMenu = () => {
     if (!rowMenuEl) return;
+    closeRowSub();
     rowMenuEl.remove(); rowMenuEl = null;
-    document.removeEventListener("click", closeRowMenu, true);
+    document.removeEventListener("click", rowMenuClick, true);
     document.removeEventListener("keydown", rowMenuKey, true);
     window.removeEventListener("blur", closeRowMenu);
     window.removeEventListener("resize", closeRowMenu);
@@ -2574,20 +2592,32 @@
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     const items = [...rowMenuEl.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { document.activeElement.dispatchEvent(new Event("opensub")); if (rowSubEl) rowSubEl.querySelector("button").focus(); return; }
     items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
   };
   const rowMenu = (items) => (e) => {
     e.preventDefault(); e.stopPropagation();
     closeRowMenu();
     // "-" between items draws a line between groups
-    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => it === "-" ? h("div", { class: "sep", role: "separator" }) : h("button", { type: "button", role: "menuitem", class: it[2] || "", onclick: () => { closeRowMenu(); it[1](); } }, plain(it[0]))));
+    rowMenuEl = h("div", { class: "cv-menu", role: "menu" }, items.map((it) => {
+      if (it === "-") return h("div", { class: "sep", role: "separator" });
+      if (Array.isArray(it[1])) {
+        const b = h("button", { type: "button", role: "menuitem", class: "has-sub", "aria-haspopup": "true" }, plain(it[0]), h("span", {}, "▸"));
+        b.addEventListener("opensub", () => openRowSub(b, it[1]));
+        b.addEventListener("mouseenter", () => openRowSub(b, it[1]));
+        return b;
+      }
+      const b = h("button", { type: "button", role: "menuitem", class: it[2] || "", onclick: () => { closeRowMenu(); it[1](); } }, plain(it[0]));
+      b.addEventListener("mouseenter", closeRowSub);
+      return b;
+    }));
     document.body.append(rowMenuEl);
     const r = rowMenuEl.getBoundingClientRect(), b = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 0, bottom: 0 };
     const x = e.clientX || b.left, y = e.clientY || b.bottom;
     rowMenuEl.style.left = Math.max(4, Math.min(x, window.innerWidth - r.width - 4)) + "px";
     rowMenuEl.style.top = Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) + "px";
     rowMenuEl.querySelector("button").focus();
-    document.addEventListener("click", closeRowMenu, true);
+    document.addEventListener("click", rowMenuClick, true);
     document.addEventListener("keydown", rowMenuKey, true);
     window.addEventListener("blur", closeRowMenu);
     window.addEventListener("resize", closeRowMenu);
@@ -4582,7 +4612,8 @@
       const real = box; box = h("div", {});
       try {
         const menu = (v) => rowMenu([["Edit…", () => editor(v.task, tasks)], ["Copy", () => copyTask(v.task)], clip ? ["Paste", () => pasteTask(tasks)] : null, "-",
-          ["Run now on this node", () => { if (confirm("Run “" + v.name + "” on this node now?")) call("run", { id: v.id }); }],
+          ["Run now on…", [["this node", () => { if (confirm("Run “" + v.name + "” on this node now?")) call("run", { id: v.id }); }],
+            ["all nodes", () => { if (confirm("Run “" + v.name + "” on every node it is for now? The nodes start 30 seconds apart, each when it is free.")) call("run", { id: v.id, all: true }); }]]],
           [v.disabled ? "Enable" : "Disable", () => call("task", { task: Object.assign({}, v.task, { disabled: !v.disabled }) })], "-",
           ["Delete", () => { if (confirm("Delete the task “" + v.name + "”?")) call("delete", { id: v.id }); }, "danger"]].filter(Boolean));
         const emptyMenu = rowMenu([["New task…", () => editor(null, tasks)], clip ? ["Paste", () => pasteTask(tasks)] : null].filter(Boolean));

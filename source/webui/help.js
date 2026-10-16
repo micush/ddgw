@@ -454,7 +454,7 @@ const DNSDIR_HELP = {
       "Tasks that run by themselves, on every node of the cluster or on the nodes you choose: restart dnsdir, empty the answer cache, pause or resume a node, clear the statistics, or run a shell command. The list of tasks is shared by the cluster, so the page looks the same through any node; **what ran** is kept per node, and shown for the node picked at the top right.",
       ["h", "The page"],
       ["ul", [
-        "**New task** opens the form; **right-click** a task for *Edit…*, *Copy*, *Paste*, *Run now on this node*, *Disable* / *Enable* and *Delete*. *Copy* remembers the task in this browser; *Paste* (in the menu, or on the button, or after right-clicking the empty list) adds a copy of it with a new name, which you can then edit. Double-click a task to edit it.",
+        "**New task** opens the form; **right-click** a task for *Edit…*, *Copy*, *Paste*, *Run now on…* (*this node*, or *all nodes*: every node the task is for, started 30 seconds apart and each when it is free), *Disable* / *Enable* and *Delete*. *Copy* remembers the task in this browser; *Paste* (in the menu, or on the button, or after right-clicking the empty list) adds a copy of it with a new name, which you can then edit. Double-click a task to edit it.",
         "**Next run (this node)** is when this node will run the task: the scheduled time plus this node's own place in the offset window (hover it for the scheduled time). The times are shown in this browser's time zone.",
         "**History of this node** lists what ran here, whether it worked, and the output of a command (click it to read it all). The last 300 runs are kept.",
       ]],
