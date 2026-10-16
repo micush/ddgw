@@ -150,6 +150,9 @@ func (m *Mgmt) PutConfig(dc *DaemonConfig, actor, note string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkVIPsNotNodes(cur, dc, m.cl); err != nil {
+		return err
+	}
 	if m.cl.Enabled() && m.cl.Snapshot().Role == RoleReplica && sharedOf(dc).hash() != sharedOf(cur).hash() {
 		payload := adminSharedConfig{Shared: sharedOf(dc), Seeds: seedsOf(dc)}
 		if _, err := m.cl.forwardAdmin("shared-config", actor, payload); err != nil {

@@ -1,5 +1,16 @@
 # Changelog
 
+## [v415] - 2026-10-16 — A shared address cannot be a node's address
+
+### Added
+- Saving a gateway is refused when a shared address (VIP, more addresses) or an anycast address that is new in the change is an address a node already has: this host's own interface addresses, and the addresses the cluster members are reached on. A shared address moves between nodes, so a member's own address used as one ends up answered by whichever node holds it, and that member then fails the cluster identity check ("peer identity does not match the pinned fingerprint"). Addresses already in the saved configuration are not checked, so such a configuration can still be saved and fixed.
+
+### Verified
+- `go test -race .` passes, with a test for shared and anycast addresses and for an existing address still saving.
+
+### Not verified
+- The cluster-member side of the check (peer addresses) is not covered by a test; names are not resolved, only addresses.
+
 ## [v414] - 2026-10-16 — Traceroute: resolve names
 
 ### Added
