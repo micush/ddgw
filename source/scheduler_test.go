@@ -357,8 +357,9 @@ func TestMultipleOrdinalsAndWeekdaysWithAWindow(t *testing.T) {
 	for _, b := range task.bases(utc(2026, 11, 1), utc(2026, 11, 30).Add(24*time.Hour-time.Second)) {
 		got = append(got, b.Format("01-02 15:04"))
 	}
-	// November 2026: Sundays 1,8,15,22,29 and Saturdays 7,14,21,28 → 2nd/3rd are Sat 14, Sun 8, Sat 21, Sun 15
-	if want := "11-08 01:00,11-14 01:00,11-15 01:00,11-21 01:00"; strings.Join(got, ",") != want {
+	// November 2026: Sundays 1,8,15,22,29 and Saturdays 7,14,21,28 → the candidates are Sun 8, Sat 14, Sun 15, Sat 21,
+	// but the task runs once a month, on the first of them.
+	if want := "11-08 01:00"; strings.Join(got, ",") != want {
 		t.Fatalf("got %v want %s", got, want)
 	}
 	if d := task.describe(); d != "every month, the 2nd or 3rd Sunday or Saturday between 01:00 and 10:00 UTC" && !strings.Contains(d, "between 01:00 and 10:00") {
@@ -481,5 +482,28 @@ func TestSchedulerRunsOneJobAtATime(t *testing.T) {
 	})
 	if h.s.Status().Tasks[1].Queued {
 		t.Fatal("still queued after it ran")
+	}
+}
+
+func TestEachDayRunsOnEveryMatchingDay(t *testing.T) {
+	utc := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	task := mustTask(t, SchedTask{Freq: "monthly", Nths: []int{2, 3}, Weekdays: []int{6, 0}, At: "01:00", EachDay: true})
+	var got []string
+	for _, b := range task.bases(utc(2026, 10, 1), utc(2026, 10, 31).Add(24*time.Hour-time.Second)) {
+		got = append(got, b.Format("01-02"))
+	}
+	if want := "10-10,10-11,10-17,10-18"; strings.Join(got, ",") != want {
+		t.Fatalf("got %v want %s", got, want)
+	}
+	if d := task.describe(); !strings.Contains(d, "each of the 2nd or 3rd Sunday or Saturdays") {
+		t.Fatal(d)
+	}
+	first := mustTask(t, SchedTask{Freq: "monthly", Nths: []int{2, 3}, Weekdays: []int{6, 0}, At: "01:00"})
+	if d := first.describe(); !strings.Contains(d, "the first of the 2nd or 3rd") {
+		t.Fatal(d)
+	}
+	plain := mustTask(t, SchedTask{Freq: "daily", At: "01:00", EachDay: true})
+	if plain.EachDay {
+		t.Fatal("each_day kept on a daily task")
 	}
 }

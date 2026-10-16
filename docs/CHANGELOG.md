@@ -1,5 +1,15 @@
 # Changelog
 
+## [v426] - 2026-10-16 — Scheduler: first day or each day
+
+### Added
+- A monthly or yearly task that names several occurrences or weekdays has a new choice, **run on: first of those days only / each of those days**. The first is the v425 behaviour (once a month); *each* runs on every matching day, so *the 2nd or 3rd Saturday or Sunday* can run on all four. The list describes the task as "the first of the…" or "each of the…". Saved as `"each_day": true`.
+
+## [v425] - 2026-10-16 — Scheduler: once a month
+
+### Fixed
+- A monthly or yearly task set to several occurrences and weekdays, such as *the 2nd or 3rd Saturday or Sunday*, ran on every one of those days (four times a month). It now runs **once** in the month, on the first of the days that match; the *At* to *To* window still spreads the nodes. A single occurrence and weekday behaves as before.
+
 ## [v424] - 2026-10-16 — Scheduler: one minute apart
 
 ### Changed

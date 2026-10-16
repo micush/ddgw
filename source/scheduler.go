@@ -48,7 +48,7 @@ type SchedTask struct {
 	// Nth (1-4, or -1 for the last) Weekday (0 = Sunday) of the month.
 	Day int `json:"day,omitempty"`
 	// Nths and Weekdays (monthly, yearly): when Nths is set the days are the given occurrences (1-4, or -1 for the last)
-	// of the given weekdays (0 = Sunday) of the month, e.g. the 2nd and 3rd Saturday and Sunday.
+	// of the given weekdays (0 = Sunday) of the month, e.g. the 2nd and 3rd Saturday and Sunday (the task runs once a month, on the first of those days).
 	Nths     []int `json:"nths,omitempty"`
 	Weekdays []int `json:"weekdays,omitempty"`
 	// Nth and Weekday are the older single form; validate folds them into Nths and Weekdays.
@@ -64,6 +64,8 @@ type SchedTask struct {
 	// Until ("HH:MM", optional) states the window as an end time instead: the task runs between At and Until (the next
 	// day when Until is not later than At).  validate turns it into WindowSec.
 	Until string `json:"until,omitempty"`
+	// EachDay (with Nths and Weekdays) runs the task on every matching day of the month instead of only the first one.
+	EachDay bool `json:"each_day,omitempty"`
 }
 
 const (
@@ -209,6 +211,9 @@ func (t *SchedTask) validate() error {
 		t.Nths, t.Weekdays = []int{t.Nth}, []int{t.Weekday}
 	}
 	t.Nth, t.Weekday = 0, 0
+	if len(t.Nths) == 0 || t.Freq != "monthly" && t.Freq != "yearly" {
+		t.EachDay = false
+	}
 	nths, wds := t.Nths, t.Weekdays
 	t.Nths, t.Weekdays = nil, nil
 	if t.Freq != "monthly" && t.Freq != "yearly" {
@@ -293,27 +298,42 @@ func dayIndex(t time.Time) int {
 	return int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() / 86400)
 }
 
+// nthDay says whether day dd of the month is one of the weekdays in the given occurrences (Nths and Weekdays).
+func (t *SchedTask) nthDay(y int, m time.Month, dd int) bool {
+	d := time.Date(y, m, dd, 0, 0, 0, 0, time.UTC)
+	ok := false
+	for _, w := range t.Weekdays {
+		if int(d.Weekday()) == w {
+			ok = true
+		}
+	}
+	if !ok {
+		return false
+	}
+	for _, n := range t.Nths {
+		if n == -1 && dd+7 > daysIn(y, m) || n > 0 && (dd-1)/7+1 == n {
+			return true
+		}
+	}
+	return false
+}
+
 // dayMatches says whether the date is one of the days the task is on (not looking at Every or the time of day).
 func (t *SchedTask) dayMatches(d time.Time) bool {
 	y, m, dd := d.Date()
 	dim := daysIn(y, m)
 	byDay := func() bool {
 		if len(t.Nths) > 0 {
-			ok := false
-			for _, w := range t.Weekdays {
-				if int(d.Weekday()) == w {
-					ok = true
-				}
-			}
-			if !ok {
+			// Several ordinals/weekdays name the days a run may happen on; it runs once a month, on the first of them.
+			if !t.nthDay(y, m, dd) {
 				return false
 			}
-			for _, n := range t.Nths {
-				if n == -1 && dd+7 > dim || n > 0 && (dd-1)/7+1 == n {
-					return true
+			for e := 1; e < dd && !t.EachDay; e++ {
+				if t.nthDay(y, m, e) {
+					return false
 				}
 			}
-			return false
+			return true
 		}
 		if t.Day == -1 {
 			return dd == dim
@@ -428,7 +448,13 @@ func (t *SchedTask) describe() string {
 			for _, d := range t.Weekdays {
 				w = append(w, wd[d])
 			}
-			return "the " + joinOr(o) + " " + joinOr(w)
+			switch {
+			case len(t.Nths)*len(t.Weekdays) == 1:
+				return "the " + joinOr(o) + " " + joinOr(w)
+			case t.EachDay:
+				return "each of the " + joinOr(o) + " " + joinOr(w) + "s"
+			}
+			return "the first of the " + joinOr(o) + " " + joinOr(w) + "s"
 		}
 		if t.Day == -1 {
 			return "the last day"
