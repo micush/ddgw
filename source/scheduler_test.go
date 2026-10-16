@@ -507,3 +507,34 @@ func TestEachDayRunsOnEveryMatchingDay(t *testing.T) {
 		t.Fatal("each_day kept on a daily task")
 	}
 }
+
+func TestOnceRunsOnlyOnItsDate(t *testing.T) {
+	utc := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	task := mustTask(t, SchedTask{Freq: "once", Date: "2026-11-14", At: "03:30", Until: "05:00", Every: 1, Days: []int{1}})
+	var got []string
+	for _, b := range task.bases(utc(2026, 1, 1), utc(2027, 12, 31)) {
+		got = append(got, b.Format("2006-01-02 15:04"))
+	}
+	if strings.Join(got, ",") != "2026-11-14 03:30" {
+		t.Fatalf("got %v", got)
+	}
+	if task.WindowSec != 90*60 || task.Every != 0 || len(task.Days) != 0 {
+		t.Fatalf("%+v", task)
+	}
+	if d := task.describe(); d != "once on 2026-11-14 between 03:30 and 05:00 UTC" {
+		t.Fatal(d)
+	}
+	if n := task.next(utc(2026, 11, 14).Add(4 * time.Hour)); !n.IsZero() {
+		t.Fatalf("runs again at %v", n)
+	}
+	if err := (&SchedTask{Name: "x", Action: "stats_clear", Freq: "once"}).validate(); err == nil {
+		t.Fatal("date required")
+	}
+	if err := (&SchedTask{Name: "x", Action: "stats_clear", Freq: "once", Date: "2026-13-40"}).validate(); err == nil {
+		t.Fatal("bad date accepted")
+	}
+	daily := mustTask(t, SchedTask{Freq: "daily", Date: "2026-11-14"})
+	if daily.Date != "" {
+		t.Fatal("date kept on a daily task")
+	}
+}

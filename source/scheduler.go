@@ -37,8 +37,10 @@ type SchedTask struct {
 	TimeoutSec int    `json:"timeout_sec,omitempty"` // shell: stopped after this long (default 300)
 	// Nodes are the node IDs that run it; empty means every node.
 	Nodes []string `json:"nodes,omitempty"`
-	// Freq is hourly, daily, weekly, monthly or yearly; Every N of them (0 or 1 = each).
+	// Freq is once, hourly, daily, weekly, monthly or yearly; Every N of them (0 or 1 = each).  A once task runs on Date
+	// ("YYYY-MM-DD", UTC) at At, one time only.
 	Freq  string `json:"freq"`
+	Date  string `json:"date,omitempty"`
 	Every int    `json:"every,omitempty"`
 	// At is the time of day, "HH:MM[:SS]"; for an hourly task only the minute and second count.
 	At string `json:"at,omitempty"`
@@ -89,7 +91,7 @@ var schedActions = map[string]string{
 	"node_reboot":    "Reboot this node (waits until it is safe)",
 }
 
-var schedEveryMax = map[string]int{"hourly": 720, "daily": 366, "weekly": 52, "monthly": 24, "yearly": 10}
+var schedEveryMax = map[string]int{"once": 1, "hourly": 720, "daily": 366, "weekly": 52, "monthly": 24, "yearly": 10}
 
 // loc is UTC: the scheduler works in UTC on every node.
 func (t *SchedTask) loc() *time.Location { return time.UTC }
@@ -152,7 +154,7 @@ func (t *SchedTask) validate() error {
 	}
 	max, ok := schedEveryMax[t.Freq]
 	if !ok {
-		return fmt.Errorf("scheduler: %q: the frequency must be hourly, daily, weekly, monthly or yearly", t.Name)
+		return fmt.Errorf("scheduler: %q: the frequency must be once, hourly, daily, weekly, monthly or yearly", t.Name)
 	}
 	if t.Every < 0 || t.Every > max {
 		return fmt.Errorf("scheduler: %q: every N %s: N must be 1 to %d", t.Name, strings.TrimSuffix(t.Freq, "ly"), max)
@@ -187,6 +189,15 @@ func (t *SchedTask) validate() error {
 		t.WindowSec = w
 	}
 	t.TZ = ""
+	if t.Freq == "once" {
+		d, err := time.Parse("2006-01-02", t.Date)
+		if err != nil {
+			return fmt.Errorf("scheduler: %q: a one-time task needs a date, YYYY-MM-DD", t.Name)
+		}
+		t.Date = d.Format("2006-01-02")
+	} else {
+		t.Date = ""
+	}
 	// the fields of the other frequencies are dropped, so a copy of a task compares equal to the original
 	days := t.Days
 	t.Days = nil
@@ -342,6 +353,8 @@ func (t *SchedTask) dayMatches(d time.Time) bool {
 	}
 	every := max(t.Every, 1)
 	switch t.Freq {
+	case "once":
+		return d.Format("2006-01-02") == t.Date
 	case "daily":
 		return dayIndex(d)%every == 0
 	case "weekly":
@@ -473,6 +486,8 @@ func (t *SchedTask) describe() string {
 		if s == 0 {
 			out = fmt.Sprintf("%s at minute %d", every("hour"), m)
 		}
+	case "once":
+		out = "once on " + t.Date + " at " + at
 	case "daily":
 		out = every("day") + " at " + at
 	case "weekly":

@@ -1,5 +1,10 @@
 # Changelog
 
+## [v427] - 2026-10-16 — Scheduler: Once
+
+### Added
+- **Once** in *How often*: the task runs one time, on a date you pick (UTC) at the *At* time, optionally within an *At* to *To* window like any other task. It stays in the list afterwards and never runs again; delete it or change the date to reuse it. Saved as `"freq":"once","date":"YYYY-MM-DD"`.
+
 ## [v426] - 2026-10-16 — Scheduler: first day or each day
 
 ### Added
