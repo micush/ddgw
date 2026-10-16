@@ -4591,11 +4591,10 @@
         const row = (v) => h("tr", { tabindex: "0", class: v.disabled ? "paused" : "", oncontextmenu: menu(v), ondblclick: () => editor(v.task, tasks) },
           h("td", {}, v.name), h("td", {}, actionLabel(v.task, st.actions), v.task.action === "shell" ? h("div", { class: "mono small muted sched-cmd", title: v.task.command }, v.task.command) : null),
           h("td", {}, where(v)), h("td", {}, v.describe),
-          h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.next_run ? h("span", { title: "scheduled for " + when(v.next) }, when(v.next_run)) : "–"),
+          h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.queued ? pill("waiting for another task", "warn") : v.next_run ? h("span", { title: "scheduled for " + when(v.next) }, when(v.next_run)) : "–"),
           h("td", {}, lastCell(v)));
         box.append(section("Scheduled tasks",
-          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: () => editor(null, tasks) }, "New task"),
-            clip ? h("button", { class: "btn", type: "button", onclick: () => pasteTask(tasks) }, "Paste “" + clip.name + "”") : null),
+          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: () => editor(null, tasks) }, "New task")),
           h("div", { class: "scroll", oncontextmenu: emptyMenu }, h("table", { class: "sched" },
             h("thead", {}, h("tr", {}, ["Task", "Does", "Runs on", "Schedule", "Next run (this node)", "Last run (this node)"].map((x) => h("th", {}, x)))),
             h("tbody", {}, st.tasks.length ? st.tasks.map(row) : h("tr", {}, h("td", { colspan: 6, class: "empty" }, "No tasks yet. Add one with New task, or right-click here."))))),

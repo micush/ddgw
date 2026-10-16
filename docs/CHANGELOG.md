@@ -1,5 +1,15 @@
 # Changelog
 
+## [v422] - 2026-10-16 — Scheduler: one job at a time
+
+### Changed
+- Only one scheduled job runs at a time on a node. A job that falls due while another is running waits in a queue (kept across a restart, first come, first served) and starts as soon as the previous one has finished, however late that is. The task table shows *waiting for another task*. *Run now* is refused while a job is running. A task whose own previous run is still going or waiting skips its next occurrence, as before. The 30-second staggering of overlapping windows stays; it only makes it less likely that jobs queue behind each other.
+
+## [v421] - 2026-10-16 — Scheduler: no Paste button
+
+### Removed
+- The Paste button next to New task on the Scheduler page. Paste is in the right-click menu (on a task or on the empty table).
+
 ## [v420] - 2026-10-16 — Scheduler: no seconds
 
 ### Changed

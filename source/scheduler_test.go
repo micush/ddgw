@@ -199,19 +199,20 @@ func TestSchedulerShellCommand(t *testing.T) {
 	slow := mustTask(t, SchedTask{ID: "s2", Name: "slow", Action: "shell", Command: "sleep 30", TimeoutSec: 1, Freq: "daily"})
 	bad := mustTask(t, SchedTask{ID: "s3", Name: "bad", Action: "shell", Command: "exit 3", Freq: "daily"})
 	h.s.SetTasks([]SchedTask{ok, slow, bad})
-	for _, id := range []string{"s1", "s2", "s3"} {
-		if err := h.s.RunNow(id, "test"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	waitFor(t, func() bool {
+	idle := func() bool {
 		for _, r := range h.s.Status().History {
 			if r.Status == "running" {
 				return false
 			}
 		}
 		return true
-	})
+	}
+	for _, id := range []string{"s1", "s2", "s3"} { // one at a time
+		if err := h.s.RunNow(id, "test"); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, idle)
+	}
 	by := map[string]SchedRun{}
 	for _, r := range h.s.Status().History {
 		by[r.Task] = r
@@ -432,5 +433,53 @@ func TestOverlappingTasksAreStaggered(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestSchedulerRunsOneJobAtATime(t *testing.T) {
+	a := mustTask(t, SchedTask{ID: "a1", Name: "a", Action: "stats_clear", Freq: "daily", At: "12:00"})
+	b := mustTask(t, SchedTask{ID: "a2", Name: "b", Action: "node_pause", Freq: "daily", At: "12:00"})
+	h := newHarness(t, a, b)
+	release := make(chan struct{})
+	h.s.act = func(action, actor string) (string, error) {
+		h.mu.Lock()
+		h.ran = append(h.ran, action)
+		h.mu.Unlock()
+		if action == "stats_clear" {
+			<-release
+		}
+		return "done", nil
+	}
+	h.s.Tick("n1")
+	h.at(time.Date(2026, 10, 17, 12, 0, 2, 0, time.UTC))
+	h.s.Tick("n1")
+	waitFor(t, func() bool { return h.count() == 1 })
+	time.Sleep(100 * time.Millisecond)
+	if h.count() != 1 {
+		t.Fatal("the second job started while the first was running")
+	}
+	if st := h.s.Status(); !st.Tasks[1].Queued {
+		t.Fatalf("the second job should show as waiting: %+v", st.Tasks[1])
+	}
+	if err := h.s.RunNow("a2", "me"); err == nil {
+		t.Fatal("Run now must not start a second job")
+	}
+	h.s.Tick("n1") // still running: still waits
+	time.Sleep(50 * time.Millisecond)
+	if h.count() != 1 {
+		t.Fatal("started during the first job")
+	}
+	close(release)
+	waitFor(t, func() bool { return h.count() == 2 })
+	waitFor(t, func() bool {
+		for _, r := range h.s.Status().History {
+			if r.Status == "running" {
+				return false
+			}
+		}
+		return true
+	})
+	if h.s.Status().Tasks[1].Queued {
+		t.Fatal("still queued after it ran")
 	}
 }
