@@ -72,7 +72,7 @@ Supported systems are Ubuntu, Debian, Fedora, RHEL, Rocky, Alma, Arch and Manjar
 
 The installer builds AnyName from the source tree, installing only the prerequisites that are missing:
 
-- **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) **nmap**, **ping** and **mtr** (for Scan, Ping and Traceroute on the Statistics page).
+- **gcc and the PAM headers**, **iproute2**, **FRR** (for the Anycast pages) **nmap**, **ping** and **mtr** (for Scan, Ping and Traceroute on the Statistics page), **snmpd** (`snmpd` on Debian and Ubuntu, `net-snmp` elsewhere; for Configure ▸ SNMP, switched off by the installer until a community string is set).
 - **A Go toolchain, version 1.24 or newer.** It is taken from the distribution's own package (`golang-1.2x-go`, `golang-go`, `golang` or `go`) when that is recent enough. Otherwise it is downloaded from go.dev with a checksum check. A downloaded toolchain is kept in `/usr/local/share/dnsdir/go`, because the daemon rebuilds itself with it when you apply an update; `--no-keep-go` removes it.
 - FRR comes from the distribution's `frr` package (EPEL on the RHEL family). If that fails the installer only warns, and AnyName leaves FRR untouched until a local AS is set on the Anycast page. A failed nmap, ping or mtr install is a warning too; only Scan, Ping and Traceroute need them.
 
@@ -126,6 +126,8 @@ Fallbacks are **never probed** and always count as up, because the domains the n
 The DNS page marks the fallbacks and says when they are in use, the canvas shows amber "answering from the fallback servers", and the log says when the pool switches either way. A fallback may use `tls://` or `https://` like any server. It cannot also be a normal server, and `server_queries`, names and pausing apply to normal servers only.
 
 ### How clients and servers talk
+
+**SNMP.** Configure ▸ SNMP (`snmp_communities` and `snmp_contact` in the shared `dns` block, `location` in this node's own `snmp` block) runs net-snmp's `snmpd` for monitoring systems. **With at least one community string snmpd is enabled and running; with none it is disabled.** Any number of community strings can be set (up to 16); each gives read-only access over IPv4 and IPv6 on UDP 161 (open the port in the firewall), and `location` and `contact` become `sysLocation` and `sysContact`. dnsdir writes `/etc/snmp/snmpd.conf` (mode 0600; its first line says it is managed) and starts, restarts or stops the `snmpd` service when the settings change and when dnsdir starts. A `snmpd.conf` that was there before is kept once as `snmpd.conf.dnsdir-orig` and put back when the communities are emptied or dnsdir is uninstalled; an snmpd that dnsdir never took over is left alone. The community strings and the contact are cluster settings (replicated); the location is local to each node. The community strings are left out of support bundles and only their number appears in the history.
 
 **Clients to AnyName.** Plain DNS is answered over UDP and TCP on `listen_port` (default 53). Two more listeners are off by default:
 

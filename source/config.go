@@ -535,6 +535,11 @@ type DNSConfig struct {
 	// AllowedClients are the networks (10.0.0.0/8, 192.168.1.5, 2001:db8::/32) that may use the proxy; empty means
 	// everyone. Any other client is answered REFUSED, dynamic updates included. The node itself always may.
 	AllowedClients []string `json:"allowed_clients,omitempty"`
+	// SNMPCommunities and SNMPContact are the cluster-wide part of the SNMP settings (Configure ▸ SNMP), replicated like
+	// AllowedClients: every node answers the same communities and reports the same contact.  The location is per node and
+	// lives in DaemonConfig.SNMP.  See snmp.go.
+	SNMPCommunities []string `json:"snmp_communities,omitempty"`
+	SNMPContact     string   `json:"snmp_contact,omitempty"`
 	// SortList orders the A and AAAA records of an answer per client network: "10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"
 	// (see sortlist.go). Empty means answers keep the order the servers gave.
 	SortList []string `json:"sortlist,omitempty"`
@@ -949,6 +954,9 @@ type DaemonConfig struct {
 	// BGP is this node's FRR/BGP settings (see bgp.go).  A pointer with omitempty so
 	// a config that never used BGP has no "bgp" key and older versions still read it.
 	BGP *BGPConfig `json:"bgp,omitempty"`
+	// SNMP is this node's own snmpd setting, the location (see snmp.go).  The community strings and the contact are
+	// shared and live in DNS.  A pointer with omitempty so a config that never used SNMP has no "snmp" key.
+	SNMP *SNMPConfig `json:"snmp,omitempty"`
 	// NodePaused takes the whole node out of service for maintenance, the same as
 	// pausing every gateway on it (present and future): it resigns, stops answering
 	// and stops probing, and the other nodes carry on.  Local to the node, never
@@ -1153,6 +1161,22 @@ func (dc *DaemonConfig) Validate() error {
 	}
 	if err := dc.Web.Validate(); err != nil {
 		return err
+	}
+	{
+		sc := SNMPConfig{Communities: dc.DNS.SNMPCommunities, Contact: dc.DNS.SNMPContact}
+		if err := sc.Validate(); err != nil {
+			return err
+		}
+		dc.DNS.SNMPCommunities, dc.DNS.SNMPContact = sc.Communities, sc.Contact
+	}
+	if dc.SNMP != nil {
+		dc.SNMP.Communities, dc.SNMP.Contact = nil, ""
+		if err := dc.SNMP.Validate(); err != nil {
+			return err
+		}
+		if dc.SNMP.empty() {
+			dc.SNMP = nil
+		}
 	}
 	if dc.BGP != nil {
 		if err := dc.BGP.Validate(); err != nil {
@@ -1677,4 +1701,13 @@ func (g GroupConfig) pausedAnycast() map[string]string {
 		out[a] = "all"
 	}
 	return out
+}
+
+// snmpSettings is the whole SNMP configuration of this node: the cluster's communities and contact, this node's location.
+func (dc *DaemonConfig) snmpSettings() SNMPConfig {
+	c := SNMPConfig{Communities: dc.DNS.SNMPCommunities, Contact: dc.DNS.SNMPContact}
+	if dc.SNMP != nil {
+		c.Location = dc.SNMP.Location
+	}
+	return c
 }

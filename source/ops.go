@@ -149,6 +149,14 @@ func (m *Mgmt) Op(cmd string, raw json.RawMessage, actor string) (any, error) {
 		err := m.cl.SyncOnce(ctx)
 		return m.cl.View(), err
 
+	// SNMP
+	case "snmp.status":
+		dc, _, err := m.LiveConfig()
+		if err != nil {
+			return nil, err
+		}
+		return snmpStatus(dc.snmpSettings()), nil
+
 	// bgp
 	case "bgp.status":
 		return m.BGPStatus()

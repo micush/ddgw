@@ -490,6 +490,31 @@ func configSections(a, b *DaemonConfig) []Section {
 		out = append(out, Section{"Groups changed", strings.Join(changed, "; ")})
 	}
 
+	// snmp: the community strings are secrets, so only their number is said
+	{
+		sa, sb := a.snmpSettings(), b.snmpSettings()
+		var parts []string
+		if !reflect.DeepEqual(sa.Communities, sb.Communities) {
+			switch {
+			case len(sa.Communities) == 0:
+				parts = append(parts, fmt.Sprintf("SNMP switched on with %d community string(s)", len(sb.Communities)))
+			case len(sb.Communities) == 0:
+				parts = append(parts, "SNMP switched off (no community string)")
+			default:
+				parts = append(parts, fmt.Sprintf("community strings changed (%d now)", len(sb.Communities)))
+			}
+		}
+		if sa.Location != sb.Location {
+			parts = append(parts, "location changed")
+		}
+		if sa.Contact != sb.Contact {
+			parts = append(parts, "contact changed")
+		}
+		if len(parts) > 0 {
+			out = append(out, Section{"SNMP", strings.Join(parts, "; ")})
+		}
+	}
+
 	if a.NodePaused != b.NodePaused {
 		if b.NodePaused {
 			out = append(out, Section{"Node", "paused — this node is out of service"})
@@ -570,7 +595,7 @@ func configSections(a, b *DaemonConfig) []Section {
 		}
 		out = append(out, Section{"DNS probe domains", strings.Join(parts, ", ")})
 	}
-	if f := changedFields(toMap(a.DNS), toMap(b.DNS), "servers", "queries", "paused_servers", "paused_queries"); len(f) > 0 {
+	if f := changedFields(toMap(a.DNS), toMap(b.DNS), "servers", "queries", "paused_servers", "paused_queries", "snmp_communities", "snmp_contact"); len(f) > 0 {
 		out = append(out, Section{"DNS settings", named(f)})
 	}
 	if f := changedFields(toMap(a.Web), toMap(b.Web)); len(f) > 0 {

@@ -41,7 +41,7 @@ const (
 )
 
 // A key whose value is a secret: passwords, the gateway key, tokens, join codes, private keys.
-var tshootSecretKey = regexp.MustCompile(`(?i)(^|_)(pass|passwd|password|secret|token|key|psk|private|cookie|csrf|code|auth)($|_)`)
+var tshootSecretKey = regexp.MustCompile(`(?i)(^|_)(pass|passwd|password|secret|token|key|psk|private|cookie|csrf|code|auth|community|communities)($|_)`)
 
 // A secret written in free text (an FRR configuration, a command's output).
 var tshootSecretText = regexp.MustCompile(`(?i)\b(password|passwd|secret|md5|community|key|auth-key)([ =:]+)(?:[0-9] )?(\S+)`)

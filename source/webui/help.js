@@ -144,23 +144,31 @@ const DNSDIR_HELP = {
     title: "Configure",
     body: [
       "Every setting of this node, as a form. **Changes save and apply as you make them** — when you leave a field, pick an option or tick a box. If the daemon refuses a value, a red “Not saved” message says why and nothing is changed until you correct it.",
-      ["h", "Pages (General, Gateway groups, DNS proxy, Web GUI, Cluster; every change saves from whichever page you are on)"],
+      ["h", "Pages (General, Gateway groups, DNS proxy, Web GUI, SNMP, Cluster; every change saves from whichever page you are on)"],
       ["ul", [
         "**General** — log level.",
         "**Gateway groups** — one card per gateway (gateways are added and deleted on the Topology page, not here): group id, interface, VIPs, priority, weight, preemption, load-balance method, timers, key, and unicast neighbours. Fields tagged **shared** follow the cluster; the rest belong to this node only.",
         "**DNS proxy** — six tabs, each with its own help page (open Help while on the tab): **Servers**, **Health & balancing**, **Listeners**, **Resolution**, **Cache & ECS** and **Clients**. A gateway drawn on the Topology page has its own servers and domains instead of the defaults here.",
         "**Web GUI** — listen address, login group, PAM service, session timeout and lockout. Changing the listen address restarts the GUI and ends every session, so you are asked to confirm first.",
+        "**SNMP** — read-only SNMP for monitoring systems: the community strings, a location and a contact. snmpd runs while at least one community string is set and is switched off when the list is empty. The community strings and the contact are shared; the location is this node's own.",
         "**Cluster** — the address the other nodes use to reach this one, the peer listen address and sync interval. Joining, promotion and membership are on the Cluster page.",
       ]],
       ["h", "In a cluster"],
       "A change to a shared setting made on a replica is sent to the primary, checked there and replicated to everyone within the sync interval. Use the **Node** menu (top right) to edit another member's own settings.",
       ["h", "Fields"],
-      "Every field of the General, Gateway groups, Web GUI and Cluster pages. The fields of the DNS proxy page are in the help of its six tabs, one page per tab. A field tagged **shared** follows the cluster (a change goes to the primary and is replicated); the others are this node's own. Defaults are those of a new installation.",
+      "Every field of the General, Gateway groups, Web GUI, SNMP and Cluster pages. The fields of the DNS proxy page are in the help of its six tabs, one page per tab. A field tagged **shared** follows the cluster (a change goes to the primary and is replicated); the others are this node's own. Defaults are those of a new installation.",
       ["h", "General"],
       ["fields", [
         ["Log level", "`debug`, `info` (default), `warning` or `error`. The least important lines the daemon writes to the journal and the Log page."],
         ["Update every node automatically when a newer release is staged (one node at a time)", "Auto-update. On (the default), each node builds and installs a staged release by itself, one node at a time (the first node must run it 2 minutes without trouble before the others follow), and rolls back if the new version does not stay up. Ticking it asks you to confirm. Applies to the whole cluster."],
         ["Online repository", "The GitHub repository **Fetch from online** (Operate ▸ Upgrade) downloads releases from, written as `https://github.com/owner/repo` (the default is `https://github.com/micush/dnsdir`; use it to follow a fork or if the repository moves). Saved when you leave the field; an empty field goes back to the default. Only github.com repositories are accepted. Shared: it is kept with the update settings on the primary and followed by every node. Nodes build and install what is downloaded as root, so point it only at a repository you trust. CLI: `--update-repo URL|default`."],
+      ]],
+      ["h", "SNMP"],
+      "The community strings and the contact are **shared** (every node answers the same communities and reports the same contact); the location is this node's own, since it differs from node to node. dnsdir writes `/etc/snmp/snmpd.conf` and switches the `snmpd` service on and off itself: **on** while there is a community string, **off** when there is none. An snmpd.conf that was there before is kept as `snmpd.conf.dnsdir-orig` and put back when the list is emptied; an snmpd that dnsdir never took over is left alone. The page says whether snmpd is installed and running. Access is read-only, over IPv4 and IPv6 on UDP 161; open that port in the firewall for your monitoring system.",
+      ["fields", [
+        ["Community strings", "The read-only community strings, one per line, up to 16, each up to 64 letters, digits or punctuation (no spaces, quotes, backslash or `#`). Empty switches SNMP off. They are kept in the config file and its history, readable by root only, and left out of support bundles."],
+        ["Location", "What snmpd reports as `sysLocation` (one line, up to 255 characters). Optional. Not shared: each node has its own."],
+        ["Contact", "What snmpd reports as `sysContact` (one line, up to 255 characters). Optional."],
       ]],
       ["h", "Gateway groups (one card per gateway)"],
       ["fields", [

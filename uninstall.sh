@@ -136,6 +136,17 @@ if [ -f "$NM_FILE" ] && { [ "$NM_CREATED" = 1 ] || [ "$PURGE" = 1 ] || [ -z "$NM
   if [ "$HAVE_SYSTEMD" = 1 ]; then run "$SYSTEMCTL" reload NetworkManager >/dev/null 2>&1 || true; fi
 fi
 
+# snmpd: when dnsdir was running it (Configure ▸ SNMP), switch it off and put back the snmpd.conf it replaced.  snmpd stays installed.
+SNMP_CONF="${DNSDIR_SNMP_CONF:-/etc/snmp/snmpd.conf}"
+if [ -f "$SNMP_CONF" ] && grep -q '^# Managed by dnsdir (Configure' "$SNMP_CONF"; then
+  if [ "$HAVE_SYSTEMD" = 1 ]; then run "$SYSTEMCTL" disable --now snmpd >/dev/null 2>&1 || true; fi
+  if [ -f "$SNMP_CONF.dnsdir-orig" ]; then
+    run mv -f "$SNMP_CONF.dnsdir-orig" "$SNMP_CONF"; info "put back the original $SNMP_CONF and switched snmpd off (snmpd itself is left installed)"
+  else
+    run rm -f "$SNMP_CONF"; info "removed $SNMP_CONF written by dnsdir and switched snmpd off (snmpd itself is left installed)"
+  fi
+fi
+
 # PAM service
 if [ -f "$PAM_FILE" ]; then
   if [ "$PURGE" = 1 ]; then

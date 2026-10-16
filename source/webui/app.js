@@ -227,7 +227,7 @@
   const TOPO = "Topology";
   const NAV_GROUPS = [
     ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["capture", "Capture"], ["log", "Log"]]],
-    ["Configure", [["cfg_general", "General"], ["cfg_groups", "Gateway groups"], ["cfg_dns", "DNS proxy"], ["cfg_web", "Web GUI"], ["cfg_cluster", "Cluster"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
+    ["Configure", [["cfg_general", "General"], ["cfg_groups", "Gateway groups"], ["cfg_dns", "DNS proxy"], ["cfg_web", "Web GUI"], ["cfg_snmp", "SNMP"], ["cfg_cluster", "Cluster"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
     ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["updates", "Upgrade"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
@@ -2101,6 +2101,11 @@
     { k: "lockout_minutes", l: "Lockout lasts (minutes)", t: "int", min: 1 },
     { k: "min_password_length", l: "Minimum password length", t: "int", min: 0, max: 128, hint: "0 = 8" },
   ];
+  const SNMP_FIELDS = [
+    { shared: true, k: "snmp_communities", l: "Community strings", t: "list", wide: true, hint: "One per line. SNMP is on while there is at least one and off when the list is empty. Each gives read-only access, over IPv4 and IPv6." },
+    { k: "location", l: "Location", t: "text", hint: "What snmpd reports as sysLocation, e.g. Rack 4, Phoenix DC. Differs from node to node, so it is not shared." },
+    { shared: true, k: "snmp_contact", l: "Contact", t: "text", hint: "What snmpd reports as sysContact, e.g. noc@example.com" },
+  ];
   const CLUSTER_FIELDS = [
     { k: "listen", l: "Binding address", t: "port", hint: "the port, default 53854 (all addresses); or an address with the port: 10.0.0.1:53854" },
     { k: "self", l: "Advertised address", t: "text" },
@@ -2350,7 +2355,7 @@
   // Configure ▸ General, Gateway groups, DNS proxy, Web GUI and Cluster: one page each, all made from the one form
   // (every page shows its own panel and saves through the same call).
   const makeConfigView = (only) => {
-    let holder, status, collect = null;
+    let holder, status, collect = null, refreshSNMP = () => {};
     const tab = only;
 
     // Action results ("Saved", "Restored" …) are not announced; only errors, warnings and hints are.
@@ -2360,6 +2365,21 @@
       const general = fieldset(GENERAL_FIELDS, cfg);
       const web = fieldset(WEB_FIELDS, cfg.web);
       const dns = fieldset(DNS_FIELDS, cfg.dns, true);
+      const snmp = fieldset(SNMP_FIELDS, { snmp_communities: cfg.dns.snmp_communities, snmp_contact: cfg.dns.snmp_contact, location: (cfg.snmp || {}).location });
+      // what snmpd is doing, under the form (refreshed after every save)
+      const snmpShared = () => { const v = snmp.get(); return { snmp_communities: v.snmp_communities, snmp_contact: v.snmp_contact }; };
+      const snmpLocal = () => { const v = snmp.get(); return { location: v.location }; };
+      const snmpNote = h("div", { "aria-live": "polite" });
+      refreshSNMP = async () => {
+        try {
+          const st = (await api("GET", "/api/snmp")).data;
+          clear(snmpNote);
+          if (st.enabled && !st.installed) snmpNote.append(h("div", { class: "notice bad", role: "alert" }, "snmpd is not installed on this node, so SNMP cannot answer. Install the snmpd package (net-snmp on Fedora, RHEL and Arch), or run the installer again."));
+          else if (st.enabled && !st.running) snmpNote.append(h("div", { class: "notice warn" }, "snmpd is not running yet. It was told to start; reload this page in a moment."));
+          else snmpNote.append(h("p", { class: "hint" }, st.enabled ? "snmpd is on and answering SNMP on UDP 161." : "SNMP is off: no community string is set."));
+        } catch (_) { /* not shown */ }
+      };
+      refreshSNMP();
       const cluster = fieldset(CLUSTER_FIELDS, cfg.cluster || {});
       // the DNS proxy page is six tabs; every card stays in the page (a hidden one is still read when saving)
       const dnsTabs = () => {
@@ -2419,10 +2439,11 @@
         ...general.get(),
         // keep what this form has no fields for (a gateway's own DNS pool, per-server domains)
         groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.excluded_nodes ? { excluded_nodes: g.orig.excluded_nodes } : {}), ...(g.orig.node_order ? { node_order: g.orig.node_order } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
-        dns: { ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get() },
+        dns: { ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get(), ...snmpShared() },
         // the certificate is managed under Web GUI; keep any file paths already in the config
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },
         cluster: cluster.get(),
+        snmp: snmpLocal(),
         ...(cfg.bgp ? { bgp: cfg.bgp } : {}), // edited on the Anycast page
         ...(cfg.node_paused ? { node_paused: true } : {}), // set on the Node page
         ...(cfg.paused_servers_here ? { paused_servers_here: cfg.paused_servers_here } : {}), // set on the Topology page
@@ -2467,6 +2488,7 @@
         ["groups", "Gateway groups", h("div", {}, groupsEl)],
         ["dns", "DNS proxy", dnsTabs()],
         ["web", "Web GUI", h("div", {}, section("Web GUI", web.el), certBox)],
+        ["snmp", "SNMP", h("div", {}, section("SNMP", snmp.el), snmpNote)],
         ["cluster", "Cluster", section("Cluster", cluster.el)],
       ];
       for (const [pid, , el] of panels) el.hidden = pid !== tab;
@@ -2516,6 +2538,7 @@
         state.cfg = r.config;
         clear(status);
         state.cfgInfo.exists = true;
+        setTimeout(() => refreshSNMP(), 1500);   // snmpd was (re)started by the save
       } catch (e) { if (e.message !== "unauthenticated") say("bad", "Not saved: " + e.message); }
     }
 
@@ -2528,7 +2551,7 @@
       },
     };
   };
-  for (const id of ["general", "groups", "dns", "web", "cluster"]) VIEWS["cfg_" + id] = makeConfigView(id);
+  for (const id of ["general", "groups", "dns", "web", "snmp", "cluster"]) VIEWS["cfg_" + id] = makeConfigView(id);
 
   // ── shared helpers for the management pages ───────────────────────────────
   // Nothing is said when every node answered (the Node menu says "Cluster"); when one could not, which and why, since the

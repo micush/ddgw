@@ -339,6 +339,27 @@ install_nmap() {
   return 0
 }
 
+# snmpd answers SNMP while a community string is set (Configure ▸ SNMP); dnsdir writes /etc/snmp/snmpd.conf and switches the
+# service on and off by itself.  A package that starts snmpd as soon as it is installed (Debian) must not leave it running with its
+# own default configuration, so a freshly installed snmpd is switched off here: with no community string SNMP is off.
+# Only that feature needs it, so a failure is a warning.
+have_snmpd() { ! assumed_missing snmpd && { have snmpd || [ -x /usr/sbin/snmpd ]; }; }
+install_snmpd() {
+  local pkg=snmpd
+  case $FAMILY in fedora|rhel|arch) pkg=net-snmp;; esac
+  if have_snmpd; then
+    info "snmpd already present"
+    return 0
+  fi
+  info "installing $pkg (Configure ▸ SNMP; stays off until a community string is set)"
+  if ! (pkg_install "$pkg"); then
+    warn "snmpd could not be installed. Everything else works; install the '$pkg' package yourself before using Configure ▸ SNMP."
+    return 0
+  fi
+  if [ "$HAVE_SYSTEMD" = 1 ]; then run "$SYSTEMCTL" disable --now snmpd >/dev/null 2>&1 || true; fi
+  return 0
+}
+
 # ping and mtr run the "Ping" and "Traceroute" of a client on the Statistics page.  Only those need them, so a failure is a warning.
 install_nettools() {
   local want=() ping_pkg=iputils-ping
@@ -446,6 +467,7 @@ else
   install_frr
   install_nmap
   install_nettools
+  install_snmpd
 fi
 step "Go toolchain"
 if find_go; then info "using $GO ($("$GO" version | awk '{print $3}'))"

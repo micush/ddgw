@@ -1,5 +1,20 @@
 # Changelog
 
+## [v407] - 2026-10-15 — SNMP
+
+### Added
+- Configure ▸ SNMP: community strings (any number, one per line, up to 16), a Contact and a Location. **A community string set: snmpd is enabled and running. None: snmpd is disabled.** Each community gives read-only access over IPv4 and IPv6 on UDP 161; Location and Contact become `sysLocation` and `sysContact`. The page also says whether snmpd is installed and running.
+- **The community strings and the contact are shared** across the cluster (`dns.snmp_communities`, `dns.snmp_contact`, replicated like Allowed clients); **the location is local** to each node (`snmp.location`).
+- dnsdir writes `/etc/snmp/snmpd.conf` (mode 0600, first line marks it as managed) and enables/restarts/disables `snmpd` when the settings change and when it starts. An existing `snmpd.conf` is kept once as `snmpd.conf.dnsdir-orig` and put back when the communities are emptied; an snmpd that dnsdir never took over is left alone.
+- Installer prerequisite: `snmpd` (`net-snmp` on Fedora, RHEL and Arch). A failed install is a warning. A freshly installed snmpd is switched off at once, so with no community string SNMP is off. The uninstaller switches snmpd off again and puts the original `snmpd.conf` back; snmpd stays installed.
+- The community strings are left out of support bundles, and the history says only how many there are.
+
+### Verified
+- Go tests: validation, the generated snmpd.conf, enable / restart only when the file changed / disable and restore, a foreign snmpd left alone, snmpd not installed, replication to a replica (location untouched), redaction and history wording. Headless Chromium: the page and saving through `/api/config`.
+
+### Not verified
+- Not run against a real snmpd or systemd (the sandbox has neither).
+
 ## [v406] - 2026-10-15 — Configure tabs: cards back in the right tab
 
 ### Fixed
