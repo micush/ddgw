@@ -428,8 +428,8 @@ func TestOverlappingTasksAreStaggered(t *testing.T) {
 		s.mu.Unlock()
 		for i := range at {
 			for j := i + 1; j < len(at); j++ {
-				if d := at[i] - at[j]; d < 30 && d > -30 {
-					t.Errorf("node %s: tasks %d and %d start %d s apart", node, i, j, d)
+				if d := at[i] - at[j]; d < int64(schedStagger/time.Second) && d > -int64(schedStagger/time.Second) {
+					t.Errorf("node %s: tasks %d and %d start %d s apart (under the stagger)", node, i, j, d)
 				}
 			}
 		}

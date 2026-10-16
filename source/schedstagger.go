@@ -13,8 +13,8 @@ import (
 // is the same each time and a node never moves a run it has already worked out.
 
 const (
-	schedStagger   = 30 * time.Second // jobs on one node start at least this far apart (less when the window is too small)
-	schedClusterMx = 300              // overlapping occurrences looked at together; beyond this the plain hashed place is used
+	schedStagger   = time.Minute // jobs on one node start at least this far apart, and the gap between nodes of a "run on all nodes" (less when the window is too small)
+	schedClusterMx = 300         // overlapping occurrences looked at together; beyond this the plain hashed place is used
 )
 
 type schedOcc struct {

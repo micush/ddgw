@@ -1,5 +1,10 @@
 # Changelog
 
+## [v424] - 2026-10-16 — Scheduler: one minute apart
+
+### Changed
+- The gap used to stagger jobs is now 1 minute instead of 30 seconds: between the nodes of *Run now on… ▸ all nodes* (a reboot needs longer than 30 seconds), and between jobs whose windows overlap on a node (a smaller gap when a window is too small to fit them).
+
 ## [v423] - 2026-10-16 — Scheduler: run now on all nodes
 
 ### Changed

@@ -4613,7 +4613,7 @@
       try {
         const menu = (v) => rowMenu([["Edit…", () => editor(v.task, tasks)], ["Copy", () => copyTask(v.task)], clip ? ["Paste", () => pasteTask(tasks)] : null, "-",
           ["Run now on…", [["this node", () => { if (confirm("Run “" + v.name + "” on this node now?")) call("run", { id: v.id }); }],
-            ["all nodes", () => { if (confirm("Run “" + v.name + "” on every node it is for now? The nodes start 30 seconds apart, each when it is free.")) call("run", { id: v.id, all: true }); }]]],
+            ["all nodes", () => { if (confirm("Run “" + v.name + "” on every node it is for now? The nodes start 1 minute apart, each when it is free.")) call("run", { id: v.id, all: true }); }]]],
           [v.disabled ? "Enable" : "Disable", () => call("task", { task: Object.assign({}, v.task, { disabled: !v.disabled }) })], "-",
           ["Delete", () => { if (confirm("Delete the task “" + v.name + "”?")) call("delete", { id: v.id }); }, "danger"]].filter(Boolean));
         const emptyMenu = rowMenu([["New task…", () => editor(null, tasks)], clip ? ["Paste", () => pasteTask(tasks)] : null].filter(Boolean));
