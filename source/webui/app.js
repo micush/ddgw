@@ -4488,7 +4488,7 @@
       const action = h("select", { "aria-label": "Action" }, acts.map(([k, l]) => h("option", { value: k, selected: k === t.action }, l)), h("option", { value: "shell", selected: t.action === "shell" }, "Run a shell command"));
       const cmd = h("textarea", { rows: "4", spellcheck: "false", maxlength: "4096", "aria-label": "Command", class: "mono" }); cmd.value = t.command || "";
       const tmo = h("input", { type: "number", min: "1", max: "86400", value: String(t.timeout_sec || 300), "aria-label": "Time limit in seconds" });
-      const shellBox = h("div", {}, h("label", { class: "f wide" }, "Command", cmd, h("span", { class: "hint" }, "Run with /bin/sh as root on each node, in the daemon's directory. Output is kept in the history.")),
+      const shellBox = h("div", {}, h("label", { class: "f wide" }, "Command", cmd, h("span", { class: "hint" }, "Run with /bin/sh as root on each node, in the daemon's directory. The PATH has the usual system directories; no login profile is read. Output is kept in the history.")),
         h("label", { class: "f" }, "Stop it after (seconds)", tmo));
       const allNodes = h("input", { type: "radio", name: "sched-where", checked: !(t.nodes || []).length });
       const someNodes = h("input", { type: "radio", name: "sched-where", checked: (t.nodes || []).length > 0 });

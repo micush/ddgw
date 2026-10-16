@@ -375,3 +375,24 @@ func TestMultipleOrdinalsAndWeekdaysWithAWindow(t *testing.T) {
 		t.Fatalf("wrap %d", wrap.WindowSec)
 	}
 }
+
+func TestSchedEnvHasTheUsualPaths(t *testing.T) {
+	env := schedEnv([]string{"PATH=/opt/x/bin", "LANG=C"}, "job")
+	m := map[string]string{}
+	for _, e := range env {
+		if i := strings.IndexByte(e, '='); i > 0 {
+			m[e[:i]] = e[i+1:]
+		}
+	}
+	for _, p := range []string{"/opt/x/bin", "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"} {
+		if !strings.Contains(":"+m["PATH"]+":", ":"+p+":") {
+			t.Errorf("PATH %q lacks %s", m["PATH"], p)
+		}
+	}
+	if m["HOME"] != "/root" || m["LANG"] != "C" {
+		t.Errorf("env %v", m)
+	}
+	if got := schedEnv(nil, "job"); len(got) < 2 {
+		t.Errorf("empty base: %v", got)
+	}
+}

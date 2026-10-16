@@ -729,7 +729,7 @@ func (s *Scheduler) execute(t SchedTask, actor string) (string, error) {
 	var buf bytes.Buffer
 	lw := &limitWriter{w: &buf, n: 1 << 20}
 	cmd.Stdout, cmd.Stderr = lw, lw // one writer for both: they share one pipe, and the output stays in order
-	cmd.Env = append(os.Environ(), "DNSDIR_TASK="+t.Name)
+	cmd.Env = schedEnv(os.Environ(), t.Name)
 	err := cmd.Run()
 	lw.mu.Lock()
 	out := buf.String()
@@ -857,4 +857,42 @@ func (s *Scheduler) Status() SchedStatus {
 		out.History = append(out.History, s.st.History[i])
 	}
 	return out
+}
+
+// schedEnv is the environment of a shell task: the daemon's own, with the usual system and local command directories
+// on the PATH (a service started by systemd may have a short one or none) and HOME set, so a plain `ls` or `systemctl`
+// is found as it would be in a root shell.
+func schedEnv(base []string, task string) []string {
+	const std = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	var out []string
+	path, home := "", false
+	for _, e := range base {
+		switch {
+		case strings.HasPrefix(e, "PATH="):
+			path = e[5:]
+		case strings.HasPrefix(e, "HOME="):
+			home = true
+			out = append(out, e)
+		case strings.HasPrefix(e, "NTPDIR_TASK=") || strings.HasPrefix(e, "DNSDIR_TASK="):
+		default:
+			out = append(out, e)
+		}
+	}
+	have := map[string]bool{}
+	for _, p := range strings.Split(path, ":") {
+		have[p] = true
+	}
+	for _, p := range strings.Split(std, ":") {
+		if !have[p] {
+			if path != "" {
+				path += ":"
+			}
+			path += p
+		}
+	}
+	out = append(out, "PATH="+path)
+	if !home {
+		out = append(out, "HOME=/root")
+	}
+	return append(out, "DNSDIR_TASK="+task)
 }
