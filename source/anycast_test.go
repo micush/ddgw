@@ -123,6 +123,9 @@ func hookLo(t *testing.T) *fakeLo {
 	}
 	anycastDelFn = func(a string) { f.mu.Lock(); delete(f.on, a); f.dels++; f.mu.Unlock() }
 	t.Cleanup(func() { anycastAddFn, anycastDelFn = oa, od })
+	og := anycastGateFn // these tests are not about BGP: the gate is open unless a test closes it
+	anycastGateFn = func(*BGPConfig, string) string { return "" }
+	t.Cleanup(func() { anycastGateFn = og })
 	return f
 }
 

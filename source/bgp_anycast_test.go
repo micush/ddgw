@@ -66,6 +66,9 @@ func TestAnycastBGPStatus(t *testing.T) {
 // The canvas colours a held address by its BGP sessions, and leaves it alone
 // when this node does not manage BGP.
 func TestMarkAnycastBGPColour(t *testing.T) {
+	og := anycastGateFn
+	anycastGateFn = func(*BGPConfig, string) string { return "" }
+	t.Cleanup(func() { anycastGateFn = og })
 	hookLo(t)
 	up := newFakeDNS(t)
 	g := defaultGroup()
@@ -117,5 +120,17 @@ func TestMarkAnycastBGPColour(t *testing.T) {
 	s.mu.Unlock()
 	if got := look("Established"); got != "bad" {
 		t.Errorf("BGP disabled: %q, want bad", got)
+	}
+}
+
+func TestAnycastBGPGateWords(t *testing.T) {
+	if anycastBGPGate(nil, "192.0.2.1") == "" {
+		t.Error("no BGP configured must close the gate")
+	}
+	if anycastBGPGate(&BGPConfig{ASN: 65000, Disabled: true}, "192.0.2.1") == "" {
+		t.Error("disabled BGP must close the gate")
+	}
+	if anycastBGPGate(&BGPConfig{ASN: 65000}, "192.0.2.1") == "" {
+		t.Error("no neighbor must close the gate")
 	}
 }

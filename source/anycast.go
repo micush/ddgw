@@ -155,6 +155,9 @@ type anycastSet struct {
 	doh   func() int // the DNS-over-HTTPS port (0 = off); nil means off
 	// paused says per address where its announcing is paused ("node" or "all"); nil means none
 	paused func() map[string]string
+	// bgp returns the node's BGP settings; a nil hook turns the gate off.  An address is only held while BGP is
+	// configured and at least one neighbor of its family is established (see anycastBGPGate).
+	bgp func() (*BGPConfig, bool)
 
 	mu     sync.Mutex
 	reason map[string]string
@@ -248,6 +251,11 @@ func (a *anycastSet) step() {
 		if !healthy {
 			why = "no DNS server is answering"
 		}
+		if why == "" && a.bgp != nil {
+			if cfg, ok := a.bgp(); ok {
+				why = anycastGateFn(cfg, addr)
+			}
+		}
 		switch paused[addr] {
 		case "node":
 			why = pausedHereWhy
@@ -331,3 +339,23 @@ func (a *anycastSet) state() []AnycastState {
 	}
 	return out
 }
+
+// anycastBGPGate says why an anycast address must not be held: nothing would announce it, or no neighbor that could
+// carry it is established.  "" means BGP can carry it.  One established neighbor of the address's family is enough
+// (a partly established set stays up; the drawing shows it amber).
+func anycastBGPGate(cfg *BGPConfig, addr string) string {
+	switch {
+	case !cfg.Configured():
+		return "BGP anycast is not configured: nothing announces the address"
+	case cfg.Disabled:
+		return "BGP is disabled on this node: the address is not announced"
+	}
+	peers, known := liveBGPPeers()
+	if st, detail, _ := anycastBGPStatus(addr, cfg.Neighbors, peers, known); st == "bad" {
+		return "BGP: " + detail
+	}
+	return ""
+}
+
+// anycastGateFn is the announce gate (replaceable in tests that are not about BGP).
+var anycastGateFn = anycastBGPGate
