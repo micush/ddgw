@@ -201,6 +201,22 @@ func cloneDNS(d DNSConfig) DNSConfig {
 	if len(d.SNMPCommunities) == 0 {
 		d.SNMPCommunities = nil
 	}
+	if len(d.Schedule) > 0 {
+		sch := make([]SchedTask, len(d.Schedule))
+		for i, t := range d.Schedule {
+			t.Days, t.Nodes = append([]int(nil), t.Days...), append([]string(nil), t.Nodes...)
+			if len(t.Days) == 0 {
+				t.Days = nil
+			}
+			if len(t.Nodes) == 0 {
+				t.Nodes = nil
+			}
+			sch[i] = t
+		}
+		d.Schedule = sch
+	} else {
+		d.Schedule = nil
+	}
 	d.ClientExempt = append([]string(nil), d.ClientExempt...)
 	if len(d.ClientExempt) == 0 {
 		d.ClientExempt = nil

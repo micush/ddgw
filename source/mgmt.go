@@ -28,6 +28,7 @@ type Mgmt struct {
 	capjobs capJobs      // the cluster-wide capture
 	capruns capRuns      // timed captures started on this node (by the cluster-wide one, from another node)
 
+	sched    *Scheduler // the scheduled tasks of this node (Operate ▸ Scheduler)
 	versions *VersionStore
 	certs    *CertManager
 	upd      *Updater
@@ -80,6 +81,8 @@ func NewMgmt(confPath, stateDir string, dc *DaemonConfig) (*Mgmt, error) {
 		return nil, fmt.Errorf("state directory %s: %w", stateDir, err)
 	}
 	m := &Mgmt{confPath: confPath, stateDir: stateDir}
+	m.sched = newScheduler(m, stateDir)
+	m.sched.SetTasks(dc.DNS.Schedule)
 	m.bgp = NewBGPManager(stateDir)
 	w := dc.Web
 	m.webPolicy.Store(&w)
@@ -116,6 +119,7 @@ func (m *Mgmt) OnConfigLoaded(dc *DaemonConfig) {
 	w := dc.Web
 	m.webPolicy.Store(&w)
 	m.bgp.Apply(dc)
+	m.sched.SetTasks(dc.DNS.Schedule)
 	m.certs.Refresh()
 	if _, raw, err := m.LiveConfig(); err == nil {
 		if _, err := os.Stat(m.confPath); err == nil { // don't version a config that doesn't exist yet

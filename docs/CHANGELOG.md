@@ -1,5 +1,26 @@
 # Changelog
 
+## [v416] - 2026-10-16 — Scheduler
+
+### Added
+- **Scheduler rules**: a monthly or yearly task can pick several occurrences and several weekdays at once ("the 2nd or 3rd Saturday or Sunday of every month"), and the offset window can be stated as an end time ("between 01:00 and 10:00", running into the next day if the end is not later than the start) instead of "up to N after". Each node still runs once, at a time of its own inside the window. Tasks saved with the single `nth`/`weekday` form are converted when loaded.
+- **Operate ▸ Scheduler**: tasks that run on every cluster node or on chosen nodes. Frequencies: hourly, daily, weekly (chosen days), monthly (a day of the month, the last day, or the 1st to 4th / last weekday, e.g. the 3rd Saturday) and yearly, each "every N". Time zone per task (empty: the node's own).
+- **Offset window**: a task is due at its time and each node runs it at its own stable place (a hash of node, task and occurrence) inside that window, so the nodes do not all run it at once. A node that was down runs a missed task once on return if still inside the window; older runs are skipped and logged. A task that is still running is not started again.
+- Actions: restart dnsdir (once it is safe to go down), empty the answer cache, pause or resume the node, clear the statistics, or a shell command (`/bin/sh -c`, as root, with a time limit; the whole process group is stopped on timeout). Output and result of the last 300 runs are kept per node (`scheduler.json` in the state directory).
+- The list: New task, and right-click ▸ Edit, Copy, Paste, Run now on this node, Disable/Enable, Delete (Paste adds a copy with a new name; double-click edits). The task list is part of the shared `dns` settings (`schedule`) and replicates; a replica's change goes through the primary like any shared edit.
+- CLI: `--schedule`, `--schedule-history`, `--schedule-set JSON`, `--schedule-del ID`, `--schedule-run ID`. Help topic, README section.
+
+### Fixed
+- A node that joins the cluster through a replica is no longer added to every gateway: the primary now excludes it when it learns of the newcomer from the replica's broadcast, as it already did when the node joined the primary directly.
+
+### Verified
+- `go test -race ./...` passes, with tests for every frequency, the 3rd Saturday of each month of 2026, last days and day clamping, every-N, offsets (stable, inside the window, different per node), catch-up inside and outside the window, nodes the task is not for, shell output/timeout/exit status, history across a restart, validation, config save and the shared hash.
+- The same tests as ntpdir (adapted), and headless Chromium against the dnsdir page: New, Edit, Copy, Paste, Delete. The live daemon run was done on ntpdir only; the code is the same.
+
+### Not verified
+- Not run on a cluster of real nodes (replication of the list uses the same path as other shared settings). Built-in actions other than the statistics were not run (a restart of dnsdir in particular).
+- Daylight-saving changes were not tested; a time that does not exist that day runs an hour later.
+
 ## [v415] - 2026-10-16 — A shared address cannot be a node's address
 
 ### Added

@@ -700,8 +700,14 @@ func (c *Cluster) handlePeerAdd(rw http.ResponseWriter, r *http.Request, caller 
 		jsonError(rw, http.StatusBadRequest, "bad request")
 		return
 	}
+	newcomer := m.Peer.NodeID != "" && !c.knowsNode(m.Peer.NodeID)
 	if c.node.AddPeer(m.Peer) {
 		infof("cluster: %s (node %s) joined through %s", m.Peer.Addr, m.Peer.NodeID, caller.Addr)
+	}
+	if newcomer && c.mg != nil && c.node.Snapshot().Role == RolePrimary {
+		// the primary leaves a node that joined through another member out of the gateways too (the member that took the
+		// join asks for the same; the second is a no-op)
+		go c.mg.excludeNewNode(m.Peer.NodeID)
 	}
 	if m.MTLS {
 		c.node.NoteMTLS(m.Peer.Fp)
@@ -800,9 +806,10 @@ func (c *Cluster) handleJoin(rw http.ResponseWriter, r *http.Request) {
 	c.node.UnremoveFp(peer.Fp) // a token is an administrator's decision to let this identity in
 	newcomer := peer.NodeID != "" && !c.knowsNode(peer.NodeID)
 	c.node.AddPeer(peer)
-	if newcomer && c.node.Snapshot().Role == RolePrimary && c.mg != nil {
+	if newcomer && c.mg != nil {
 		// A node that joins does not start serving every gateway: it is left out of each until an administrator adds it
 		// (right-click the gateway ▸ Add node).  Done before the answer, so the joiner's first sync already carries it.
+		// Whichever member took the join does it: a replica's change reaches the primary like any shared edit.
 		c.mg.excludeNewNode(peer.NodeID)
 	}
 	if req.MTLS {

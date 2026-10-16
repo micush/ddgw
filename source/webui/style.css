@@ -598,3 +598,28 @@ table.qtop.plain tbody tr { height: 2.6667rem; }   /* twelve of these are as tal
 .pweye.on { opacity: 1; color: var(--accent); }
 
 .nt-opt { margin-right: auto; display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--muted); }
+
+/* scheduler */
+dialog.sched-dialog { width: min(40rem, calc(100vw - 2rem)); }
+.sched-dialog textarea { width: 100%; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+.sched-every { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; color: var(--text); }
+.sched-every input[type=number] { width: 6rem; }
+.sched-days, .sched-nodes { display: flex; flex-wrap: wrap; gap: .25rem .9rem; }
+.sched-nodes { flex-direction: column; margin-left: 1.6rem; gap: .1rem; }
+.sched-dialog [hidden] { display: none !important; }
+table.sched td { vertical-align: top; }
+table.sched .sched-cmd { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.sched tr.paused { opacity: .6; }
+table.sched details summary { cursor: pointer; }
+table.sched details pre.nt-out { max-height: 12rem; overflow: auto; margin: .3rem 0 0; }
+.sched-dialog div.f { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
+.sched-dialog .grid > .wide, .sched-dialog .grid > div { grid-column: 1 / -1; }
+.sched-dialog .grid > div > label.f { margin-bottom: .5rem; }
+.sched-dialog div.f > label.f.check { color: var(--text); }
+table.sched { width: 100%; table-layout: auto; }
+table.sched td, table.sched th { white-space: normal; }
+table.sched td:nth-child(5), table.sched td:nth-child(6) { min-width: 9rem; }
+table.sched .sched-cmd { max-width: 13rem; }
+.sched-dialog .f.check { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; color: var(--text); }
+.sched-dialog .f.check input[type=number], .sched-dialog .f.check input[type=time], .sched-dialog .f.check select { width: auto; }
+.sched-dialog .f.check .sched-days { flex-basis: 100%; margin-left: 1.6rem; }

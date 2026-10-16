@@ -18,12 +18,15 @@ import (
 // calls the same code), so the two always agree.
 
 type cliFlags struct {
-	versions, versionSnapshot, tlsStatus, tlsInstall, tlsCSR, tlsRevert, tlsRegenerate                                                                                                                                                               *bool
-	clusterStatus, clusterToken, clusterPromote, clusterLeave, clusterSync                                                                                                                                                                           *bool
-	updateStatus, updateApply, updateHistory, noWait, yes                                                                                                                                                                                            *bool
-	versionShow, versionDiff, versionRestore, versionExport, configImport, note                                                                                                                                                                      *string
-	certFile, keyFile, cn, san                                                                                                                                                                                                                       *string
-	clusterJoin, clusterRemove, clusterUnremove                                                                                                                                                                                                      *string
+	versions, versionSnapshot, tlsStatus, tlsInstall, tlsCSR, tlsRevert, tlsRegenerate *bool
+	clusterStatus, clusterToken, clusterPromote, clusterLeave, clusterSync             *bool
+	updateStatus, updateApply, updateHistory, noWait, yes                              *bool
+	versionShow, versionDiff, versionRestore, versionExport, configImport, note        *string
+	certFile, keyFile, cn, san                                                         *string
+	clusterJoin, clusterRemove, clusterUnremove                                        *string
+	schedule, scheduleHistory                                                          *bool
+	scheduleSet, scheduleDel, scheduleRun                                              *string
+
 	users                                                                                                                                                                                                                                            *bool
 	userAdd, userPasswd, userExpiry, userDel, userGrant, userRevoke, expires, hostname                                                                                                                                                               *string
 	power, powerAt                                                                                                                                                                                                                                   *string
@@ -59,7 +62,8 @@ func registerCLIFlags(fs *flag.FlagSet) *cliFlags {
 		serverStats: s("server-stats"), gatewayStats: s("gateway-stats"), spread: s("spread"), lbMode: s("lb"), spreadBand: fs.Int("spread-band", 0, ""), downPercent: fs.Int("down-percent", 0, ""),
 		failThreshold: fs.Int("fail-threshold", 0, ""), maxAttempts: fs.Int("max-attempts", 0, ""), latencyAlpha: fs.Float64("latency-alpha", 0, ""),
 		vip: s("vip"), ifname: s("interface"), server: s("server"), name: s("name"), qtype: s("type"),
-		group: fs.Int("group", 0, ""),
+		group:    fs.Int("group", 0, ""),
+		schedule: b("schedule"), scheduleHistory: b("schedule-history"), scheduleSet: s("schedule-set"), scheduleDel: s("schedule-del"), scheduleRun: s("schedule-run"),
 		users: b("users"), userAdd: s("user-add"), userPasswd: s("user-passwd"), userExpiry: s("user-expiry"), userDel: s("user-del"), userGrant: s("user-grant"), userRevoke: s("user-revoke"), expires: s("expires"), hostname: s("hostname"),
 		power: s("power"), powerAt: s("at"), powerIn: fs.Int("in", 0, ""),
 		nodePause: b("node-pause"), nodeResume: b("node-resume"), nodeStatus: b("node-status"),
@@ -425,6 +429,55 @@ func (f *cliFlags) run(sock string) bool {
 		}
 		decode(op(sock, "node.pause", map[string]bool{"paused": *f.nodePause}), &r)
 		fmt.Println(r.Message)
+	// ── scheduler ──
+	case *f.schedule || *f.scheduleHistory:
+		var r SchedStatus
+		decode(op(sock, "schedule.status", nil), &r)
+		if *f.scheduleHistory {
+			if len(r.History) == 0 {
+				fmt.Println("Nothing has run on this node yet.")
+			}
+			for _, h := range r.History {
+				fmt.Printf("%s  %-8s %s\n", lt(time.Unix(h.Start, 0)), h.Status, h.Name)
+				if h.Output != "" {
+					fmt.Println("    " + strings.ReplaceAll(h.Output, "\n", "\n    "))
+				}
+			}
+			break
+		}
+		if len(r.Tasks) == 0 {
+			fmt.Println("No scheduled tasks.")
+		}
+		for _, t := range r.Tasks {
+			state := ""
+			switch {
+			case t.Disabled:
+				state = "  [disabled]"
+			case !t.Applies:
+				state = "  [not for this node]"
+			}
+			fmt.Printf("%s  %s%s\n    %s\n", t.ID, t.Name, state, t.Describe)
+			if t.NextRun > 0 {
+				fmt.Printf("    next on this node: %s\n", lt(time.Unix(t.NextRun, 0)))
+			}
+			if t.Last != nil {
+				fmt.Printf("    last: %s %s\n", t.Last.Status, lt(time.Unix(t.Last.Start, 0)))
+			}
+		}
+	case *f.scheduleSet != "":
+		var task SchedTask
+		if err := json.Unmarshal([]byte(*f.scheduleSet), &task); err != nil {
+			fatalf("--schedule-set takes the task as JSON: %v", err)
+		}
+		var r SchedTask
+		decode(op(sock, "schedule.set", map[string]any{"task": task}), &r)
+		fmt.Printf("Saved the task %q (%s)\n", r.Name, r.ID)
+	case *f.scheduleDel != "":
+		decode(op(sock, "schedule.del", map[string]string{"id": *f.scheduleDel}), &struct{}{})
+		fmt.Println("Deleted.")
+	case *f.scheduleRun != "":
+		decode(op(sock, "schedule.run", map[string]string{"id": *f.scheduleRun}), &struct{}{})
+		fmt.Println("Started on this node; see --schedule-history for the result.")
 	case *f.nodeStatus:
 		var r NodePauseState
 		decode(op(sock, "node.status", nil), &r)

@@ -540,6 +540,8 @@ type DNSConfig struct {
 	// lives in DaemonConfig.SNMP.  See snmp.go.
 	SNMPCommunities []string `json:"snmp_communities,omitempty"`
 	SNMPContact     string   `json:"snmp_contact,omitempty"`
+	// Schedule is the scheduler's task list (Operate ▸ Scheduler), replicated with the rest; see scheduler.go.
+	Schedule []SchedTask `json:"schedule,omitempty"`
 	// SortList orders the A and AAAA records of an answer per client network: "10.1.0.0/16: 10.1.0.0/16, 10.0.0.0/8"
 	// (see sortlist.go). Empty means answers keep the order the servers gave.
 	SortList []string `json:"sortlist,omitempty"`
@@ -1162,6 +1164,12 @@ func (dc *DaemonConfig) Validate() error {
 	if err := dc.Web.Validate(); err != nil {
 		return err
 	}
+	if err := validateSchedule(dc.DNS.Schedule); err != nil {
+		return err
+	}
+	if len(dc.DNS.Schedule) == 0 {
+		dc.DNS.Schedule = nil
+	}
 	{
 		sc := SNMPConfig{Communities: dc.DNS.SNMPCommunities, Contact: dc.DNS.SNMPContact}
 		if err := sc.Validate(); err != nil {
@@ -1485,6 +1493,7 @@ func keepQueries(l []string, valid map[string]bool) []string {
 
 // live is the configuration the probe pool runs with: paused servers left out.
 func (d DNSConfig) live() DNSConfig {
+	d.Schedule = nil    // the scheduler's tasks are not the pool's: a change must not restart it
 	d.ServerNames = nil // labels only: a rename must not restart the pool
 	if len(d.PausedServers) != 0 || len(d.PausedServersHere) != 0 {
 		var up []string

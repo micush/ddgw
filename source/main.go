@@ -94,6 +94,8 @@ the web GUI):
                    --server-stats ADDR [--stats-range 1h|1d|7d]   (how one DNS server has answered: latency and loss)
                    --server-stats ADDR --name DOMAIN [--type A]   (one monitored domain on that server)
                    --gateway-stats GROUP [--stats-range 1h|1d|7d]  (one gateway: client latency, errors, traffic, cache, availability)
+                   --schedule | --schedule-history   (the scheduled tasks and when this node runs them next; what ran, with its output)
+                   --schedule-set JSON | --schedule-del ID | --schedule-run ID   (add or replace a task, remove one, run one on this node now)
                    --node-pause | --node-resume | --node-status   (this whole node stops/starts serving)
                    --hostname NAME   (rename this host: its operating-system name and its /etc/hosts entry; a full name such as ns1.example.com is also registered in DNS and the old name removed)
                    --canvas-move server  --group N --server ADDR --to N   (its place in the row, 1 = leftmost; the drag in the drawing)
@@ -483,6 +485,7 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	go applySNMP(dc.snmpSettings())
 	addrVia = sup.addrViaPools
 	go memguard.Run(ctx.Done())
+	go mg.sched.Run(ctx)
 
 	st := NewStatusServer(sockPath, sup)
 	st.mg = mg

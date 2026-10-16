@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // A node that joins is left out of every gateway until an administrator adds it.
 func TestNewNodeIsNotAddedToTheGateways(t *testing.T) {
@@ -32,5 +35,31 @@ func TestNewNodeIsNotAddedToTheGateways(t *testing.T) {
 	dc2, _, _ := a.mg.LiveConfig()
 	if len(dc2.Groups[0].ExcludedNodes) != n0 {
 		t.Fatalf("the list changed on a later sync: %v", dc2.Groups[0].ExcludedNodes)
+	}
+}
+
+// A node that joins through a replica is left out of the gateways as well.
+func TestNodeJoiningThroughAReplicaIsNotAddedToTheGateways(t *testing.T) {
+	a, b := twoNodeCluster(t)
+	c := newTNode(t, "c")
+	c.join(b) // b is a replica
+	id := c.mg.cl.node.Snapshot().NodeID
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		dc, _, err := a.mg.LiveConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ok := len(dc.Groups) > 0
+		for _, g := range dc.Groups {
+			ok = ok && containsStr(g.ExcludedNodes, id)
+		}
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the node that joined through a replica is on the gateways: %+v", dc.Groups[0].ExcludedNodes)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

@@ -228,7 +228,7 @@
   const NAV_GROUPS = [
     ["Monitor", [["stats", "Statistics"], ["host", "Host"], ["gateways", "Gateways"], ["nodes", "Cluster"], ["dns", "DNS"], ["anycaststatus", "Anycast"], ["capture", "Capture"], ["log", "Log"]]],
     ["Configure", [["cfg_general", "General"], ["cfg_groups", "Gateway groups"], ["cfg_dns", "DNS proxy"], ["cfg_web", "Web GUI"], ["cfg_snmp", "SNMP"], ["cfg_cluster", "Cluster"], ["anycast", "Anycast"], ["users", "Users"], ["history", "History"]]],
-    ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["updates", "Upgrade"]]],
+    ["Operate", [["node", "Node"], ["cluster", "Cluster"], ["anycastop", "Anycast"], ["scheduler", "Scheduler"], ["updates", "Upgrade"]]],
   ];
   const TABS = [["topology", TOPO]].concat(NAV_GROUPS.flatMap(([, items]) => items));
   const groupOf = (id) => (id === "topology" ? TOPO : (NAV_GROUPS.find(([, items]) => items.some(([i]) => i === id)) || [null])[0]);
@@ -2437,7 +2437,7 @@
         ...general.get(),
         // keep what this form has no fields for (a gateway's own DNS pool, per-server domains)
         groups: groups.map((g) => ({ ...(g.orig.dns ? { dns: g.orig.dns } : {}), ...(g.orig.paused ? { paused: true } : {}), ...(g.orig.paused_all ? { paused_all: true } : {}), ...(g.orig.excluded_nodes ? { excluded_nodes: g.orig.excluded_nodes } : {}), ...(g.orig.node_order ? { node_order: g.orig.node_order } : {}), ...(g.orig.paused_vips ? { paused_vips: g.orig.paused_vips } : {}), ...(g.orig.paused_vips_here ? { paused_vips_here: g.orig.paused_vips_here } : {}), ...(g.orig.extra_vips ? { extra_vips: g.orig.extra_vips } : {}), ...g.fs.get() })),
-        dns: { ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get(), ...snmpShared() },
+        dns: { ...(cfg.dns.schedule ? { schedule: cfg.dns.schedule } : {}), ...(cfg.dns.server_queries ? { server_queries: cfg.dns.server_queries } : {}), ...(cfg.dns.server_names ? { server_names: cfg.dns.server_names } : {}), ...(cfg.dns.paused_servers ? { paused_servers: cfg.dns.paused_servers } : {}), ...(cfg.dns.paused_queries ? { paused_queries: cfg.dns.paused_queries } : {}), ...dns.get(), ...snmpShared() },
         // the certificate is managed under Web GUI; keep any file paths already in the config
         web: { cert_file: cfg.web.cert_file || "", key_file: cfg.web.key_file || "", ...web.get() },
         cluster: cluster.get(),
@@ -4439,6 +4439,190 @@
         try { draw((await api("GET", "/api/bgp")).data); } catch (e) { fail(status)(e); }
       },
       async poll() { draw((await api("GET", "/api/bgp")).data); },
+      poll_ms: 5000,
+    };
+  })();
+
+  // ── Scheduler  (CLI: --schedule, --schedule-history, --schedule-set, --schedule-del, --schedule-run) ──
+  VIEWS.scheduler = (() => {
+    let status, box, last = "", clip = null;
+    try { clip = JSON.parse(localStorage.getItem("ntpdir_sched_clip") || "null"); } catch (_) { clip = null; }
+    const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const NTH = [[1, "1st"], [2, "2nd"], [3, "3rd"], [4, "4th"], [-1, "last"]];
+    const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const when = (u) => (u ? new Date(u * 1000).toLocaleString() : "–");
+    const schedZones = () => { try { return ["UTC"].concat(Intl.supportedValuesOf("timeZone")); } catch (_) { return ["UTC"]; } };
+    const unitSec = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
+
+    async function call(path, body, done) {
+      try { await api("POST", "/api/schedule/" + path, body); if (done) done(); clear(status); await VIEWS.scheduler.poll(true); } catch (e) { fail(status)(e); }
+    }
+    const nodeName = (id) => { const n = state.nodes.find((x) => x.node_id === id); return n ? (n.self ? nodeLabel(n) + " (this one)" : nodeLabel(n)) : id.slice(0, 8); };
+    const actionLabel = (t, actions) => (t.action === "shell" ? "Shell command" : (actions || {})[t.action] || t.action);
+
+    function copyTask(t) {
+      clip = JSON.parse(JSON.stringify(t));
+      try { localStorage.setItem("ntpdir_sched_clip", JSON.stringify(clip)); } catch (_) { /* no storage */ }
+      VIEWS.scheduler.poll(true).catch(() => {});   // the Paste entries appear
+      say(status, "info", "Copied “" + t.name + "”. Right-click ▸ Paste adds a copy.");
+      setTimeout(() => clear(status), 2500);
+    }
+    function pasteTask(existing) {
+      if (!clip) return;
+      const names = new Set(existing.map((t) => t.name.toLowerCase()));
+      let name = clip.name + " copy", i = 2;
+      while (names.has(name.toLowerCase())) name = clip.name + " copy " + i++;
+      const t = Object.assign({}, clip, { name }); delete t.id;
+      call("task", { task: t });
+    }
+
+    function editor(task, existing) {
+      const t = Object.assign({ freq: "daily", at: "12:00:00", action: "stats_clear", window_sec: 0, timeout_sec: 300, days: [1], day: 1, nths: [], weekdays: [], month: 1, every: 1 }, task || {});
+      if (t.nth && !(t.nths || []).length) { t.nths = [t.nth]; t.weekdays = [t.weekday || 0]; }
+      const isNew = !task;
+      const err = h("div", { "aria-live": "polite" });
+      const d = h("dialog", { class: "cv-dialog sched-dialog", "aria-label": isNew ? "New task" : "Edit task" });
+      const close = () => { try { d.close(); } catch (_) { /* closed */ } d.remove(); };
+      d.addEventListener("close", () => d.remove());
+      const name = h("input", { type: "text", maxlength: "80", value: t.name || "", "aria-label": "Name", autocomplete: "off" });
+      const acts = Object.entries(editorActions);
+      const action = h("select", { "aria-label": "Action" }, acts.map(([k, l]) => h("option", { value: k, selected: k === t.action }, l)), h("option", { value: "shell", selected: t.action === "shell" }, "Run a shell command"));
+      const cmd = h("textarea", { rows: "4", spellcheck: "false", maxlength: "4096", "aria-label": "Command", class: "mono" }); cmd.value = t.command || "";
+      const tmo = h("input", { type: "number", min: "1", max: "86400", value: String(t.timeout_sec || 300), "aria-label": "Time limit in seconds" });
+      const shellBox = h("div", {}, h("label", { class: "f wide" }, "Command", cmd, h("span", { class: "hint" }, "Run with /bin/sh as root on each node, in the daemon's directory. Output is kept in the history.")),
+        h("label", { class: "f" }, "Stop it after (seconds)", tmo));
+      const allNodes = h("input", { type: "radio", name: "sched-where", checked: !(t.nodes || []).length });
+      const someNodes = h("input", { type: "radio", name: "sched-where", checked: (t.nodes || []).length > 0 });
+      const nodeBoxes = state.nodes.map((n) => ({ n, el: h("input", { type: "checkbox", checked: (t.nodes || []).includes(n.node_id), disabled: !n.node_id }) }));
+      const nodesList = h("div", { class: "sched-nodes" }, nodeBoxes.map(({ n, el }) => h("label", { class: "f check" }, el, nodeLabel(n) + (n.self ? " (this node)" : ""))));
+      const where = state.nodes.length > 1
+        ? h("div", { class: "f wide" }, h("span", {}, "Runs on"), h("label", { class: "f check" }, allNodes, "Every node of the cluster"), h("label", { class: "f check" }, someNodes, "Only these nodes:"), nodesList)
+        : h("div", { class: "hint" }, "Runs on this node.");
+      const freq = h("select", { "aria-label": "How often" }, [["hourly", "Hourly"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"]].map(([k, l]) => h("option", { value: k, selected: k === t.freq }, l)));
+      const every = h("input", { type: "number", min: "1", max: "720", value: String(t.every || 1), "aria-label": "Every how many" });
+      const everyUnit = h("span", {});
+      const at = h("input", { type: "time", step: "1", value: t.at || "12:00:00", "aria-label": "Time of day" });
+      const minute = h("input", { type: "number", min: "0", max: "59", value: String(+(t.at || "00:00:00").split(":")[1] || 0), "aria-label": "Minute past the hour" });
+      const days = WD.map((w, i) => ({ i, el: h("input", { type: "checkbox", checked: (t.days || []).includes(i) }) }));
+      const dayRow = h("div", { class: "sched-days" }, days.map(({ i, el }) => h("label", { class: "f check" }, el, WD[i].slice(0, 3))));
+      const byDay = h("input", { type: "radio", name: "sched-by", checked: !(t.nths || []).length });
+      const byNth = h("input", { type: "radio", name: "sched-by", checked: (t.nths || []).length > 0 });
+      const dom = h("select", { "aria-label": "Day of the month" }, Array.from({ length: 31 }, (_, i) => h("option", { value: String(i + 1), selected: t.day === i + 1 }, String(i + 1))), h("option", { value: "-1", selected: t.day === -1 }, "last day"));
+      const nths = NTH.map(([v, l]) => ({ v, el: h("input", { type: "checkbox", checked: (t.nths || []).includes(v) || (!(t.nths || []).length && v === 3) }) }));
+      const nthRow = h("span", { class: "sched-days" }, nths.map(({ v, el }) => h("label", { class: "f check" }, el, NTH.find((x) => x[0] === v)[1])));
+      const wds = WD.map((w, i) => ({ i, el: h("input", { type: "checkbox", checked: (t.weekdays || []).includes(i) || (!(t.weekdays || []).length && i === 6) }) }));
+      const wdRow = h("span", { class: "sched-days" }, wds.map(({ i, el }) => h("label", { class: "f check" }, el, WD[i].slice(0, 3))));
+      const month = h("select", { "aria-label": "Month" }, MON.map((m, i) => h("option", { value: String(i + 1), selected: t.month === i + 1 }, m)));
+      const monthRow = h("label", { class: "f" }, "Month", month);
+      const dayBox = h("div", { class: "f wide" }, h("span", {}, "On"),
+        h("label", { class: "f check" }, byDay, "day", dom, " of the month"),
+        h("div", { class: "f check" }, byNth, "the", nthRow, wdRow, "of the month"));
+      const tz = h("input", { type: "text", list: "sched-tz", value: t.tz || "", placeholder: "this node's own time zone", "aria-label": "Time zone", autocomplete: "off", spellcheck: "false" });
+      const tzl = h("datalist", { id: "sched-tz" }, schedZones().map((z) => h("option", { value: z })));
+      const wsec = t.window_sec || 0;
+      const unit = wsec && wsec % 86400 === 0 ? "days" : wsec && wsec % 3600 === 0 ? "hours" : wsec && wsec % 60 === 0 ? "minutes" : wsec ? "seconds" : "minutes";
+      const win = h("input", { type: "number", min: "0", value: String(wsec / unitSec[unit]), "aria-label": "Offset window" });
+      const winAfter = h("input", { type: "radio", name: "sched-win", checked: !t.until });
+      const winUntil = h("input", { type: "radio", name: "sched-win", checked: !!t.until });
+      const until = h("input", { type: "time", value: t.until || "", "aria-label": "Window ends" });
+      const winUnit = h("select", { "aria-label": "Offset unit" }, Object.keys(unitSec).map((u) => h("option", { value: u, selected: u === unit }, u)));
+      const enabled = h("input", { type: "checkbox", checked: !t.disabled });
+      const rows = {
+        shell: shellBox, every: h("label", { class: "f" }, "Every", h("span", { class: "sched-every" }, every, everyUnit)),
+        at: h("label", { class: "f" }, "At", at), minute: h("label", { class: "f" }, "At minute", minute), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
+      };
+      const sync = () => {
+        const f = freq.value;
+        rows.shell.hidden = action.value !== "shell";
+        const unitName = { hourly: "hour", daily: "day", weekly: "week", monthly: "month", yearly: "year" }[f];
+        everyUnit.textContent = " " + unitName + (+every.value === 1 ? "" : "s");
+        every.max = { hourly: 720, daily: 366, weekly: 52, monthly: 24, yearly: 10 }[f];
+        rows.at.hidden = f === "hourly"; rows.minute.hidden = f !== "hourly";
+        rows.days.hidden = f !== "weekly"; rows.month.hidden = f !== "yearly"; rows.day.hidden = f !== "monthly" && f !== "yearly";
+        dom.disabled = !byDay.checked; nths.concat(wds).forEach((x) => { x.el.disabled = !byNth.checked; });
+        win.disabled = winUnit.disabled = !winAfter.checked; until.disabled = !winUntil.checked; winUntil.parentElement.hidden = f === "hourly";
+        nodesList.hidden = !someNodes.checked;
+      };
+      [action, freq, every, byDay, byNth, allNodes, someNodes, winAfter, winUntil].forEach((el) => el.addEventListener("change", sync));
+      every.addEventListener("input", sync);
+      const submit = (ev) => {
+        ev.preventDefault();
+        const f = freq.value;
+        const task = { id: isNew ? "" : t.id, name: name.value.trim(), action: action.value, freq: f, every: Math.max(1, +every.value || 1), tz: tz.value.trim(),
+          window_sec: winUntil.checked && f !== "hourly" ? 0 : Math.round((+win.value || 0) * unitSec[winUnit.value]), disabled: !enabled.checked };
+        if (action.value === "shell") { task.command = cmd.value; task.timeout_sec = +tmo.value || 300; }
+        if (f === "hourly") { const m = Math.min(59, Math.max(0, +minute.value || 0)); task.at = "00:" + String(m).padStart(2, "0") + ":00"; } else task.at = at.value.length === 5 ? at.value + ":00" : at.value;
+        if (f === "weekly") task.days = days.filter((x) => x.el.checked).map((x) => x.i);
+        if (f === "monthly" || f === "yearly") { if (byNth.checked) { task.nths = nths.filter((x) => x.el.checked).map((x) => x.v); task.weekdays = wds.filter((x) => x.el.checked).map((x) => x.i); if (!task.nths.length || !task.weekdays.length) { errorBox(err, "Pick at least one occurrence and one weekday."); return; } } else task.day = +dom.value; }
+        if (f === "yearly") task.month = +month.value;
+        if (winUntil.checked && f !== "hourly") { if (!until.value) { errorBox(err, "Pick the time the window ends."); return; } task.until = until.value.slice(0, 5); }
+        if (state.nodes.length > 1 && someNodes.checked) task.nodes = nodeBoxes.filter((x) => x.el.checked).map((x) => x.n.node_id);
+        if (state.nodes.length > 1 && someNodes.checked && !task.nodes.length) { errorBox(err, "Pick at least one node, or choose every node."); return; }
+        if (!task.name) { errorBox(err, "Give the task a name."); return; }
+        api("POST", "/api/schedule/task", { task }).then(() => { close(); VIEWS.scheduler.poll(true); }).catch((e) => { if (e.message !== "unauthenticated") errorBox(err, e.message); });
+      };
+      d.append(h("button", { class: "dlg-x", type: "button", "aria-label": "Close", title: "Close", onclick: close }, "✕"), h("h2", {}, isNew ? "New task" : "Edit task"),
+        h("form", { onsubmit: submit },
+          h("div", { class: "grid" },
+            h("label", { class: "f wide" }, "Name", name),
+            h("label", { class: "f wide" }, "Does", action), rows.shell, where,
+            h("label", { class: "f" }, "How often", freq), rows.every, rows.at, rows.minute, rows.days, rows.month, rows.day,
+            h("label", { class: "f wide" }, "Time zone", tz, tzl, h("span", { class: "hint" }, "The time above is read in this zone. Empty is each node's own zone.")),
+            h("div", { class: "f wide" }, h("span", {}, "Offset window"),
+              h("label", { class: "f check" }, winAfter, "up to ", win, winUnit, " after the scheduled time"),
+              h("label", { class: "f check" }, winUntil, "between the time above and ", until),
+              h("span", { class: "hint" }, "Each node runs the task at a time of its own somewhere in this window, so the nodes do not all run it at once. 0 runs every node at the scheduled time. A node that was off and comes back inside the window still runs it.")),
+            h("label", { class: "f check wide" }, enabled, "Enabled")),
+          err,
+          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, isNew ? "Add task" : "Save"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
+      root.append(d); sync(); d.showModal(); name.focus();
+    }
+    let editorActions = {};
+
+    function draw(st) {
+      const sig = JSON.stringify([st, clip && clip.name, state.nodes.map((n) => [n.node_id, nodeLabel(n)])]);
+      if (sig === last) return;
+      last = sig;
+      editorActions = st.actions || {};
+      const tasks = st.tasks.map((v) => v.task);
+      const real = box; box = h("div", {});
+      try {
+        const menu = (v) => rowMenu([["Edit…", () => editor(v.task, tasks)], ["Copy", () => copyTask(v.task)], clip ? ["Paste", () => pasteTask(tasks)] : null, "-",
+          ["Run now on this node", () => { if (confirm("Run “" + v.name + "” on this node now?")) call("run", { id: v.id }); }],
+          [v.disabled ? "Enable" : "Disable", () => call("task", { task: Object.assign({}, v.task, { disabled: !v.disabled }) })], "-",
+          ["Delete", () => { if (confirm("Delete the task “" + v.name + "”?")) call("delete", { id: v.id }); }, "danger"]].filter(Boolean));
+        const emptyMenu = rowMenu([["New task…", () => editor(null, tasks)], clip ? ["Paste", () => pasteTask(tasks)] : null].filter(Boolean));
+        const lastCell = (v) => v.last ? h("span", { title: v.last.output || "" }, pill(v.last.status, v.last.status === "ok" ? "ok" : v.last.status === "failed" ? "bad" : v.last.status === "running" ? "info" : "warn"), " ", when(v.last.start)) : h("span", { class: "muted" }, "never");
+        const where = (v) => (v.task.nodes || []).length ? v.task.nodes.map(nodeName).join(", ") : "every node";
+        const row = (v) => h("tr", { tabindex: "0", class: v.disabled ? "paused" : "", oncontextmenu: menu(v), ondblclick: () => editor(v.task, tasks) },
+          h("td", {}, v.name), h("td", {}, actionLabel(v.task, st.actions), v.task.action === "shell" ? h("div", { class: "mono small muted sched-cmd", title: v.task.command }, v.task.command) : null),
+          h("td", {}, where(v)), h("td", {}, v.describe, v.task.tz ? h("div", { class: "small muted" }, v.task.tz) : null),
+          h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.next_run ? h("span", { title: "scheduled for " + when(v.next) }, when(v.next_run)) : "–"),
+          h("td", {}, lastCell(v)));
+        box.append(section("Scheduled tasks",
+          h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: () => editor(null, tasks) }, "New task"),
+            clip ? h("button", { class: "btn", type: "button", onclick: () => pasteTask(tasks) }, "Paste “" + clip.name + "”") : null),
+          h("div", { class: "scroll", oncontextmenu: emptyMenu }, h("table", { class: "sched" },
+            h("thead", {}, h("tr", {}, ["Task", "Does", "Runs on", "Schedule", "Next run (this node)", "Last run (this node)"].map((x) => h("th", {}, x)))),
+            h("tbody", {}, st.tasks.length ? st.tasks.map(row) : h("tr", {}, h("td", { colspan: 6, class: "empty" }, "No tasks yet. Add one with New task, or right-click here."))))),
+          h("p", { class: "hint" }, "Right-click a task to edit, copy, paste, run, disable or delete it. Times are shown in this browser's zone.")));
+        box.append(section("History of this node",
+          h("div", { class: "scroll" }, h("table", { class: "sched" },
+            h("thead", {}, h("tr", {}, ["Started", "Task", "Result", "Output"].map((x) => h("th", {}, x)))),
+            h("tbody", {}, st.history.length ? st.history.slice(0, 60).map((r) => h("tr", {},
+              h("td", {}, when(r.start)), h("td", {}, r.name),
+              h("td", {}, pill(r.status, r.status === "ok" ? "ok" : r.status === "failed" ? "bad" : r.status === "running" ? "info" : "warn"), r.end && r.end > r.start ? h("span", { class: "small muted" }, " " + (r.end - r.start) + " s") : null),
+              h("td", { class: "wrap" }, r.output ? h("details", {}, h("summary", {}, r.output.split("\n")[0].slice(0, 100)), h("pre", { class: "nt-out" }, r.output)) : ""))) : h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Nothing has run on this node yet.")))))));
+      } finally { morph(real, box); box = real; }
+    }
+
+    return {
+      async mount(main) {
+        status = h("div", { "aria-live": "polite" }); box = h("div", {}); last = "";
+        main.append(status, box);
+        try { draw((await api("GET", "/api/schedule")).data); } catch (e) { fail(status)(e); }
+      },
+      async poll(force) { if (force) last = ""; draw((await api("GET", "/api/schedule")).data); },
       poll_ms: 5000,
     };
   })();

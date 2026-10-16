@@ -712,6 +712,7 @@ func setLB(dc *DaemonConfig, g *GroupConfig, e canvasEdit) (string, error) {
 // their defaults, so the gateway keeps following Settings for them until it is given its own.
 func ownPoolFrom(shared DNSConfig) DNSConfig {
 	c := cloneDNS(shared)
+	c.Schedule = nil
 	c.LB = nil
 	c.setLBValues(defaultDNS().lbValues())
 	return c
