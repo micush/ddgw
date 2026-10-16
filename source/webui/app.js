@@ -4500,7 +4500,7 @@
       const freq = h("select", { "aria-label": "How often" }, [["hourly", "Hourly"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"]].map(([k, l]) => h("option", { value: k, selected: k === t.freq }, l)));
       const every = h("input", { type: "number", min: "1", max: "720", value: String(t.every || 1), "aria-label": "Every how many" });
       const everyUnit = h("span", {});
-      const at = h("input", { type: "time", step: "1", value: t.at || "12:00:00", "aria-label": "Time of day" });
+      const at = h("input", { type: "time", step: "60", value: (t.at || "12:00:00").slice(0, 5), "aria-label": "Time of day" });
       const minute = h("input", { type: "number", min: "0", max: "59", value: String(+(t.at || "00:00:00").split(":")[1] || 0), "aria-label": "Minute past the hour" });
       const days = WD.map((w, i) => ({ i, el: h("input", { type: "checkbox", checked: (t.days || []).includes(i) }) }));
       const dayRow = h("div", { class: "sched-days" }, days.map(({ i, el }) => h("label", { class: "f check" }, el, WD[i].slice(0, 3))));
@@ -4572,8 +4572,9 @@
     }
     let editorActions = {};
 
+    const openRuns = new Set();   // history rows whose output is expanded: kept open when the page redraws
     function draw(st) {
-      const sig = JSON.stringify([st, clip && clip.name, state.nodes.map((n) => [n.node_id, nodeLabel(n)])]);
+      const sig = JSON.stringify([Object.assign({}, st, { now: 0 }), openRuns.size, clip && clip.name, state.nodes.map((n) => [n.node_id, nodeLabel(n)])]);
       if (sig === last) return;
       last = sig;
       editorActions = st.actions || {};
@@ -4605,7 +4606,7 @@
             h("tbody", {}, st.history.length ? st.history.slice(0, 60).map((r) => h("tr", {},
               h("td", {}, when(r.start)), h("td", {}, r.name),
               h("td", {}, pill(r.status, r.status === "ok" ? "ok" : r.status === "failed" ? "bad" : r.status === "running" ? "info" : "warn"), r.end && r.end > r.start ? h("span", { class: "small muted" }, " " + (r.end - r.start) + " s") : null),
-              h("td", { class: "wrap" }, r.output ? h("details", {}, h("summary", {}, r.output.split("\n")[0].slice(0, 100)), h("pre", { class: "nt-out" }, r.output)) : ""))) : h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Nothing has run on this node yet.")))))));
+              h("td", { class: "wrap" }, r.output ? h("details", { open: openRuns.has(r.task + "|" + r.start), ontoggle: (e) => { const k = r.task + "|" + r.start; if (e.target.open) openRuns.add(k); else openRuns.delete(k); } }, h("summary", {}, r.output.split("\n")[0].slice(0, 100)), h("pre", { class: "nt-out" }, r.output)) : ""))) : h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Nothing has run on this node yet.")))))));
       } finally { morph(real, box); box = real; }
     }
 

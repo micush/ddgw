@@ -396,3 +396,41 @@ func TestSchedEnvHasTheUsualPaths(t *testing.T) {
 		t.Errorf("empty base: %v", got)
 	}
 }
+
+func TestOverlappingTasksAreStaggered(t *testing.T) {
+	s := newScheduler(nil, t.TempDir())
+	var l []SchedTask
+	for i, n := range []string{"a", "b", "c", "d", "e", "f"} {
+		x := mustTask(t, SchedTask{ID: "aa0" + string(rune('0'+i)), Name: n, Action: "stats_clear", Freq: "daily", At: "01:00", Until: "02:00"})
+		l = append(l, x)
+	}
+	fixed := mustTask(t, SchedTask{ID: "aa10", Name: "fixed", Action: "stats_clear", Freq: "daily", At: "01:30"})
+	l = append(l, fixed)
+	s.SetTasks(l)
+	base := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
+	for _, node := range []string{"ab01", "ab02"} {
+		s.mu.Lock()
+		var at []int64
+		for _, x := range l {
+			b := base
+			if x.WindowSec == 0 {
+				b = base.Add(30 * time.Minute)
+			}
+			at = append(at, b.Add(s.runOffset(node, x, b)).Unix())
+			if again := b.Add(s.runOffset(node, x, b)).Unix(); again != at[len(at)-1] {
+				t.Fatal("not stable")
+			}
+			if o := s.runOffset(node, x, b); x.WindowSec > 0 && (o < 0 || o > time.Duration(x.WindowSec)*time.Second) {
+				t.Fatalf("outside the window: %v", o)
+			}
+		}
+		s.mu.Unlock()
+		for i := range at {
+			for j := i + 1; j < len(at); j++ {
+				if d := at[i] - at[j]; d < 30 && d > -30 {
+					t.Errorf("node %s: tasks %d and %d start %d s apart", node, i, j, d)
+				}
+			}
+		}
+	}
+}

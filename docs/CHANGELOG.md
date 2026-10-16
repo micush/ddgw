@@ -1,5 +1,23 @@
 # Changelog
 
+## [v420] - 2026-10-16 — Scheduler: no seconds
+
+### Changed
+- The At field of a task takes hours and minutes only (it showed seconds). Tasks saved with seconds keep them.
+
+## [v420] - 2026-10-16 — Scheduler: no seconds, history stays open
+
+### Changed
+- The At field of a task takes hours and minutes only (it showed seconds). Tasks saved with seconds keep them.
+
+### Fixed
+- An expanded output in the scheduler history closed again after a few seconds, when the page refreshed. It stays open until you close it, and the page no longer redraws when only the clock has moved.
+
+## [v419] - 2026-10-16 — Scheduler: overlapping tasks are staggered
+
+### Changed
+- Tasks whose windows overlap no longer start at the same time. On each node the jobs whose windows overlap are placed together: a task with no window keeps its time, the others take their usual hashed place or, if another job starts less than 30 seconds away, the next free place in their window (a smaller gap when a window is very small). The result is the same every time it is worked out, so a run is never moved once calculated, and each node still has its own order.
+
 ## [v418] - 2026-10-16 — Scheduler shell environment
 
 ### Changed

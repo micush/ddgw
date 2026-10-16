@@ -523,7 +523,8 @@ type Scheduler struct {
 	tasks   []SchedTask
 	st      schedState
 	running map[string]bool
-	now     func() time.Time // replaceable in tests
+	slots   map[string]time.Duration // staggered places already worked out (schedstagger.go)
+	now     func() time.Time         // replaceable in tests
 	// act runs a built-in action (replaceable in tests)
 	act func(action, actor string) (string, error)
 }
@@ -553,6 +554,7 @@ func newScheduler(m *Mgmt, stateDir string) *Scheduler {
 func (s *Scheduler) SetTasks(l []SchedTask) {
 	s.mu.Lock()
 	s.tasks = append([]SchedTask(nil), l...)
+	s.slots = nil
 	s.mu.Unlock()
 }
 
@@ -616,7 +618,7 @@ func (s *Scheduler) Tick(nodeID string) {
 		var skipBase time.Time
 		for _, b := range t.bases(from, now) {
 			b := b
-			runAt := b.Add(schedOffset(nodeID, t.ID, b, t.WindowSec))
+			runAt := b.Add(s.runOffset(nodeID, t, b))
 			if now.Before(runAt) {
 				continue // its time in the window has not come yet; Last stays behind it
 			}
@@ -833,14 +835,14 @@ func (s *Scheduler) Status() SchedStatus {
 			// the next run of this node: an occurrence whose own time in the window has not yet passed counts too
 			from := now.Add(-time.Duration(t.WindowSec) * time.Second)
 			for _, b := range t.bases(from, now) {
-				if runAt := b.Add(schedOffset(node, t.ID, b, t.WindowSec)); runAt.After(now) && b.Unix() > s.st.Last[t.ID] {
+				if runAt := b.Add(s.runOffset(node, t, b)); runAt.After(now) && b.Unix() > s.st.Last[t.ID] {
 					v.Next, v.NextRun = b.Unix(), runAt.Unix()
 					break
 				}
 			}
 			if v.Next == 0 {
 				if b := t.next(now); !b.IsZero() {
-					v.Next, v.NextRun = b.Unix(), b.Add(schedOffset(node, t.ID, b, t.WindowSec)).Unix()
+					v.Next, v.NextRun = b.Unix(), b.Add(s.runOffset(node, t, b)).Unix()
 				}
 			}
 		}
@@ -896,3 +898,5 @@ func schedEnv(base []string, task string) []string {
 	}
 	return append(out, "DNSDIR_TASK="+task)
 }
+
+func strconvI(n int64) string { return strconv.FormatInt(n, 10) }
