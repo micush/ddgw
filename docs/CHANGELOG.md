@@ -1,5 +1,21 @@
 # Changelog
 
+## [v409] - 2026-10-15 — SNMP status of the node picked in the top bar
+
+### Fixed
+- Configure ▸ SNMP: the line under the form (snmpd installed / running / on / off) now follows the node picked in the top bar. Before, the request was refused for any node but the one you are logged in to and the line stayed empty. If a node cannot answer (an older version), the page now says so instead of staying blank.
+
+### Verified
+- A test that the status request is relayable; the page in headless Chromium.
+
+## [v408] - 2026-10-15 — SNMP field descriptions are in Help
+
+### Changed
+- Configure ▸ SNMP: the explanations under the Community strings, Location and Contact boxes moved into Help (they were already there; the examples and the shared / not-shared notes were added). The page shows just the boxes.
+
+### Verified
+- The help tests (every field has an entry); the page loads and saves in headless Chromium.
+
 ## [v407] - 2026-10-15 — SNMP
 
 ### Added

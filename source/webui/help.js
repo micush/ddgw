@@ -166,9 +166,9 @@ const DNSDIR_HELP = {
       ["h", "SNMP"],
       "The community strings and the contact are **shared** (every node answers the same communities and reports the same contact); the location is this node's own, since it differs from node to node. dnsdir writes `/etc/snmp/snmpd.conf` and switches the `snmpd` service on and off itself: **on** while there is a community string, **off** when there is none. An snmpd.conf that was there before is kept as `snmpd.conf.dnsdir-orig` and put back when the list is emptied; an snmpd that dnsdir never took over is left alone. The page says whether snmpd is installed and running. Access is read-only, over IPv4 and IPv6 on UDP 161; open that port in the firewall for your monitoring system.",
       ["fields", [
-        ["Community strings", "The read-only community strings, one per line, up to 16, each up to 64 letters, digits or punctuation (no spaces, quotes, backslash or `#`). Empty switches SNMP off. They are kept in the config file and its history, readable by root only, and left out of support bundles."],
-        ["Location", "What snmpd reports as `sysLocation` (one line, up to 255 characters). Optional. Not shared: each node has its own."],
-        ["Contact", "What snmpd reports as `sysContact` (one line, up to 255 characters). Optional."],
+        ["Community strings", "One per line, up to 16; each gives read-only access over IPv4 and IPv6. SNMP is on while there is at least one and off when the list is empty. Shared. Each string is up to 64 letters, digits or punctuation (no spaces, quotes, backslash or `#`). They are kept in the config file and its history, readable by root only, and left out of support bundles."],
+        ["Location", "What snmpd reports as `sysLocation`, e.g. `Rack 4, Phoenix DC` (one line, up to 255 characters). Optional. Not shared: each node has its own, since it differs from node to node."],
+        ["Contact", "What snmpd reports as `sysContact`, e.g. `noc@example.com` (one line, up to 255 characters). Optional. Shared."],
       ]],
       ["h", "Gateway groups (one card per gateway)"],
       ["fields", [

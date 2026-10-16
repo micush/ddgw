@@ -229,3 +229,9 @@ func TestSharedSNMPCommunitiesAreValidated(t *testing.T) {
 		t.Fatal("a community with a space should be refused")
 	}
 }
+
+func TestSNMPStatusCanBeReadOnAnotherNode(t *testing.T) {
+	if err := proxyAllowed("GET", "/api/snmp"); err != nil {
+		t.Fatalf("the SNMP status must be relayable to the node picked in the top bar: %v", err)
+	}
+}

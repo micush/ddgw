@@ -2102,9 +2102,9 @@
     { k: "min_password_length", l: "Minimum password length", t: "int", min: 0, max: 128, hint: "0 = 8" },
   ];
   const SNMP_FIELDS = [
-    { shared: true, k: "snmp_communities", l: "Community strings", t: "list", wide: true, hint: "One per line. SNMP is on while there is at least one and off when the list is empty. Each gives read-only access, over IPv4 and IPv6." },
-    { k: "location", l: "Location", t: "text", hint: "What snmpd reports as sysLocation, e.g. Rack 4, Phoenix DC. Differs from node to node, so it is not shared." },
-    { shared: true, k: "snmp_contact", l: "Contact", t: "text", hint: "What snmpd reports as sysContact, e.g. noc@example.com" },
+    { shared: true, k: "snmp_communities", l: "Community strings", t: "list", wide: true },
+    { k: "location", l: "Location", t: "text" },
+    { shared: true, k: "snmp_contact", l: "Contact", t: "text" },
   ];
   const CLUSTER_FIELDS = [
     { k: "listen", l: "Binding address", t: "port", hint: "the port, default 53854 (all addresses); or an address with the port: 10.0.0.1:53854" },
@@ -2377,7 +2377,10 @@
           if (st.enabled && !st.installed) snmpNote.append(h("div", { class: "notice bad", role: "alert" }, "snmpd is not installed on this node, so SNMP cannot answer. Install the snmpd package (net-snmp on Fedora, RHEL and Arch), or run the installer again."));
           else if (st.enabled && !st.running) snmpNote.append(h("div", { class: "notice warn" }, "snmpd is not running yet. It was told to start; reload this page in a moment."));
           else snmpNote.append(h("p", { class: "hint" }, st.enabled ? "snmpd is on and answering SNMP on UDP 161." : "SNMP is off: no community string is set."));
-        } catch (_) { /* not shown */ }
+        } catch (e) {
+          if (e.message === "unauthenticated") return;
+          clear(snmpNote).append(h("p", { class: "hint" }, "Could not read what snmpd is doing on this node: " + e.message + ". (A node running an older version cannot answer this.)"));
+        }
       };
       refreshSNMP();
       const cluster = fieldset(CLUSTER_FIELDS, cfg.cluster || {});
