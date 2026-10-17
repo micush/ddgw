@@ -1,5 +1,17 @@
 # Changelog
 
+## [v436] - 2026-10-17 — The web page reloads itself after an upgrade
+
+### Added
+- **An open web page reloads itself after an upgrade.** The daemon puts its version into `app.js` when it serves it. The page asks the daemon for its session (the same call it makes when it loads) every 15 seconds while the tab is visible, and again after a login; when the version differs from the one the page was loaded with, it reloads. It waits while a dialog is open, a text field or list has the keyboard, or a Configure page is open (it may hold changes not yet saved), and tries again every 3 seconds. While the daemon restarts the check simply fails and tries again later.
+- `TestSecurityHeadersAndStatic` also checks that `app.js` carries the daemon's version.
+
+### Not verified
+- The reload itself was not seen in a browser, and not across a real upgrade; only that the served file carries the version and the script parses. A page open on a version older than this one still needs one manual refresh to get this behaviour.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64; `node --check` on `app.js`.
+
 ## [v435] - 2026-10-17 — Local time box also changes next run and last run
 
 ### Changed

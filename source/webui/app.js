@@ -8,6 +8,26 @@
     target: null, nodes: [], clustered: false }; // target: address of the node being driven, null = this one
   const root = document.getElementById("app");
 
+  // The daemon puts its version in BUILD when it serves this file. After an upgrade the daemon restarts with a new
+  // interface; a page left open notices (the session says which version answers) and reloads itself, but not while
+  // a dialog is open, a field is being typed in, or a Configure page is open (it may hold changes not yet saved).
+  const BUILD = "@@BUILD@@";
+  let reloading = false;
+  function checkBuild(v) {
+    if (reloading || BUILD.charAt(0) === "@" || !v || String(v) === BUILD) return;
+    reloading = true;
+    const go = () => {
+      const a = document.activeElement, typing = a && (a.tagName === "TEXTAREA" || a.tagName === "SELECT" || (a.tagName === "INPUT" && a.type !== "checkbox" && a.type !== "radio" && a.type !== "button"));
+      if (document.querySelector("dialog[open]") || typing || String(state.tab).startsWith("cfg")) { setTimeout(go, 3000); return; }
+      location.reload();
+    };
+    go();
+  }
+  setInterval(() => {
+    if (!state.session || document.hidden || reloading) return;
+    api("GET", "/api/session", undefined, true).then((s) => checkBuild(s && s.version)).catch(() => { /* the daemon is restarting: look again next time */ });
+  }, 15000);
+
   // ── DOM helper ────────────────────────────────────────────────────────────
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -193,6 +213,7 @@
         err.classList.add("hidden");
         try {
           state.session = await api("POST", "/api/login", { username: user.value, password: pass.value });
+          checkBuild(state.session.version);
           pass.value = "";
           showShell();
         } catch (ex) {
@@ -4906,6 +4927,7 @@
   (async () => {
     try {
       state.session = await api("GET", "/api/session");
+      checkBuild(state.session.version);
       showShell();
     } catch (e) {
       if (e.message !== "unauthenticated") showLogin();

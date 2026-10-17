@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -277,7 +278,7 @@ func (w *WebServer) Handler() http.Handler {
 	sub, _ := fs.Sub(webFS, "webui")
 	static := http.FileServerFS(sub)
 	mux.Handle("GET /{$}", static)
-	mux.Handle("GET /app.js", static)
+	mux.HandleFunc("GET /app.js", serveAppJS)
 	mux.Handle("GET /help.js", static)
 	mux.Handle("GET /style.css", static)
 
@@ -322,6 +323,18 @@ func secure(next http.Handler) http.Handler {
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(rw, r)
 	})
+}
+
+// appJS is app.js with the daemon's version put in where it says @@BUILD@@: a page left open across an upgrade then
+// knows it was loaded from an older daemon and reloads itself (see checkBuild in app.js).
+var appJS = sync.OnceValue(func() []byte {
+	b, _ := webFS.ReadFile("webui/app.js")
+	return bytes.ReplaceAll(b, []byte("@@BUILD@@"), []byte(version()))
+})
+
+func serveAppJS(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	rw.Write(appJS())
 }
 
 type ctxKey struct{}

@@ -355,6 +355,14 @@ func TestSecurityHeadersAndStatic(t *testing.T) {
 			t.Fatalf("%s: %d len=%d", p, r.StatusCode, len(b))
 		}
 	}
+	// app.js knows the version of the daemon that served it, so an open page can tell an upgrade happened
+	if r, _ := http.Get(e.ts.URL + "/app.js"); r != nil {
+		b, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		if bytes.Contains(b, []byte("@@BUILD@@")) || !bytes.Contains(b, []byte(`const BUILD = "`+version()+`";`)) {
+			t.Fatal("app.js does not carry the daemon's version")
+		}
+	}
 	// the stylesheet must follow the system theme
 	css, _ := http.Get(e.ts.URL + "/style.css")
 	cb, _ := io.ReadAll(css.Body)
