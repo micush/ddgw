@@ -1,5 +1,16 @@
 # Changelog
 
+## [v435] - 2026-10-17 — Local time box also changes next run and last run
+
+### Changed
+- The `Local time` box on the scheduler's History header now switches **every** time on the page: the next run and last run of the task list as well as the history. Before it changed the history only. Unticked, all of them are UTC.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64; `node --check` on `app.js` and `help.js`.
+
+### Not verified
+- The page was not looked at in a browser.
+
 ## [v434] - 2026-10-17 — The offset window is gone: At and To are the window
 
 ### Changed
