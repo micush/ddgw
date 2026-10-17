@@ -1,5 +1,16 @@
 # Changelog
 
+## [v432] - 2026-10-17 — Shorter task names in the scheduler's "Does" list
+
+### Changed
+- The notes in brackets are gone from the task names in the **Does** list (`Update from online`, `Reboot this node`, `Restart dnsdir`). The help now says what they said: a restart or reboot waits until it is safe for the node to go down, and the online update installs the newest release only when it is newer than the one running.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64; `node --check` on `help.js`.
+
+### Not verified
+- The page was not looked at in a browser.
+
 ## [v431] - 2026-10-17 — Scheduler page: UTC times, Local time box, cleaner forms
 
 ### Changed

@@ -451,7 +451,7 @@ const DNSDIR_HELP = {
   scheduler: {
     title: "Scheduler",
     body: [
-      "Tasks that run by themselves, on every node of the cluster or on the nodes you choose: restart dnsdir, empty the answer cache, pause or resume a node, clear the statistics, or run a shell command. The list of tasks is shared by the cluster, so the page looks the same through any node; **what ran** is kept per node, and shown for the node picked at the top right.",
+      "Tasks that run by themselves, on every node of the cluster or on the nodes you choose: restart dnsdir, empty the answer cache, pause or resume a node, clear the statistics, or run a shell command. The list of tasks is shared by the cluster, so the page looks the same through any node; **what ran** is kept per node, and shown for the node picked at the top right. A **restart** or **reboot** waits until it is safe for the node to go down, and **Update from online** installs the newest release only when it is newer than the one running.",
       ["h", "The page"],
       ["ul", [
         "**New task** opens the form; **right-click** a task for *Edit…*, *Copy*, *Paste*, *Run now on…* (*this node*, or *all nodes*: every node the task is for, started 1 minute apart and each when it is free), *Disable* / *Enable* and *Delete*. *Copy* remembers the task in this browser; *Paste* (in the menu, or on the button, or after right-clicking the empty list) adds a copy of it with a new name, which you can then edit. Double-click a task to edit it.",

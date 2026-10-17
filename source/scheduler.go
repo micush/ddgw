@@ -82,13 +82,13 @@ const (
 
 // schedActions are the built-in actions.  The first is the label shown in the page.
 var schedActions = map[string]string{
-	"dnsdir_restart": "Restart dnsdir (waits until it is safe)",
+	"dnsdir_restart": "Restart dnsdir",
 	"cache_clear":    "Empty the answer cache",
 	"node_pause":     "Pause this node",
 	"node_resume":    "Resume this node",
 	"stats_clear":    "Clear the statistics",
-	"update_online":  "Update from online (newest release, when newer)",
-	"node_reboot":    "Reboot this node (waits until it is safe)",
+	"update_online":  "Update from online",
+	"node_reboot":    "Reboot this node",
 }
 
 var schedEveryMax = map[string]int{"once": 1, "hourly": 720, "daily": 366, "weekly": 52, "monthly": 24, "yearly": 10}
