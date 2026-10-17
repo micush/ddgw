@@ -153,7 +153,14 @@ func (h *HostStats) persistTo(emit func(pRec) error) error {
 
 // savePersisted writes the whole file.  The rest of the daemon keeps running while it does: every part is
 // copied under its own lock a slice at a time and encoded outside it.
-func savePersisted(dir string) error {
+//
+// The file is compressed at gzip's fastest level: the JSON shrinks well even so, and the save is a burst of CPU on
+// a node that is answering queries.  A save made by the five-minute timer does not fsync before the rename (the
+// next one is five minutes away, and the rename keeps the old file whole if the machine dies first); the saves
+// before a stop, a restart or an update do.
+func savePersisted(dir string) error { return savePersistedOpt(dir, true) }
+
+func savePersistedOpt(dir string, durable bool) error {
 	if dir == "" {
 		return nil
 	}
@@ -174,7 +181,7 @@ func savePersisted(dir string) error {
 		}
 	}()
 	bw := bufio.NewWriterSize(f, 1<<16)
-	zw := gzip.NewWriter(bw)
+	zw, _ := gzip.NewWriterLevel(bw, gzip.BestSpeed)
 	enc := json.NewEncoder(zw)
 	emit := func(r pRec) error { return enc.Encode(r) }
 	if err := emit(pRec{K: "hdr", Hdr: &pHeader{Format: persistFormat, Saved: time.Now().Unix()}}); err != nil {
@@ -198,8 +205,10 @@ func savePersisted(dir string) error {
 	if err := bw.Flush(); err != nil {
 		return err
 	}
-	if err := f.Sync(); err != nil {
-		return err
+	if durable {
+		if err := f.Sync(); err != nil {
+			return err
+		}
 	}
 	if err := f.Close(); err != nil {
 		return err
@@ -367,7 +376,7 @@ func startPersistence(dir string, stop <-chan struct{}) (final func()) {
 			case <-stop:
 				return
 			case <-t.C:
-				if err := savePersisted(dir); err != nil {
+				if err := savePersistedOpt(dir, false); err != nil {
 					warnf("statistics: saving: %v", err)
 				}
 			}

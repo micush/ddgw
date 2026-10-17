@@ -285,10 +285,12 @@ Live reload: the daemon watches the config file via inotify.
 var (
 	cpuQuota float64
 	cpuProcs int
+	memLimit int64 // the soft memory limit set for the collector (see memlimit.go)
 )
 
 func main() {
 	cpuQuota, cpuProcs = limitProcsToCgroup() // logged by the daemon only, not by every CLI command
+	memLimit = limitMemoryToCgroup()
 	if len(os.Args) > 1 && os.Args[1] == "?" {
 		fmt.Println(usageText)
 		return
@@ -592,6 +594,9 @@ func run(dc *DaemonConfig, confFile, sockPath, stateDir string) error {
 	infof("dnsdir running — %d group(s), watching %s", len(dc.Groups), confFile)
 	if cpuProcs > 0 {
 		infof("CPU limit of %.2f in this cgroup: using %d scheduler threads instead of %d", cpuQuota, cpuProcs, runtime.NumCPU())
+	}
+	if memLimit > 0 {
+		infof("memory: garbage collector soft limit %d MiB", memLimit>>20)
 	}
 	<-ctx.Done()
 	infof("Shutdown signal received")

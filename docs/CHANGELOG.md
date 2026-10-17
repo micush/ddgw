@@ -1,5 +1,29 @@
 # Changelog
 
+## [v429] - 2026-10-16 — Memory, CPU and disk tuning
+
+### Changed
+- **Garbage collector soft memory limit.** At start-up the daemon sets a soft limit of 75% of the cgroup memory limit or, without one, of the machine's memory (`memlimit.go`; a `GOMEMLIMIT` in the environment wins). Before, garbage on a big heap (a full answer cache plus 30 days of statistics) counted as memory in use and could make the memory guard drop statistics and cache entries that were not a problem. It is soft: the collector never takes more than half the CPU to keep to it. Logged at start-up.
+- **Answer cache hits take the shard's read lock.** A hit on an entry that moved to the front of the LRU order less than a second ago no longer takes the write lock; the move is made at most once a second per entry in a cache of several shards (a cache of one shard, under 4096 entries, keeps the exact order). Parallel hits on two CPUs went from about 265 ns to about 150 ns each in `BenchmarkCacheHitParallel`. The eviction order is approximate to within a second, which does not matter at that size. Counting entries and bytes (`Len`, `Bytes`) also uses the read lock.
+- **Cheaper statistics saves.** `stats.json.gz` is compressed at gzip's fastest level, and the save made by the five-minute timer no longer fsyncs before the rename (the saves before a stop, a restart and an update still do). The file format is unchanged and old files still load.
+- **`/proc/cpuinfo` is read once** for the core count instead of at every host sample (every 10 seconds).
+
+### Added
+- `TestCacheLRUBumpIsThrottled`, `TestCacheSingleShardKeepsExactOrder`, `TestSoftMemLimit`, and `BenchmarkCacheHitParallel`.
+
+### Looked at, left alone
+- A cache hit already costs one allocation (the copy of the answer, about 175 ns with the key); pooling it would need an ownership rule across `resolve` and `sortAnswer` for little gain.
+- Interning the name string for the statistics, and shrinking `cacheEntry` (an intrusive LRU list in place of `container/list`), were not done: the first costs about what the allocation does, the second touches `cachewarm.go`, `memguard.go` and tests for a modest saving. Neither was measured.
+
+### Verified
+- `gofmt -l .` empty, `go build`, `go vet ./...`, `go test -race -count=1 ./...` and `CGO_ENABLED=0 go vet ./... && CGO_ENABLED=0 go test ./...` all pass (native amd64 with PAM headers).
+- Cross-compiled for linux/amd64, arm64, arm, 386 and riscv64.
+- Smoke run on `lo`: three stub UDP upstreams with different delays, queries to the VIP answered by the fastest, 3 cache hits counted, failover after killing the fastest upstream, hot reload by atomic rename, `--show-dns`, and `stats.json.gz` written on SIGTERM and restored at the next start.
+
+### Not verified
+- No end-to-end load test, so the gain from the soft memory limit and the faster saves is not measured; only the cache benchmark above is.
+- The cluster, web GUI, PAM, installer and BGP paths were not touched and not re-run live. Cross-compiled targets other than amd64 build the PAM stub.
+
 ## [v428] - 2026-10-16 — Block and Rewrite add to the end
 
 ### Changed

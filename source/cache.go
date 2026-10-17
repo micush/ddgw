@@ -52,12 +52,16 @@ type cacheEntry struct {
 	sh   *cacheShard
 	qEnd int // offset just after the question in msg, worked out once when the entry is stored
 	size int // what the entry counts for against the shard's byte budget
+	// bumped is when the entry last moved to the front of its shard's LRU order (c.now() in nanoseconds).  A hit
+	// on an entry bumped less than cacheBumpEvery ago leaves the order alone, so most hits need only the shard's
+	// read lock.
+	bumped atomic.Int64
 }
 
 // cacheShard is one slice of the cache with its own lock and its own LRU order.  At 100k queries a second one
 // lock around the whole cache was the largest lock wait on a production node.
 type cacheShard struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	max      int
 	maxBytes int // budget for the sizes of the entries (see cacheBytesPerEntry)
 	bytes    int
@@ -76,6 +80,12 @@ const (
 	// bytes, so the budget is only reached by unusually large ones; the oldest entries leave first, as for the count.
 	cacheBytesPerEntry = 4096
 	cacheEntryOverhead = 256 // bookkeeping counted on top of the message and the key
+
+	// cacheBumpEvery: in a cache of several shards a hit moves its entry to the front of the LRU order at most this
+	// often.  The order is then approximate to within this time, which does not matter to a cache that holds
+	// hundreds of thousands of entries, and a hit on a popular name no longer takes the shard's write lock.  A
+	// cache small enough for one shard keeps the exact order.
+	cacheBumpEvery = int64(time.Second)
 )
 
 type respCache struct {
@@ -165,9 +175,9 @@ func (c *respCache) clear() int {
 func (c *respCache) Bytes() int {
 	n := 0
 	for _, sh := range c.shards {
-		sh.mu.Lock()
+		sh.mu.RLock()
 		n += sh.bytes
-		sh.mu.Unlock()
+		sh.mu.RUnlock()
 	}
 	return n
 }
@@ -175,9 +185,9 @@ func (c *respCache) Bytes() int {
 func (c *respCache) Len() int {
 	n := 0
 	for _, sh := range c.shards {
-		sh.mu.Lock()
+		sh.mu.RLock()
 		n += len(sh.m)
-		sh.mu.Unlock()
+		sh.mu.RUnlock()
 	}
 	return n
 }
@@ -309,36 +319,57 @@ func optionsOnly(rdata []byte, codes ...uint16) bool {
 
 // get returns the cached answer for the query, with its ID, question and TTLs made right, or nil.
 func (c *respCache) get(key string, q []byte) []byte {
-	sh := c.shardFor(key)
-	sh.mu.Lock()
-	e := sh.m[key]
-	return c.serve(sh, e, q, -1)
+	return c.lookup(c.shardFor(key), key, nil, q, -1)
 }
 
 // getBytes is get for a key held as bytes, so that a hit allocates no key.  qEnd is the offset just after the
 // question in q, when the caller has it already (-1 to work it out).
 func (c *respCache) getBytes(key, q []byte, qEnd int) []byte {
-	sh := c.shardForBytes(key)
-	sh.mu.Lock()
-	e := sh.m[string(key)] // does not allocate
-	return c.serve(sh, e, q, qEnd)
+	return c.lookup(c.shardForBytes(key), "", key, q, qEnd)
 }
 
-// serve finishes a lookup: sh.mu is held on entry and released here.
-func (c *respCache) serve(sh *cacheShard, e *cacheEntry, q []byte, qEnd int) []byte {
+// lookup finds the key (kb when it is held as bytes, else key) in sh under the read lock; only an expired entry or
+// an LRU bump takes the write lock.
+func (c *respCache) lookup(sh *cacheShard, key string, kb, q []byte, qEnd int) []byte {
+	now := c.now()
+	sh.mu.RLock()
+	var e *cacheEntry
+	if kb != nil {
+		e = sh.m[string(kb)] // does not allocate
+	} else {
+		e = sh.m[key]
+	}
 	if e == nil {
-		sh.mu.Unlock()
+		sh.mu.RUnlock()
 		return nil
 	}
-	age := c.now().Sub(e.at)
+	age := now.Sub(e.at)
 	if age >= e.life || age < 0 {
-		sh.drop(e)
+		sh.mu.RUnlock()
+		sh.mu.Lock()
+		if sh.m[e.key] == e { // still the same entry
+			sh.drop(e)
+		}
 		sh.mu.Unlock()
 		return nil
 	}
-	sh.lru.MoveToFront(e.elem)
-	sh.mu.Unlock()
-	// an entry's message is never changed after it is stored, so it is copied outside the lock
+	if len(c.shards) == 1 || now.UnixNano()-e.bumped.Load() >= cacheBumpEvery {
+		sh.mu.RUnlock()
+		sh.mu.Lock()
+		if sh.m[e.key] == e { // not dropped or replaced in between
+			sh.lru.MoveToFront(e.elem)
+			e.bumped.Store(now.UnixNano())
+		}
+		sh.mu.Unlock()
+	} else {
+		sh.mu.RUnlock()
+	}
+	return c.finish(e, age, q, qEnd)
+}
+
+// finish builds the answer for a client from the stored entry.  An entry's message is never changed after it is
+// stored, so it is copied outside any lock.
+func (c *respCache) finish(e *cacheEntry, age time.Duration, q []byte, qEnd int) []byte {
 	out := append([]byte(nil), e.msg...)
 	ttls := e.ttls
 
@@ -390,6 +421,7 @@ func (c *respCache) store(key string, resp []byte, age time.Duration, fromPeer b
 	qEnd, _ := questionEnd(msg)
 	e := &cacheEntry{key: key, msg: msg, ttls: ttls, at: c.now().Add(-age), life: life, sh: sh, qEnd: qEnd,
 		size: len(msg) + len(key) + cacheEntryOverhead}
+	e.bumped.Store(c.now().UnixNano())
 	if e.size > sh.maxBytes { // one answer that is more than the whole budget of its shard is not kept
 		return false
 	}

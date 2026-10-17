@@ -418,7 +418,18 @@ func readHost() (*hostReading, error) {
 	return r, nil
 }
 
+var (
+	coresOnce sync.Once
+	coresN    int
+)
+
+// runtimeCores is the number of processors; /proc/cpuinfo is read once, not at every host sample.
 func runtimeCores() int {
+	coresOnce.Do(func() { coresN = readCores() })
+	return coresN
+}
+
+func readCores() int {
 	if b, err := os.ReadFile("/proc/cpuinfo"); err == nil {
 		n := 0
 		for _, l := range strings.Split(string(b), "\n") {

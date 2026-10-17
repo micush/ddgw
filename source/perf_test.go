@@ -423,3 +423,32 @@ func BenchmarkCacheHit(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkCacheHitParallel: many goroutines hitting a cache of several shards, which is where the shard lock shows.
+func BenchmarkCacheHitParallel(b *testing.B) {
+	c := newRespCache(100000, 3600)
+	const names = 256
+	qs := make([][]byte, names)
+	for i := range qs {
+		n := fmt.Sprintf("n%d.example.com", i)
+		qs[i] = cacheQuery(n, 1, withOPT(1232, true))
+		k, _ := c.keyFor(qs[i], false, netip.Addr{}, false, 24, 56)
+		c.put(k, mkResp(qs[i], 0, [][]byte{aRR(n, 3000)}, nil, nil))
+	}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			q := qs[i%names]
+			i++
+			var qi qinfo
+			parseQuestion(q, &qi)
+			var kb [384]byte
+			key, _ := c.keyBytes(kb[:0], q, &qi, false, netip.Addr{}, false, 24, 56)
+			if c.getBytes(key, q, qi.nameEnd+4) == nil {
+				b.Error("miss")
+				return
+			}
+		}
+	})
+}
