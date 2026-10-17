@@ -21,8 +21,8 @@ import (
 
 // The scheduler (Operate ▸ Scheduler): tasks that run on every node of the cluster, or on chosen nodes, at times given
 // as hourly / daily / weekly / monthly / yearly rules, including "the 3rd Saturday of every month".  A task also has an
-// offset window: it is due at its scheduled time, and each node runs it at a time of its own somewhere in that time plus
-// the window, so the nodes do not all act at once.  The task list is part of the shared settings (DNSConfig.Schedule,
+// window: it is due at its scheduled time (At), and each node runs it at a time of its own somewhere between then and
+// the end of the window (To), so the nodes do not all act at once.  The task list is part of the shared settings (DNSConfig.Schedule,
 // replicated like the rest); every node works out for itself what is due, so a node that is down only misses its own runs.
 // The history of what ran is kept per node.
 
@@ -63,8 +63,9 @@ type SchedTask struct {
 	// WindowSec is the offset window: each node runs the task at the scheduled time plus a time of its own between 0 and
 	// this many seconds.
 	WindowSec int `json:"window_sec,omitempty"`
-	// Until ("HH:MM", optional) states the window as an end time instead: the task runs between At and Until (the next
-	// day when Until is not later than At).  validate turns it into WindowSec.
+	// Until ("HH:MM", optional) ends the window: the task runs between At and Until (the next day when Until is not later
+	// than At).  An hourly task's Until is a minute past the hour ("00:MM"), at most 59 minutes after At.  validate turns
+	// it into WindowSec.  A task saved by an older version may have a WindowSec and no Until: it keeps working.
 	Until string `json:"until,omitempty"`
 	// EachDay (with Nths and Weekdays) runs the task on every matching day of the month instead of only the first one.
 	EachDay bool `json:"each_day,omitempty"`
@@ -177,11 +178,18 @@ func (t *SchedTask) validate() error {
 		}
 		t.Until = fmt.Sprintf("%02d:%02d", uh, um)
 		w := (uh*3600 + um*60) - (h*3600 + m*60 + s)
-		if w <= 0 {
-			w += 24 * 3600
-		}
 		if t.Freq == "hourly" {
-			return fmt.Errorf("scheduler: %q: an hourly task has no until time; use the offset window", t.Name)
+			// an hourly task's To is a minute past the hour (only the minute counts), and the window is shorter than an hour
+			t.Until = fmt.Sprintf("00:%02d", um)
+			w = um*60 - (m*60 + s)
+			if w == 0 {
+				return fmt.Errorf("scheduler: %q: the To minute must differ from the At minute (the window is at most 59 minutes)", t.Name)
+			}
+			if w < 0 {
+				w += 3600
+			}
+		} else if w <= 0 {
+			w += 24 * 3600
 		}
 		if w > maxSchedWindow {
 			return fmt.Errorf("scheduler: %q: the window is too long", t.Name)
@@ -501,7 +509,10 @@ func (t *SchedTask) describe() string {
 	case "yearly":
 		out = every("year") + ", " + day() + " of " + mon[t.Month] + " at " + at
 	}
-	if t.Until != "" {
+	if t.Until != "" && t.Freq == "hourly" {
+		_, um, _, _ := parseSchedAt(t.Until)
+		out = fmt.Sprintf("%s between minute %d and minute %d", every("hour"), m, um)
+	} else if t.Until != "" {
 		out += " to " + t.Until
 		out = strings.Replace(out, " at "+at+" to ", " between "+at+" and ", 1) + " UTC"
 	} else {

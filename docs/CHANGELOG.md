@@ -1,5 +1,22 @@
 # Changelog
 
+## [v434] - 2026-10-17 — The offset window is gone: At and To are the window
+
+### Changed
+- **The task form has no Offset window.** `At` is when the task is due and `To` (optional) ends the window: each node runs it at a time of its own between the two, the same as before. Without `To` every node runs it at `At`. The offset only said the same thing a different way.
+- **An hourly task can have a To minute** (`At minute` and `To minute`, both minutes past the hour). The window is at most 59 minutes, and the next hour when To is earlier than At; To equal to At is refused. Shown in the task list as `every hour between minute 10 and minute 40`.
+- **Tasks saved by an older version keep working.** The server still reads `window_sec`. The form shows an offset window of whole minutes (under a day, under an hour for an hourly task) as its To time; one that does not fit (several days, or odd seconds) is kept as it was until the task gets a To time.
+- Help and README say it in terms of At and To.
+
+### Added
+- `TestHourlyToMinute`.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64; `node --check` on `app.js` and `help.js`.
+
+### Not verified
+- The task form was not looked at in a browser; the offset-to-To conversion in the form is JavaScript with no test.
+
 ## [v433] - 2026-10-17 — The online update task names the release once
 
 ### Fixed

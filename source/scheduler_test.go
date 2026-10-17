@@ -538,3 +538,27 @@ func TestOnceRunsOnlyOnItsDate(t *testing.T) {
 		t.Fatal("date kept on a daily task")
 	}
 }
+
+// An hourly task can have a To minute: the window is from the At minute to it, never more than 59 minutes, and the
+// next hour when To is earlier than At.
+func TestHourlyToMinute(t *testing.T) {
+	a := mustTask(t, SchedTask{Freq: "hourly", At: "00:10:00", Until: "00:40"})
+	if a.WindowSec != 30*60 || a.Until != "00:40" {
+		t.Fatalf("10 to 40: window %d until %q", a.WindowSec, a.Until)
+	}
+	b := mustTask(t, SchedTask{Freq: "hourly", At: "00:50:00", Until: "00:05"})
+	if b.WindowSec != 15*60 {
+		t.Fatalf("50 to 05 wraps to the next hour: window %d", b.WindowSec)
+	}
+	c := mustTask(t, SchedTask{Freq: "hourly", At: "00:00:00", Until: "07:59"}) // only the minute counts
+	if c.WindowSec != 59*60 || c.Until != "00:59" {
+		t.Fatalf("59 minutes: window %d until %q", c.WindowSec, c.Until)
+	}
+	if !strings.Contains(a.describe(), "between minute 10 and minute 40") {
+		t.Fatalf("describe: %q", a.describe())
+	}
+	d := SchedTask{ID: "x", Name: "n", Action: "stats_clear", Freq: "hourly", At: "00:10:00", Until: "00:10"}
+	if err := d.validate(); err == nil {
+		t.Fatal("To equal to At on an hourly task must be refused (it would be a 60 minute window)")
+	}
+}

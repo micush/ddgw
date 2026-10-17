@@ -4494,7 +4494,6 @@
     try { localTimes = localStorage.getItem("sched_local_times") === "1"; } catch (_) { /* no storage */ }
     const whenUTC = (u) => (u ? new Date(u * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC" : "–");
     const when = (u) => (!u ? "–" : localTimes ? new Date(u * 1000).toLocaleString([], { timeZoneName: "short" }) : new Date(u * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC");
-    const unitSec = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
 
     async function call(path, body, done) {
       try { await api("POST", "/api/schedule/" + path, body); if (done) done(); clear(status); await VIEWS.scheduler.poll(true); } catch (e) { fail(status)(e); }
@@ -4561,18 +4560,19 @@
       const dayBox = h("div", { class: "f wide" }, h("span", {}, "On"),
         h("label", { class: "f check" }, byDay, "day", dom, " of the month"),
         h("div", { class: "f check sched-nthrow" }, byNth, "the", nthRow, wdRow, "of the month, run on", eachSel));
-      const wsec = t.window_sec || 0;
-      const unit = wsec && wsec % 86400 === 0 ? "days" : wsec && wsec % 3600 === 0 ? "hours" : wsec && wsec % 60 === 0 ? "minutes" : wsec ? "seconds" : "minutes";
-      const win = h("input", { type: "number", min: "0", value: String(wsec / unitSec[unit]), "aria-label": "Offset window" });
-      const until = h("input", { type: "time", value: t.until || "", "aria-label": "To (UTC)" });
-      const winUnit = h("select", { "aria-label": "Offset unit" }, Object.keys(unitSec).map((u) => h("option", { value: u, selected: u === unit }, u)));
+      // The offset window of an older version is shown as its To time when it fits (whole minutes, under a day, under an hour for an hourly task); otherwise it is kept as it was.
+      let legacyWin = t.window_sec || 0, toTime = t.until || "";
+      if (!toTime && legacyWin > 0 && legacyWin % 60 === 0 && legacyWin < (t.freq === "hourly" ? 3600 : 86400)) {
+        const [ah, am] = (t.at || "00:00:00").split(":").map(Number), e = ah * 60 + am + legacyWin / 60;
+        toTime = String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0"); legacyWin = 0;
+      }
+      const until = h("input", { type: "time", value: t.freq === "hourly" ? "" : toTime, "aria-label": "To (UTC)" });
+      const untilMin = h("input", { type: "number", min: "0", max: "59", value: t.freq === "hourly" && toTime ? String(+toTime.split(":")[1]) : "", "aria-label": "To minute past the hour" });
       const enabled = h("input", { type: "checkbox", checked: !t.disabled });
       const rows = {
         shell: shellBox, date: h("label", { class: "f" }, "On (UTC)", dateIn), every: h("label", { class: "f" }, "Every", h("span", { class: "sched-every" }, every, everyUnit)),
-        at: h("div", { class: "f sched-range" }, h("label", { class: "f" }, "At (UTC)", at), h("label", { class: "f" }, "To (optional)", until)), minute: h("label", { class: "f" }, "At minute", minute), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
+        at: h("div", { class: "f sched-range" }, h("label", { class: "f" }, "At (UTC)", at), h("label", { class: "f" }, "To (optional)", until)), minute: h("div", { class: "f sched-range" }, h("label", { class: "f" }, "At minute", minute), h("label", { class: "f" }, "To minute (optional)", untilMin)), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
       };
-      const winRow = h("div", { class: "f wide" }, h("span", {}, "Offset window"),
-        h("span", { class: "sched-every" }, "up to ", win, winUnit, " after the scheduled time"));
       const sync = () => {
         const f = freq.value;
         rows.shell.hidden = action.value !== "shell";
@@ -4583,7 +4583,6 @@
         rows.at.hidden = f === "hourly"; rows.minute.hidden = f !== "hourly";
         rows.days.hidden = f !== "weekly"; rows.month.hidden = f !== "yearly"; rows.day.hidden = f !== "monthly" && f !== "yearly";
         dom.disabled = !byDay.checked; nths.concat(wds).forEach((x) => { x.el.disabled = !byNth.checked; }); eachSel.disabled = !byNth.checked;
-        winRow.hidden = !!until.value && f !== "hourly"; // with a To time the window is At to To, so the offset is not asked
         nodesList.hidden = !someNodes.checked;
       };
       [action, freq, every, byDay, byNth, allNodes, someNodes, until].forEach((el) => el.addEventListener("change", sync));
@@ -4592,14 +4591,18 @@
         ev.preventDefault();
         const f = freq.value;
         const task = { id: isNew ? "" : t.id, name: name.value.trim(), action: action.value, freq: f, every: f === "once" ? 1 : Math.max(1, +every.value || 1),
-          window_sec: until.value && f !== "hourly" ? 0 : Math.round((+win.value || 0) * unitSec[winUnit.value]), disabled: !enabled.checked };
+          window_sec: (f === "hourly" ? untilMin.value !== "" : until.value !== "") ? 0 : (f === "hourly" && legacyWin >= 3600 ? 0 : legacyWin), disabled: !enabled.checked };
         if (action.value === "shell") { task.command = cmd.value; task.timeout_sec = +tmo.value || 300; }
         if (f === "hourly") { const m = Math.min(59, Math.max(0, +minute.value || 0)); task.at = "00:" + String(m).padStart(2, "0") + ":00"; } else task.at = at.value.length === 5 ? at.value + ":00" : at.value;
         if (f === "once") { if (!dateIn.value) { errorBox(err, "Pick the date."); return; } task.date = dateIn.value; }
         if (f === "weekly") task.days = days.filter((x) => x.el.checked).map((x) => x.i);
         if (f === "monthly" || f === "yearly") { if (byNth.checked) { task.nths = nths.filter((x) => x.el.checked).map((x) => x.v); task.weekdays = wds.filter((x) => x.el.checked).map((x) => x.i); if (!task.nths.length || !task.weekdays.length) { errorBox(err, "Pick at least one occurrence and one weekday."); return; } task.each_day = eachSel.value === "each"; } else task.day = +dom.value; }
         if (f === "yearly") task.month = +month.value;
-        if (until.value && f !== "hourly") task.until = until.value.slice(0, 5);
+        if (f === "hourly" && untilMin.value !== "") {
+          const um = Math.min(59, Math.max(0, +untilMin.value || 0));
+          if (um === Math.min(59, Math.max(0, +minute.value || 0))) { errorBox(err, "The To minute must differ from the At minute."); return; }
+          task.until = "00:" + String(um).padStart(2, "0");
+        } else if (f !== "hourly" && until.value) task.until = until.value.slice(0, 5);
         if (state.nodes.length > 1 && someNodes.checked) task.nodes = nodeBoxes.filter((x) => x.el.checked).map((x) => x.n.node_id);
         if (state.nodes.length > 1 && someNodes.checked && !task.nodes.length) { errorBox(err, "Pick at least one node, or choose every node."); return; }
         if (!task.name) { errorBox(err, "Give the task a name."); return; }
@@ -4611,7 +4614,6 @@
             h("label", { class: "f wide" }, "Name", name),
             h("label", { class: "f wide" }, "Does", action), rows.shell, where,
             h("label", { class: "f" }, "How often", freq), rows.date, rows.every, rows.at, rows.minute, rows.days, rows.month, rows.day,
-            winRow,
             h("label", { class: "f check wide" }, enabled, "Enabled")),
           err,
           h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, isNew ? "Add task" : "Save"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
