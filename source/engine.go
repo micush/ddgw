@@ -63,12 +63,14 @@ type Engine struct {
 	dnsCfg func() DNSConfig // current DNS settings (port)
 	pool   func() *Pool
 
-	state    State
-	peers    map[string]*Peer
-	afnID    int
-	agcIP    string
-	rrCursor int
-	myIP     string
+	state      State
+	peers      map[string]*Peer
+	stamps     map[string]int64     // the newest packet timestamp taken from each sender (replay.go)
+	skewWarned map[string]time.Time // when each sender with a clock too far off was last named in the log
+	afnID      int
+	agcIP      string
+	rrCursor   int
+	myIP       string
 
 	conn       net.PacketConn
 	helloTimer *time.Timer
@@ -165,6 +167,9 @@ func (e *Engine) run(ctx context.Context) {
 	}
 	infof("Starting distributed gateway/%s on %s ip=%s group=%d vip=%s",
 		e.af, e.cfg.Interface, ip, e.cfg.GroupID, e.cfg.vipFor(e.af))
+	if isWeakKey(e.cfg.Key) {
+		warnf("Gateway %d signs its messages with a well-known or short key: anyone on this network who knows it can take over the gateway. Set a long random key in Settings ▸ Gateway groups (the cluster pushes it to every node) (%s)", e.cfg.GroupID, e.tag())
+	}
 
 	var conn net.PacketConn
 	for {
@@ -356,12 +361,17 @@ func (e *Engine) readLoop(conn net.PacketConn) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		data := append([]byte(nil), buf[:n]...)
-		e.mu.Lock()
-		if e.running {
-			e.onPacketLocked(data, addr)
-		}
-		e.mu.Unlock()
+		e.handlePacket(append([]byte(nil), buf[:n]...), addr)
+	}
+}
+
+// handlePacket gives one received datagram to the engine.  A panic in it drops that datagram (see safe.go).
+func (e *Engine) handlePacket(data []byte, addr net.Addr) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer recoverPanic("a gateway packet from " + addr.String())
+	if e.running {
+		e.onPacketLocked(data, addr)
 	}
 }
 
@@ -535,6 +545,9 @@ func (e *Engine) onPacketLocked(data []byte, from net.Addr) {
 	sender := pkt.SenderIP
 	if sender == e.myIP {
 		return // own multicast echo
+	}
+	if !e.replayLocked(pkt) {
+		return
 	}
 
 	peer := e.peers[sender]

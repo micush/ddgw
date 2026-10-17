@@ -156,6 +156,7 @@ type GroupConfig struct {
 // not say real_macs is off, as it always was, so an upgrade changes no running gateway.
 func newGatewayGroup() GroupConfig {
 	g := defaultGroup()
+	g.Key = newGroupKey() // a gateway someone adds does not start with a key everybody knows
 	g.RealMACs = true
 	return g
 }

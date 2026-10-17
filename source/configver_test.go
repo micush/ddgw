@@ -9,6 +9,9 @@ import (
 func cfgBytes(t *testing.T, mut func(*DaemonConfig)) []byte {
 	t.Helper()
 	dc := newDaemonConfig()
+	for i := range dc.Groups {
+		dc.Groups[i].Key = "fixed-test-key-for-version-compare" // a new gateway's key is random; these tests compare configs
+	}
 	if mut != nil {
 		mut(dc)
 	}

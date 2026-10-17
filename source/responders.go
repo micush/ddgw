@@ -34,8 +34,14 @@ func (r *rawResponder) loop(handle func(fd int, frame []byte)) {
 		if r.stop.Load() {
 			return
 		}
-		handle(r.fd, buf[:n])
+		r.handleFrame(handle, buf[:n])
 	}
+}
+
+// handleFrame gives one received frame to handle; a panic in it drops that frame (see safe.go).
+func (r *rawResponder) handleFrame(handle func(fd int, frame []byte), frame []byte) {
+	defer recoverPanic("an ARP or neighbour frame")
+	handle(r.fd, frame)
 }
 
 func (e *Engine) stopRespondersLocked() {

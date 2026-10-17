@@ -2036,7 +2036,7 @@
     { shared: true, k: "hello_ms", l: "Hello interval (ms)", t: "int", min: 1 },
     { shared: true, k: "hold_ms", l: "Hold time (ms)", t: "int", min: 1 },
     { shared: true, k: "max_afns", l: "Max forwarders", t: "int", min: 1, max: 255 },
-    { shared: true, k: "key", l: "HMAC shared key", t: "text" },
+    { shared: true, k: "key", l: "HMAC shared key", t: "text", weakKey: true },
     { k: "preempt", l: "Preemption", t: "bool" },
     { shared: true, k: "real_macs", l: "Use real MAC addresses (no virtual MACs)", t: "bool", hint: "On for a gateway you add now (most networks need it: a VMware port group that is not promiscuous, a cloud with one MAC per interface, a switch with port security); gateways that already existed keep their setting. Off is the older way with a virtual MAC per node. On: the VIP is on every node's lo and the controller answers ARP with the real MAC of the node it picks. Failover then depends on the neighbors honoring an unsolicited ARP. Restarts the gateway; set it on every node's cluster together." },
     { shared: true, k: "neighbors", l: "Neighbors (unicast mode)", t: "list", wide: true, hint: "Every node, one IP per line. Empty: multicast." },
@@ -2290,6 +2290,10 @@
 
   // Build inputs for one object; returns {el, get()} where get() reads values back with types.
   // With asCards, every {section} spec starts a card of its own (title in the header, optional note above the fields).
+  // the gateway keys everybody knows, and the shortest key not called short (keep in step with gkey.go)
+  const WELL_KNOWN_KEYS = ["", "dnsdir", "dgw", "ddgw", "change-me", "changeme", "secret", "password", "key", "test", "default"];
+  const isWeakKey = (k) => k.length < 12 || WELL_KNOWN_KEYS.includes(k.trim().toLowerCase());
+
   function fieldset(specs, obj, asCards) {
     const getters = {};
     let grid = h("div", { class: "grid" });
@@ -2347,7 +2351,13 @@
         get = () => input.value.trim();
       }
       getters[f.k] = get;
-      grid.append(h("label", { class: "f" + (f.wide ? " wide" : "") }, h("span", {}, f.l, sharedTag(f)), input, f.hint ? h("span", { class: "hint" }, f.hint) : null));
+      // a well-known or short gateway key: a few words of red text beside the field, no more (it follows what is typed)
+      const weak = f.weakKey ? h("span", { class: "hint weak-key" }) : null;
+      if (weak) {
+        const upd = () => { weak.textContent = isWeakKey(input.value) ? "Well known or short: anyone on the network can take over this gateway." : ""; };
+        input.addEventListener("input", upd); upd();
+      }
+      grid.append(h("label", { class: "f" + (f.wide ? " wide" : "") }, h("span", {}, f.l, sharedTag(f)), input, f.hint ? h("span", { class: "hint" }, f.hint) : null, weak));
     }
     return { el: wrap, get: () => Object.fromEntries(Object.entries(getters).map(([k, g]) => [k, g()])) };
   }

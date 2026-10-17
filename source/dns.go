@@ -407,6 +407,7 @@ func (p *Pool) ProbeNow(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer recoverPanic("a probe of " + s.Addr)
 			p.probeServer(ctx, s)
 		}()
 	}

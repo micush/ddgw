@@ -416,11 +416,14 @@ const queryBufSize = 2048
 var queryBufs = sync.Pool{New: func() any { b := make([]byte, 0, queryBufSize); return &b }}
 
 func (f *DNSFrontend) answerUDP(j udpJob) {
+	defer func() {
+		if j.bp != nil {
+			queryBufs.Put(j.bp)
+		}
+	}()
+	defer recoverPanic("a UDP query from " + j.client.String())
 	if resp := f.resolve(j.q, false, addrOf(j.client)); resp != nil {
 		j.rep.WriteTo(resp, j.client)
-	}
-	if j.bp != nil {
-		queryBufs.Put(j.bp)
 	}
 }
 
@@ -575,6 +578,7 @@ var respBufs = sync.Pool{New: func() any { b := make([]byte, 0, 1024); return &b
 
 func (f *DNSFrontend) handleTCP(c net.Conn) {
 	defer c.Close()
+	defer recoverPanic("a TCP query from " + c.RemoteAddr().String())
 	stop := context.AfterFunc(f.ctx, func() { c.Close() })
 	defer stop()
 	for {

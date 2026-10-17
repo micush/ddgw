@@ -527,6 +527,12 @@ Clouds block multicast and ignore virtual MACs, so the gateway VIP cannot be rea
 
 This section is the detail behind [How it works](#how-it-works), for when you need to know exactly what the nodes do on the wire.
 
+### The gateway key, clocks and replay
+
+Every packet of the election protocol is signed with the gateway's **HMAC shared key** (Settings ▸ Gateway groups), so a machine without the key cannot take part. Anyone who has the key can take over the gateway, so use a long random one: a new gateway starts with a random 32-character key, and a gateway whose key is well known (`dnsdir`, `dgw`, `change-me`) or shorter than 12 characters is named in the log, by `--canvas` and in red beside the field in Settings. Changing the key there is pushed to every node by the cluster and restarts the gateway on each; for a moment the nodes do not hear each other, so do it at a quiet time.
+
+Since protocol version 3 every packet also carries the sender's clock (Unix milliseconds) under the signature. A node drops a packet whose clock is more than 30 seconds from its own, and a packet that is not newer than the last one it took from the same sender, so a recorded packet cannot be played back. Keep the nodes' clocks in step with NTP; a node whose clock is off is named in the log once a minute ("is N s off this node's clock"). **Version 3 nodes and version 2 nodes (dnsdir v429 and earlier) do not hear each other**, so while a cluster is being updated a gateway can have more than one controller until all its nodes have the new version; update them close together.
+
 ### The VIP on controllers and forwarders
 
 The AGC owns the VIP on its macvlan. An AFN is reached through its vMAC, but the kernel only accepts traffic for addresses it owns. So an AFN adds the VIP to `lo` as a /32 (/128) and sets `arp_ignore=1` and `arp_announce=2` on the parent interface and its macvlan, so it never answers or advertises ARP for the VIP. The AGC stays the only ARP and neighbour-solicitation authority.

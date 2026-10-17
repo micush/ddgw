@@ -626,3 +626,5 @@ table.sched .sched-cmd { max-width: 13rem; }
 .sched-dialog div.f.sched-range { flex-direction: row; gap: 1rem; }
 .sched-dialog .sched-range > label.f { flex: 1; }
 .sched-dialog .sched-every select { width: auto; }
+
+.hint.weak-key { color: var(--bad); }

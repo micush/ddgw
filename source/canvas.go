@@ -59,6 +59,7 @@ type CanvasGateway struct {
 	Name      string         `json:"name"`
 	GroupID   int            `json:"group_id"`
 	Interface string         `json:"interface"`
+	WeakKey   bool           `json:"weak_key,omitempty"` // the gateway's HMAC key is well known or short (gkey.go)
 	VIP4      string         `json:"vip4"`
 	VIP6      string         `json:"vip6"`
 	Anycast   []AnycastState `json:"anycast,omitempty"`
@@ -197,7 +198,7 @@ func buildCanvas(dc *DaemonConfig, rows []SnapshotRow, pools []poolInfo) []Canva
 	for i := range dc.Groups {
 		g := &dc.Groups[i]
 		cg := CanvasGateway{Name: g.Name, GroupID: g.GroupID, Interface: g.Interface, VIP4: g.VIP4, VIP6: g.VIP6,
-			Servers: []CanvasServer{}, Fallback: []string{}, Families: []CanvasFamily{}, Members: membersOf(rows, g.GroupID), Paused: g.Paused, NodePaused: dc.NodePaused, ExcludedNodes: append([]string(nil), g.ExcludedNodes...)}
+			Servers: []CanvasServer{}, Fallback: []string{}, Families: []CanvasFamily{}, Members: membersOf(rows, g.GroupID), Paused: g.Paused, NodePaused: dc.NodePaused, ExcludedNodes: append([]string(nil), g.ExcludedNodes...), WeakKey: isWeakKey(g.Key)}
 
 		stats := map[string]ServerStat{}
 		var cfg DNSConfig

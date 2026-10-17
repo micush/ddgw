@@ -1,5 +1,33 @@
 # Changelog
 
+## [v430] - 2026-10-16 — Gateway messages cannot be replayed; keys; crash safety net; fuzz targets
+
+### Changed
+- **Protocol version 3: a signed timestamp in every gateway message.** The message grew from 79 to 87 bytes. The 8-byte Unix-millisecond time sits under the HMAC. A receiver drops a message more than 30 seconds off its own clock, and a message from a sender that is not newer than the last one it took from that sender, so a recorded message can no longer be replayed to win an election or move the virtual address. The table of senders is bounded (4096). A skewed clock is logged once a minute per sender.
+- **Version 2 nodes and version 3 nodes do not hear each other.** During a rolling update the two halves each see no peer and may both take the controller role until all nodes are updated. Update all nodes of a gateway within a short window.
+- **A gateway you add (GUI, `--canvas-add`, `--configure`) gets a random 128-bit key** instead of `dnsdir`. Existing gateways and the first-start default keep their key, so nothing running changes key.
+- A well-known or short (under 12 characters) key is logged at start-up, flagged in the GUI beside the key field, and flagged in the CLI canvas listing. It is a warning, not a refusal.
+
+### Added
+- **Crash safety net.** A panic in a gateway packet, a DNS/NTP query handler, a probe goroutine or a raw responder is logged with its stack (at most once a second) and the daemon carries on, instead of the process dying.
+- **Fuzz targets** in `fuzz_test.go` (parsers, the gateway packet and frame handling), with a two-second slow-input check. Run with `go test -fuzz=<name>`.
+- Tests for replay, stale and future stamps, the sender table bound, weak keys, random keys and panic containment.
+- README section "The gateway key, clocks and replay" and a rewritten help entry for the shared key.
+
+### Fixed
+- Anyone on the network who knew the key (or the default one) could replay captured gateway messages. See above.
+
+### Wire change
+- **Golden vectors are new**: `testdata/testdata_v4.hex` and `testdata_v6.hex` are protocol 3 (stamp 2026-10-16T12:00:00Z). The protocol 2 vectors are kept as `testdata_proto2_v4.hex` and `testdata_proto2_v6.hex` and are tested as refused.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64.
+
+### Not verified
+- No live multi-node election or rolling-update test (no `ip`/network namespaces in the build sandbox).
+- Cluster key push, PAM login, the installer and the GUI were not run live; the GUI change was not looked at in a browser.
+- Non-amd64 cross-builds use the PAM stub.
+
 ## [v429] - 2026-10-16 — Memory, CPU and disk tuning
 
 ### Changed

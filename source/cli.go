@@ -822,6 +822,9 @@ func showCanvas(sock string) {
 			}
 			fmt.Printf("      anycast %s — %s%s\n", a.Addr, state, upNote(a.Uptime))
 		}
+		if g.WeakKey {
+			fmt.Printf("      key: well known or short, so anyone on the network can take over this gateway — set a long random key (Settings ▸ Gateway groups ▸ HMAC shared key)\n")
+		}
 		for _, n := range g.Nodes {
 			who := n.Name
 			if n.Name != n.Addr {

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -16,16 +18,26 @@ const (
 	multicast4  = "224.1.3.7"
 	multicast6  = "ff02::1:307"
 	dgwPort     = 4729
-	dgwVersion  = 2
+	dgwVersion  = 3
 	packetMagic = 0xD1B0
 	hmacLen     = 32
 
-	// Wire layout (big endian), protocol version 2:
+	// Wire layout (big endian), protocol version 3:
 	//   2B magic | 1B version | 1B type | 1B group | 1B priority | 1B afn_id |
 	//   1B flags | 1B af | 16B sender_ip | 16B virtual_ip | 2B hello_ms |
-	//   2B hold_ms | 1B lb_method | 1B weight   = 47 bytes, then 32B HMAC-SHA256.
-	headerSize = 47
+	//   2B hold_ms | 1B lb_method | 1B weight | 8B timestamp (Unix milliseconds)
+	//   = 55 bytes, then 32B HMAC-SHA256.
+	//
+	// Version 3 adds the timestamp to version 2.  It is under the signature, and a receiver drops a packet whose
+	// timestamp is far from its own clock or is not newer than the last one from the same sender (see
+	// Engine.replayLocked), so a recorded packet cannot be played back.  A version 2 packet is refused, and a
+	// version 2 node refuses these: during an update the nodes of a gateway do not hear each other until all have it.
+	headerSize = 55
 	packetSize = headerSize + hmacLen
+
+	// packetMaxSkew is how far a packet's timestamp may be from the receiver's clock.  Nodes need their clocks in
+	// step to about this much (NTP does far better); a packet outside it is dropped and the sender named in the log.
+	packetMaxSkew = 30 * time.Second
 
 	defaultMaxAFNs = 128
 )
@@ -117,6 +129,7 @@ func parseLB(s string) (LBMethod, error) {
 // ── Packets ──────────────────────────────────────────────────────────────────
 
 type Packet struct {
+	Stamp     int64 // Unix milliseconds when the sender built it
 	Type      PktType
 	GroupID   int
 	Priority  int
@@ -147,9 +160,37 @@ func ip16ToString(b []byte, af AF) string {
 	return netip.AddrFrom16([16]byte(b)).String()
 }
 
+// wireNow is the clock the protocol timestamps come from.
+var wireNow = time.Now
+
+// lastStamp is the newest timestamp this process has put on a packet.
+var lastStamp atomic.Int64
+
+// nextStamp is the timestamp for a packet about to be built: the clock in Unix milliseconds, and always larger than
+// the one before it, so the packets of one sender are strictly ordered however fast they are built.
+func nextStamp() int64 { return advanceStamp(&lastStamp, wireNow().UnixMilli()) }
+
+// advanceStamp is now, or one more than *last when now is not past it; it stores the result in *last.
+func advanceStamp(last *atomic.Int64, now int64) int64 {
+	for {
+		l := last.Load()
+		if now <= l {
+			now = l + 1
+		}
+		if last.CompareAndSwap(l, now) {
+			return now
+		}
+	}
+}
+
 // buildPacket encodes and signs one packet.  senderIP is the engine's own
 // address for this family; vip is the bare VIP (no prefix length).
 func buildPacket(cfg *GroupConfig, ptype PktType, af AF, afnID int, flags uint8, senderIP string) ([]byte, error) {
+	return buildPacketAt(cfg, ptype, af, afnID, flags, senderIP, nextStamp())
+}
+
+// buildPacketAt is buildPacket with the timestamp (Unix milliseconds) given; the golden vectors are made with it.
+func buildPacketAt(cfg *GroupConfig, ptype PktType, af AF, afnID int, flags uint8, senderIP string, stamp int64) ([]byte, error) {
 	if cfg.Preempt {
 		flags |= 0x01
 	}
@@ -183,6 +224,7 @@ func buildPacket(cfg *GroupConfig, ptype PktType, af AF, afnID int, flags uint8,
 	binary.BigEndian.PutUint16(buf[43:], uint16(cfg.HoldMS))
 	buf[45] = byte(cfg.LBMethod)
 	buf[46] = byte(cfg.Weight)
+	binary.BigEndian.PutUint64(buf[47:], uint64(stamp))
 
 	mac := hmac.New(sha256.New, cfg.keyBytes())
 	mac.Write(buf)
@@ -214,6 +256,7 @@ func parsePacket(data, key []byte) (*Packet, error) {
 	}
 	flags := header[7]
 	return &Packet{
+		Stamp:     int64(binary.BigEndian.Uint64(header[47:])),
 		Type:      pt,
 		GroupID:   int(header[4]),
 		Priority:  int(header[5]),
