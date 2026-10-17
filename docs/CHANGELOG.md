@@ -1,5 +1,10 @@
 # Changelog
 
+## [v428] - 2026-10-16 — Block and Rewrite add to the end
+
+### Changed
+- Statistics ▸ right-click ▸ **Block** and **Rewrite…** (on a domain) and **Block** (on a client) add their row at the **end** of the Policy-Based Resolution table instead of the top. The first row that matches still wins, so a broader row already above it (a `*` row, a pool row, a wildcard for the same name) is read first; the 🚫 and ✏️ icons follow that, and move the row up on Configure ▸ DNS proxy ▸ Resolution if it must come first.
+
 ## [v427] - 2026-10-16 — Scheduler: Once
 
 ### Added

@@ -3385,7 +3385,7 @@
       input.focus(); input.select();
     }
 
-    // adds a row "any client / name / keyword" at the top of the shared Policy-Based Resolution table and saves it
+    // adds a row "any client / name / keyword" at the end of the shared Policy-Based Resolution table and saves it
     async function addPolicyRow(name, keyword, client, dest) {
       client = client || "*";
       try {
@@ -3394,7 +3394,7 @@
         const list = cfg.dns.policy || [];
         const same = list.findIndex((r) => (r.client || "*") === client && String(r.name || "*").toLowerCase() === name.toLowerCase());
         if (same >= 0) { say(status, "bad", "There already is a policy row for " + (client === "*" ? name : client + " asking for " + name) + " (row " + (same + 1) + ", " + ((list[same].servers || []).join(", ") || "no servers") + "). Edit it on Configure ▸ DNS proxy ▸ Resolution."); return; }
-        list.unshift(dest ? { client, name, servers: [], dest } : { client, name, servers: [keyword] });
+        list.push(dest ? { client, name, servers: [], dest } : { client, name, servers: [keyword] });
         cfg.dns.policy = list;
         await api("PUT", "/api/config", { config: cfg, note: "Policy row from Statistics: " + (dest ? "rewrite to " + dest : keyword) + " for " + (client === "*" ? name : client + " / " + name) });
         await load();
