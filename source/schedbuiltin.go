@@ -42,12 +42,21 @@ func (s *Scheduler) updateOnline(actor string) (string, error) {
 		}
 	}
 	if !versionGreater(staged, run) {
-		return fmt.Sprintf("up to date: running v%s, newest release %s (v%s)", run, tag, staged), nil
+		return fmt.Sprintf("up to date: running v%s, newest release %s", run, releaseName(tag, staged)), nil
 	}
 	if err := m.UpdatePush([]string{m.cl.selfAddrForEvents()}, actor); err != nil {
 		return "", fmt.Errorf("v%s is staged but could not be queued: %w", staged, err)
 	}
-	return fmt.Sprintf("v%s (%s) staged; this node is queued to update (running v%s)", staged, tag, run), nil
+	return fmt.Sprintf("%s staged; this node is queued to update (running v%s)", releaseName(tag, staged), run), nil
+}
+
+// releaseName is the release as one name: its tag (v80), and the version inside it only when that is a different
+// number, so the line does not say v80 twice.
+func releaseName(tag, staged string) string {
+	if strings.TrimPrefix(tag, "v") == staged {
+		return "v" + staged
+	}
+	return tag + " (v" + staged + ")"
 }
 
 // rebootHost restarts the host, but only once that is safe (no gateway would lose its last serving member), like an update.

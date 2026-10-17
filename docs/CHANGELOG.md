@@ -1,5 +1,16 @@
 # Changelog
 
+## [v433] - 2026-10-17 — The online update task names the release once
+
+### Fixed
+- The history line of the **Update from online** task said the release twice (`v80 (v80) staged; ...`, and `newest release v80 (v80)` when up to date). It now says `v80 staged; this node is queued to update (running v78)`. The version in brackets is shown only when it differs from the tag. Added `TestReleaseNameSaysItOnce`.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64.
+
+### Not verified
+- A real online update was not run (no network access to GitHub from the build sandbox); the message is covered by the unit test only.
+
 ## [v432] - 2026-10-17 — Shorter task names in the scheduler's "Does" list
 
 ### Changed

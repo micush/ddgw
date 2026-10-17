@@ -115,3 +115,12 @@ func TestSchedRunAllOnAMemberlessNode(t *testing.T) {
 		return len(mg.sched.Status().History) > 0
 	})
 }
+
+func TestReleaseNameSaysItOnce(t *testing.T) {
+	if got := releaseName("v80", "80"); got != "v80" {
+		t.Fatalf("same tag and version: %q", got)
+	}
+	if got := releaseName("v80-rc1", "80"); got != "v80-rc1 (v80)" {
+		t.Fatalf("different: %q", got)
+	}
+}
