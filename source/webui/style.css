@@ -628,3 +628,5 @@ table.sched .sched-cmd { max-width: 13rem; }
 .sched-dialog .sched-every select { width: auto; }
 
 .hint.weak-key { color: var(--bad); }
+.sched-local { margin-left: auto; margin-right: 0; }
+.sched-dialog .f.check.sched-nthrow { row-gap: .75rem; }

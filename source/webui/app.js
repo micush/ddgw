@@ -4490,13 +4490,16 @@
     const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const NTH = [[1, "1st"], [2, "2nd"], [3, "3rd"], [4, "4th"], [-1, "last"]];
     const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const when = (u) => (u ? new Date(u * 1000).toLocaleString() : "–");
+    let localTimes = false; // run times are UTC, like the schedules; the Local time box on the history shows them in this browser's zone
+    try { localTimes = localStorage.getItem("sched_local_times") === "1"; } catch (_) { /* no storage */ }
+    const whenUTC = (u) => (u ? new Date(u * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC" : "–");
+    const when = (u) => (!u ? "–" : localTimes ? new Date(u * 1000).toLocaleString([], { timeZoneName: "short" }) : new Date(u * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC");
     const unitSec = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
 
     async function call(path, body, done) {
       try { await api("POST", "/api/schedule/" + path, body); if (done) done(); clear(status); await VIEWS.scheduler.poll(true); } catch (e) { fail(status)(e); }
     }
-    const nodeName = (id) => { const n = state.nodes.find((x) => x.node_id === id); return n ? (n.self ? nodeLabel(n) + " (this one)" : nodeLabel(n)) : id.slice(0, 8); };
+    const nodeName = (id) => { const n = state.nodes.find((x) => x.node_id === id); return n ? (nodeLabel(n)) : id.slice(0, 8); };
     const actionLabel = (t, actions) => (t.action === "shell" ? "Shell command" : (actions || {})[t.action] || t.action);
 
     function copyTask(t) {
@@ -4528,7 +4531,7 @@
       const action = h("select", { "aria-label": "Action" }, acts.map(([k, l]) => h("option", { value: k, selected: k === t.action }, l)), h("option", { value: "shell", selected: t.action === "shell" }, "Run a shell command"));
       const cmd = h("textarea", { rows: "4", spellcheck: "false", maxlength: "4096", "aria-label": "Command", class: "mono" }); cmd.value = t.command || "";
       const tmo = h("input", { type: "number", min: "1", max: "86400", value: String(t.timeout_sec || 300), "aria-label": "Time limit in seconds" });
-      const shellBox = h("div", {}, h("label", { class: "f wide" }, "Command", cmd, h("span", { class: "hint" }, "Run with /bin/sh as root on each node, in the daemon's directory. The PATH has the usual system directories; no login profile is read. Output is kept in the history.")),
+      const shellBox = h("div", {}, h("label", { class: "f wide" }, "Command", cmd),
         h("label", { class: "f" }, "Stop it after (seconds)", tmo));
       const allNodes = h("input", { type: "radio", name: "sched-where", checked: !(t.nodes || []).length });
       const someNodes = h("input", { type: "radio", name: "sched-where", checked: (t.nodes || []).length > 0 });
@@ -4557,7 +4560,7 @@
       const monthRow = h("label", { class: "f" }, "Month", month);
       const dayBox = h("div", { class: "f wide" }, h("span", {}, "On"),
         h("label", { class: "f check" }, byDay, "day", dom, " of the month"),
-        h("div", { class: "f check" }, byNth, "the", nthRow, wdRow, "of the month, run on", eachSel));
+        h("div", { class: "f check sched-nthrow" }, byNth, "the", nthRow, wdRow, "of the month, run on", eachSel));
       const wsec = t.window_sec || 0;
       const unit = wsec && wsec % 86400 === 0 ? "days" : wsec && wsec % 3600 === 0 ? "hours" : wsec && wsec % 60 === 0 ? "minutes" : wsec ? "seconds" : "minutes";
       const win = h("input", { type: "number", min: "0", value: String(wsec / unitSec[unit]), "aria-label": "Offset window" });
@@ -4568,6 +4571,8 @@
         shell: shellBox, date: h("label", { class: "f" }, "On (UTC)", dateIn), every: h("label", { class: "f" }, "Every", h("span", { class: "sched-every" }, every, everyUnit)),
         at: h("div", { class: "f sched-range" }, h("label", { class: "f" }, "At (UTC)", at), h("label", { class: "f" }, "To (optional)", until)), minute: h("label", { class: "f" }, "At minute", minute), days: h("div", { class: "f wide" }, h("span", {}, "On"), dayRow), month: monthRow, day: dayBox,
       };
+      const winRow = h("div", { class: "f wide" }, h("span", {}, "Offset window"),
+        h("span", { class: "sched-every" }, "up to ", win, winUnit, " after the scheduled time"));
       const sync = () => {
         const f = freq.value;
         rows.shell.hidden = action.value !== "shell";
@@ -4578,11 +4583,11 @@
         rows.at.hidden = f === "hourly"; rows.minute.hidden = f !== "hourly";
         rows.days.hidden = f !== "weekly"; rows.month.hidden = f !== "yearly"; rows.day.hidden = f !== "monthly" && f !== "yearly";
         dom.disabled = !byDay.checked; nths.concat(wds).forEach((x) => { x.el.disabled = !byNth.checked; }); eachSel.disabled = !byNth.checked;
-        win.disabled = winUnit.disabled = !!until.value && f !== "hourly";
+        winRow.hidden = !!until.value && f !== "hourly"; // with a To time the window is At to To, so the offset is not asked
         nodesList.hidden = !someNodes.checked;
       };
       [action, freq, every, byDay, byNth, allNodes, someNodes, until].forEach((el) => el.addEventListener("change", sync));
-      every.addEventListener("input", sync);
+      every.addEventListener("input", sync); until.addEventListener("input", sync);
       const submit = (ev) => {
         ev.preventDefault();
         const f = freq.value;
@@ -4606,9 +4611,7 @@
             h("label", { class: "f wide" }, "Name", name),
             h("label", { class: "f wide" }, "Does", action), rows.shell, where,
             h("label", { class: "f" }, "How often", freq), rows.date, rows.every, rows.at, rows.minute, rows.days, rows.month, rows.day,
-            h("div", { class: "f wide" }, h("span", {}, "Offset window"),
-              h("span", { class: "sched-every" }, "up to ", win, winUnit, " after the scheduled time"),
-              h("span", { class: "hint" }, "With a To time above, the window is from At to To and this is not used. Each node runs the task at a time of its own somewhere in the window, so the nodes do not all run it at once. 0 runs every node at the scheduled time. A node that was off and comes back inside the window still runs it.")),
+            winRow,
             h("label", { class: "f check wide" }, enabled, "Enabled")),
           err,
           h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "submit" }, isNew ? "Add task" : "Save"), h("button", { class: "btn", type: "button", onclick: close }, "Cancel"))));
@@ -4618,7 +4621,7 @@
 
     const openRuns = new Set();   // history rows whose output is expanded: kept open when the page redraws
     function draw(st) {
-      const sig = JSON.stringify([Object.assign({}, st, { now: 0 }), openRuns.size, clip && clip.name, state.nodes.map((n) => [n.node_id, nodeLabel(n)])]);
+      const sig = JSON.stringify([Object.assign({}, st, { now: 0 }), localTimes, openRuns.size, clip && clip.name, state.nodes.map((n) => [n.node_id, nodeLabel(n)])]);
       if (sig === last) return;
       last = sig;
       editorActions = st.actions || {};
@@ -4631,26 +4634,27 @@
           [v.disabled ? "Enable" : "Disable", () => call("task", { task: Object.assign({}, v.task, { disabled: !v.disabled }) })], "-",
           ["Delete", () => { if (confirm("Delete the task “" + v.name + "”?")) call("delete", { id: v.id }); }, "danger"]].filter(Boolean));
         const emptyMenu = rowMenu([["New task…", () => editor(null, tasks)], clip ? ["Paste", () => pasteTask(tasks)] : null].filter(Boolean));
-        const lastCell = (v) => v.last ? h("span", { title: v.last.output || "" }, pill(v.last.status, v.last.status === "ok" ? "ok" : v.last.status === "failed" ? "bad" : v.last.status === "running" ? "info" : "warn"), " ", when(v.last.start)) : h("span", { class: "muted" }, "never");
+        const lastCell = (v) => v.last ? h("span", { title: v.last.output || "" }, pill(v.last.status, v.last.status === "ok" ? "ok" : v.last.status === "failed" ? "bad" : v.last.status === "running" ? "info" : "warn"), " ", whenUTC(v.last.start)) : h("span", { class: "muted" }, "never");
         const where = (v) => (v.task.nodes || []).length ? v.task.nodes.map(nodeName).join(", ") : "every node";
         const row = (v) => h("tr", { tabindex: "0", class: v.disabled ? "paused" : "", oncontextmenu: menu(v), ondblclick: () => editor(v.task, tasks) },
           h("td", {}, v.name), h("td", {}, actionLabel(v.task, st.actions), v.task.action === "shell" ? h("div", { class: "mono small muted sched-cmd", title: v.task.command }, v.task.command) : null),
           h("td", {}, where(v)), h("td", {}, v.describe),
-          h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.queued ? pill("waiting for another task", "warn") : v.next_run ? h("span", { title: "scheduled for " + when(v.next) }, when(v.next_run)) : "–"),
+          h("td", {}, v.disabled ? pill("disabled", "") : !v.applies ? h("span", { class: "muted" }, "not for this node") : v.running ? pill("running", "info") : v.queued ? pill("waiting for another task", "warn") : v.next_run ? h("span", { title: "scheduled for " + whenUTC(v.next) }, whenUTC(v.next_run)) : "–"),
           h("td", {}, lastCell(v)));
         box.append(section("Scheduled tasks",
           h("div", { class: "toolbar" }, h("button", { class: "btn primary", type: "button", onclick: () => editor(null, tasks) }, "New task")),
           h("div", { class: "scroll", oncontextmenu: emptyMenu }, h("table", { class: "sched" },
             h("thead", {}, h("tr", {}, ["Task", "Does", "Runs on", "Schedule", "Next run (this node)", "Last run (this node)"].map((x) => h("th", {}, x)))),
-            h("tbody", {}, st.tasks.length ? st.tasks.map(row) : h("tr", {}, h("td", { colspan: 6, class: "empty" }, "No tasks yet. Add one with New task, or right-click here."))))),
-          h("p", { class: "hint" }, "Right-click a task to edit, copy, paste, run, disable or delete it. Schedules are in UTC; the run times shown here follow this browser.")));
-        box.append(section("History of this node",
+            h("tbody", {}, st.tasks.length ? st.tasks.map(row) : h("tr", {}, h("td", { colspan: 6, class: "empty" }, "No tasks yet. Add one with New task, or right-click here.")))))));
+        const localBox = h("input", { type: "checkbox", checked: localTimes });
+        localBox.addEventListener("change", () => { localTimes = localBox.checked; try { localStorage.setItem("sched_local_times", localTimes ? "1" : "0"); } catch (_) { /* no storage */ } last = ""; draw(st); });
+        box.append(h("div", { class: "card" }, h("header", {}, h("h2", {}, tc("History of this node")), h("label", { class: "nt-opt sched-local", title: "Show the times in this browser's time zone instead of UTC" }, localBox, " Local time")), h("div", { class: "body" },
           h("div", { class: "scroll" }, h("table", { class: "sched" },
             h("thead", {}, h("tr", {}, ["Started", "Task", "Result", "Output"].map((x) => h("th", {}, x)))),
             h("tbody", {}, st.history.length ? st.history.slice(0, 60).map((r) => h("tr", {},
               h("td", {}, when(r.start)), h("td", {}, r.name),
               h("td", {}, pill(r.status, r.status === "ok" ? "ok" : r.status === "failed" ? "bad" : r.status === "running" ? "info" : "warn"), r.end && r.end > r.start ? h("span", { class: "small muted" }, " " + (r.end - r.start) + " s") : null),
-              h("td", { class: "wrap" }, r.output ? h("details", { open: openRuns.has(r.task + "|" + r.start), ontoggle: (e) => { const k = r.task + "|" + r.start; if (e.target.open) openRuns.add(k); else openRuns.delete(k); } }, h("summary", {}, r.output.split("\n")[0].slice(0, 100)), h("pre", { class: "nt-out" }, r.output)) : ""))) : h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Nothing has run on this node yet.")))))));
+              h("td", { class: "wrap" }, r.output ? h("details", { open: openRuns.has(r.task + "|" + r.start), ontoggle: (e) => { const k = r.task + "|" + r.start; if (e.target.open) openRuns.add(k); else openRuns.delete(k); } }, h("summary", {}, r.output.split("\n")[0].slice(0, 100)), h("pre", { class: "nt-out" }, r.output)) : ""))) : h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Nothing has run on this node yet."))))))));
       } finally { morph(real, box); box = real; }
     }
 

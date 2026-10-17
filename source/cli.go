@@ -109,6 +109,14 @@ func askYes(prompt string, assumeYes bool) {
 	}
 }
 
+// ltUTC is lt in UTC, with the zone named: the scheduler works in UTC, so its times are shown that way.
+func ltUTC(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.UTC().Format("2006-01-02 15:04:05") + " UTC"
+}
+
 func lt(t time.Time) string {
 	if t.IsZero() {
 		return "-"
@@ -438,7 +446,7 @@ func (f *cliFlags) run(sock string) bool {
 				fmt.Println("Nothing has run on this node yet.")
 			}
 			for _, h := range r.History {
-				fmt.Printf("%s  %-8s %s\n", lt(time.Unix(h.Start, 0)), h.Status, h.Name)
+				fmt.Printf("%s  %-8s %s\n", ltUTC(time.Unix(h.Start, 0)), h.Status, h.Name)
 				if h.Output != "" {
 					fmt.Println("    " + strings.ReplaceAll(h.Output, "\n", "\n    "))
 				}
@@ -458,10 +466,10 @@ func (f *cliFlags) run(sock string) bool {
 			}
 			fmt.Printf("%s  %s%s\n    %s\n", t.ID, t.Name, state, t.Describe)
 			if t.NextRun > 0 {
-				fmt.Printf("    next on this node: %s\n", lt(time.Unix(t.NextRun, 0)))
+				fmt.Printf("    next on this node: %s\n", ltUTC(time.Unix(t.NextRun, 0)))
 			}
 			if t.Last != nil {
-				fmt.Printf("    last: %s %s\n", t.Last.Status, lt(time.Unix(t.Last.Start, 0)))
+				fmt.Printf("    last: %s %s\n", t.Last.Status, ltUTC(time.Unix(t.Last.Start, 0)))
 			}
 		}
 	case *f.scheduleSet != "":

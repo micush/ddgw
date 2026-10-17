@@ -1,5 +1,22 @@
 # Changelog
 
+## [v431] - 2026-10-17 — Scheduler page: UTC times, Local time box, cleaner forms
+
+### Changed
+- **The scheduler page shows times in UTC**, the zone the schedules are set in (the task times were UTC but the run times followed the browser, which was confusing). The next-run and last-run times of the task list are always UTC, and each says `UTC`.
+- **A `Local time` box on the right of the History header** shows the history's times in this browser's time zone instead. The choice is kept in this browser.
+- **Runs on** lists the node names, or `every node`; the `(this one)` after this node's name is gone.
+- **The task form hides Offset window** while a To time is filled in (the window is then At to To, so the offset was not used; before, the field was greyed out).
+- **Three hints are gone** (under the task list, under the offset window, under the shell command); the help now says them: the right-click menu, UTC times and the Local time box, how the window works with a To time and a node that was off, and how a shell command runs.
+- A little more space between the weekday boxes and the "of the month, run on" line in the task form.
+
+### Verified
+- gofmt clean, `go build`, `go vet`, `go test -race -count=1 ./...`, `CGO_ENABLED=0 go vet` and `go test`, cross-builds for linux/amd64, arm64, arm, 386, riscv64; `node --check` on `app.js` and `help.js`.
+
+### Not verified
+- The page was not looked at in a browser.
+- `--schedule` and `--schedule-history` on the command line still print the machine's local time; not changed.
+
 ## [v430] - 2026-10-16 — Gateway messages cannot be replayed; keys; crash safety net; fuzz targets
 
 ### Changed
